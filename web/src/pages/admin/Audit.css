@@ -1,0 +1,17 @@
+.page-audit {
+  min-height: 100vh;
+  padding: 1.5rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.audit-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+}
+
+.audit-header h1 {
+  font-size: 1.5rem;
+}
