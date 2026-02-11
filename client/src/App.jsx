@@ -16,7 +16,9 @@ import AuditHotels from './pages/admin/AuditHotels';
 import ChooseRole from './pages/ChooseRole';
 import HotelInfo from './pages/hotelOwner/HotelInfo';
 import NotFound from './components/NotFound';
+import About from './pages/About';
 import AddRoom from './pages/hotelOwner/AddRoom';
+import EditRoom from './pages/hotelOwner/EditRoom';
 import Dashboard from './pages/hotelOwner/Dashboard';
 import ListRoom from './pages/hotelOwner/ListRoom';
 import { useAppContext } from './context/AppContext';
@@ -45,12 +47,14 @@ function App() {
             <Route path='/rooms/:id' element={<RoomDetail />}/>
             <Route path='/hotels/:id' element={<HotelDetail />}/>
             <Route path='/my-bookings' element= {<MyBooking/>}/>
+            <Route path='/about' element={<About/>}/>
             <Route path='/loader/:nextUrl' element={<Loader />} />
             <Route path='/choose-role' element={<ChooseRole/>} />
             <Route path='/owner' element={<Layout/>}>
               <Route index element={<Dashboard/>} />
               <Route path='hotel-info' element={<HotelInfo/>} />
               <Route path='add-room' element={<AddRoom/>} />
+              <Route path='edit-room/:roomId' element={<EditRoom/>} />
               <Route path='list-rooms' element={<ListRoom/>} />
             </Route>
             <Route path='/admin' element={<AdminLayout/>}>

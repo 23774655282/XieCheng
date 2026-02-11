@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { assets } from '../assets/assets';
-import { CiMenuFries, CiSearch } from 'react-icons/ci';
+import { CiMenuFries } from 'react-icons/ci';
 import { IoClose } from 'react-icons/io5';
 import { useAppContext } from '../context/AppContext';
 
@@ -10,10 +9,9 @@ const BookIcons = () => <i className="fa-solid fa-book"></i>;
 
 const NavBar = () => {
     const navLinks = [
-        { name: 'Home', path: '/' },
-        { name: 'Hotels', path: '/rooms' },
-        { name: 'Experience', path: '/' },
-        { name: 'About', path: '/' },
+        { name: '首页', path: '/' },
+        { name: '酒店', path: '/rooms' },
+        { name: '关于', path: '/about' },
     ];
 
     const [isScrolled, setIsScrolled] = useState(false);
@@ -40,13 +38,27 @@ const NavBar = () => {
         return () => window.removeEventListener('scroll', handleScroll);
     }, [location.pathname]);
 
-    return (
-        <nav className={`fixed top-0 left-0 w-full flex items-center justify-between px-4 md:px-16 lg:px-24 xl:px-32 z-50 transition-all duration-500 ${isScrolled ? 'bg-white/80 shadow-md backdrop-blur-lg py-3 md:py-4 text-gray-700' : 'py-4 md:py-6 text-white'}`}>
+    const showBackButton = location.pathname !== '/' && location.pathname !== '/rooms';
 
+    return (
+        <nav className={`fixed top-0 left-0 w-full flex items-center justify-between px-4 md:px-16 lg:px-24 xl:px-32 z-50 transition-all duration-500 ${isScrolled ? 'bg-white/80 shadow-md backdrop-blur-lg py-3 md:py-4 text-gray-700' : 'bg-black/20 backdrop-blur-sm py-4 md:py-6 text-white'}`}>
+
+            <div className="flex items-center gap-3">
+            {showBackButton && (
+                <button
+                    type="button"
+                    onClick={() => navigate(-1)}
+                    className="flex items-center gap-1 text-sm font-medium px-3 py-2 rounded-md bg-black text-white hover:bg-gray-800"
+                >
+                    <span className="text-lg leading-none">←</span>
+                    <span>返回</span>
+                </button>
+            )}
             {/* Logo */}
-            <Link to="/" aria-label="Home">
-                <img src={assets.logo} alt="Logo" className={`h-9 transition-all duration-300 ${isScrolled ? 'invert opacity-80' : ''}`} />
+            <Link to="/" aria-label="首页" className={`font-bold text-lg whitespace-nowrap transition-all duration-300 ${isScrolled ? 'text-gray-800' : 'text-white'}`}>
+                易宿酒店预订平台
             </Link>
+            </div>
 
             {/* Desktop Navigation */}
             <div className="hidden md:flex items-center gap-4 lg:gap-8">
@@ -85,15 +97,12 @@ const NavBar = () => {
 
             {/* Desktop Right Side */}
             <div className="hidden md:flex items-center gap-4">
-
-                <CiSearch/>
-
                 {isAuthenticated && (
                     <button
                         onClick={() => navigate("/my-bookings")}
                         className="border px-4 py-1 text-sm font-light rounded-full cursor-pointer transition-all"
                     >
-                        Bookings
+                        我的订单
                     </button>
                 )}
                 {!isAuthenticated && (
@@ -101,14 +110,14 @@ const NavBar = () => {
                         onClick={() => navigate("/login")}
                         className="bg-black text-white px-8 py-2.5 rounded-full transition-all duration-500"
                     >
-                        Login
+                        登录
                     </button>
                 )}
             </div>
 
             {/* Mobile Menu Button */}
             <div className="flex items-center md:hidden">
-                <button onClick={() => setIsMenuOpen(!isMenuOpen)} aria-label="Toggle Menu">
+                <button onClick={() => setIsMenuOpen(!isMenuOpen)} aria-label="打开菜单">
                     < CiMenuFries className={`h-4 ${isScrolled ? 'invert' : ''}`} />
                 </button>
             </div>
@@ -116,16 +125,26 @@ const NavBar = () => {
             {/* Mobile Menu */}
             <div className={`fixed top-0 left-0 w-full h-screen bg-white flex flex-col items-center justify-center gap-6 text-gray-800 text-base font-medium transition-transform duration-500 ${isMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
                 
-                <button onClick={() => setIsMenuOpen(false)} aria-label="Close Menu" className="absolute top-4 right-4">
+                <button onClick={() => setIsMenuOpen(false)} aria-label="关闭菜单" className="absolute top-4 right-4">
                     <IoClose className="h-6.5" />
                 </button>
+
+                {showBackButton && (
+                    <button
+                        type="button"
+                        onClick={() => { setIsMenuOpen(false); navigate(-1); }}
+                        className="flex items-center gap-2 px-3 py-2 rounded-md bg-black text-white hover:bg-gray-800"
+                    >
+                        <span>←</span> 返回
+                    </button>
+                )}
 
                 {isAuthenticated && (
                     <button
                         onClick={() => { setIsMenuOpen(false); navigate("/my-bookings"); }}
                         className="border px-4 py-1 text-sm font-light rounded-full"
                     >
-                        Bookings
+                        我的订单
                     </button>
                 )}
 
@@ -167,7 +186,7 @@ const NavBar = () => {
                         onClick={() => { setIsMenuOpen(false); navigate("/login"); }}
                         className="bg-black text-white px-8 py-2.5 rounded-full transition-all duration-500"
                     >
-                        Login
+                        登录
                     </button>
                 )}
             </div>

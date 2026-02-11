@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useAppContext } from "../context/AppContext";
+import loginBg from "../assets/login_bg.jpg";
 
 function Login() {
   const { navigate, axios, fetchUser } = useAppContext();
@@ -35,10 +36,15 @@ function Login() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
+    <div className="relative min-h-screen flex items-center justify-center p-4 bg-cover bg-center bg-no-repeat">
+      <div
+        className="absolute inset-0"
+        style={{ backgroundImage: `url(${loginBg})`, backgroundSize: "cover", backgroundPosition: "center" }}
+      />
+      <div className="absolute inset-0 bg-black/40" aria-hidden />
       <form
         onSubmit={handleSubmit}
-        className="bg-white rounded-xl shadow-lg p-8 w-full max-w-md space-y-4"
+        className="relative z-10 bg-white/65 backdrop-blur-sm rounded-xl shadow-lg p-8 w-full max-w-md space-y-4"
       >
         <h1 className="text-2xl font-bold text-center mb-2">登录</h1>
         <div>

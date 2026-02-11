@@ -8,7 +8,7 @@ axios.defaults.baseURL = import.meta.env.VITE_BACKEND_URL;
 const AppContext = createContext();
 
 export function AppProvider({ children }) {
-  const currency = import.meta.env.VITE_CURRENCY || '$';
+  const currency = import.meta.env.VITE_CURRENCY || '元';
   const navigate = useNavigate();
 
   // 本地登录用户（UI 展示用），实际身份由后端 /api/users 返回的 role 控制
@@ -60,10 +60,10 @@ export function AppProvider({ children }) {
         setIsPlatformAdmin(r === "admin");
         setSearchCity(data.recentSerachCities || []);
         setIsAuthenticated(true);
-        toast.success("User data fetched successfully");
+        toast.success("用户信息加载成功");
       }
     } catch (error) {
-      toast.error("Failed to fetch user data. Please try again later.");
+      toast.error("获取用户信息失败，请稍后重试。");
     }
   }
 

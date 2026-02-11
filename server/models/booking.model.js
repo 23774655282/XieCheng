@@ -37,6 +37,15 @@ const bookingSchema = new Schema({
         enum: ['pending', 'confirmed', 'cancelled'],
         default: 'pending',
     },
+    cancelledBy: {
+        type: String,
+        enum: ['user', 'merchant'],
+        default: null,
+    },
+    cancelReason: {
+        type: String,
+        default: null,
+    },
     paymentMethod:{
         type: String,
         required: true,

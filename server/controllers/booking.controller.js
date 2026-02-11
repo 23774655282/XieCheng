@@ -8,6 +8,7 @@ import Stripe from "stripe";
 async function checkAvailability({checkInDate,checkOutDate,room}) {
     const bookings = await Booking.find({
             room,
+            status: { $ne: 'cancelled' },
             checkInDate : {
                 $lte: checkOutDate,
             },
@@ -265,4 +266,53 @@ async function stripePayment(req,res) {
     }
 }
 
-export { checkAvailabilityApi, createBooking, getUserBooking,getHotelBooking,stripePayment };
+async function cancelBooking(req, res) {
+    try {
+        const { id } = req.params;
+        const { cancelReason } = req.body || {};
+        const userId = req.user._id;
+
+        const booking = await Booking.findById(id).populate('hotel');
+        if (!booking) {
+            return res.status(404).json({ success: false, message: '订单不存在' });
+        }
+        if (booking.status === 'cancelled') {
+            return res.status(400).json({ success: false, message: '订单已取消' });
+        }
+
+        const isUser = booking.user.toString() === userId.toString();
+        const hotelId = booking.hotel._id || booking.hotel;
+        const hotelDoc = booking.hotel && booking.hotel.owner ? booking.hotel : await Hotel.findById(hotelId);
+        const isMerchant = hotelDoc && hotelDoc.owner && hotelDoc.owner.toString() === userId.toString();
+
+        if (isUser) {
+            const reason = (typeof cancelReason === 'string' && cancelReason.trim()) ? cancelReason.trim() : '未填写';
+            booking.status = 'cancelled';
+            booking.cancelledBy = 'user';
+            booking.cancelReason = reason;
+            await booking.save();
+            return res.status(200).json({
+                success: true,
+                message: '订单已取消',
+                booking,
+            });
+        }
+        if (isMerchant) {
+            booking.status = 'cancelled';
+            booking.cancelledBy = 'merchant';
+            booking.cancelReason = null;
+            await booking.save();
+            return res.status(200).json({
+                success: true,
+                message: '订单已取消',
+                booking,
+            });
+        }
+        return res.status(403).json({ success: false, message: '无权取消该订单' });
+    } catch (error) {
+        console.error('Error cancelling booking:', error);
+        return res.status(500).json({ success: false, message: '取消订单失败' });
+    }
+}
+
+export { checkAvailabilityApi, createBooking, getUserBooking, getHotelBooking, stripePayment, cancelBooking };

@@ -22,4 +22,21 @@ const storage = multer.diskStorage({
 });
 
 const upload = multer({ storage });
+
+// 酒店图片上传目录：server/uploads/hotels
+const hotelUploadDir = path.join(__dirname, "..", "uploads", "hotels");
+fs.mkdirSync(hotelUploadDir, { recursive: true });
+
+const hotelStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, hotelUploadDir);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    const base = path.basename(file.originalname, ext).replace(/\s+/g, "-");
+    cb(null, `${Date.now()}-${base}${ext}`);
+  },
+});
+
+export const uploadHotel = multer({ storage: hotelStorage });
 export default upload;

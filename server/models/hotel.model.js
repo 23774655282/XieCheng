@@ -19,6 +19,7 @@ const hotelSchema = new Schema({
         default: "pending_audit",
     },
     rejectReason: { type: String, default: "" },
+    images: [{ type: String }], // 酒店展示图，供用户端展示
 }, { timestamps: true });
 
 const Hotel = mongoose.model("Hotel", hotelSchema);

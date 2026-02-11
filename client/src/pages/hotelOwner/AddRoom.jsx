@@ -4,6 +4,7 @@ import { MdOutlineCloudUpload } from 'react-icons/md';
 import { useAppContext } from '../../context/AppContext';
 import toast from 'react-hot-toast';
 import { AiOutlineLoading3Quarters } from 'react-icons/ai';
+import { checkImageResolution, MIN_RECOMMENDED_LONG_EDGE } from '../../utils/imageUtils';
 
 function AddRoom() {
 
@@ -19,6 +20,7 @@ function AddRoom() {
   const [inputData, setInputData] = useState({
     roomType: '',
     pricePerNight: 0,
+    promoDiscount: 0,
     amenities: {
       'Free Wifi': false,
       'Free Breakfast': false,
@@ -70,11 +72,11 @@ function AddRoom() {
   };
 
   const handleImageChange = (key, file) => {
-    console.log(`Image ${key} changed:`, file);
     if (!file) return;
     setImages(prev => ({ ...prev, [key]: file }));
-
-    console.log(images)
+    checkImageResolution(file, (dim, longEdge) => {
+      toast.error(`建议上传更长边不少于 ${MIN_RECOMMENDED_LONG_EDGE} 像素的图片，放大后更清晰。当前为 ${dim.width}×${dim.height}，可能模糊。`);
+    });
   };
 
   const [loading, setLoading] = useState(false);
@@ -94,6 +96,7 @@ function AddRoom() {
       const formData = new FormData();
       formData.append('roomType', inputData.roomType);
       formData.append('pricePerNight', inputData.pricePerNight);
+      formData.append('promoDiscount', String(inputData.promoDiscount));
       const amenities = Object.keys(inputData.amenities).filter(amenity => inputData.amenities[amenity]);
       console.log(amenities);
 
@@ -114,6 +117,7 @@ function AddRoom() {
         setInputData({
           roomType: '',
           pricePerNight: 0,
+          promoDiscount: 0,
           amenities: {
             'Free Wifi': false,
             'Free Breakfast': false,
@@ -159,6 +163,7 @@ function AddRoom() {
 
       {/* Images Section */}
       <p className="text-lg font-semibold text-neutral-800 mb-4">房间图片</p>
+      <p className="text-sm text-gray-500 mb-2">建议上传 1200×800 或更高分辨率（更长边 ≥ {MIN_RECOMMENDED_LONG_EDGE} 像素），保证放大后不模糊。</p>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
         {Object.keys(images).map(key => (
           <label
@@ -169,7 +174,7 @@ function AddRoom() {
             {images[key] ? (
               <img
                 src={URL.createObjectURL(images[key])}
-                alt={`Room ${key}`}
+                alt={`房间图 ${key}`}
                 className="absolute w-full h-full object-cover"
               />
             ) : (
@@ -209,9 +214,7 @@ function AddRoom() {
           </div>
           <div>
             <p className='mt-4 text-gray-800'>
-              价格 <span className='text-xs'>
-                /每晚
-              </span>
+              价格（元/晚）
             </p>
             <input type="number"
               placeholder='0' className='w-full p-2 border border-gray-300 rounded-lg'
@@ -219,6 +222,35 @@ function AddRoom() {
               onChange={(e) => setInputData({ ...inputData, pricePerNight: e.target.value })}
             />
           </div>
+        </div>
+
+        <div className="mt-6">
+          <p className="text-gray-800 font-medium mb-2">优惠促销（%）</p>
+          <div className="flex items-center gap-4">
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={inputData.promoDiscount}
+              onChange={(e) => setInputData({ ...inputData, promoDiscount: Number(e.target.value) })}
+              className="flex-1 h-2 rounded-lg appearance-none cursor-pointer bg-gray-200"
+            />
+            <input
+              type="number"
+              min={0}
+              max={100}
+              value={inputData.promoDiscount}
+              onChange={(e) => {
+                const v = parseInt(e.target.value, 10);
+                setInputData({ ...inputData, promoDiscount: Number.isNaN(v) ? 0 : Math.min(100, Math.max(0, v)) });
+              }}
+              className="w-20 p-2 border border-gray-300 rounded-lg text-center"
+            />
+            <span className="text-gray-600">%</span>
+          </div>
+          <p className="mt-2 text-gray-700">
+            优惠后价格为：<span className="font-semibold text-gray-900">{Math.round((Number(inputData.pricePerNight) || 0) * (1 - (Number(inputData.promoDiscount) || 0) / 100))} 元/晚</span>
+          </p>
         </div>
 
         <p className='text-lg font-semibold text-neutral-800 mt-4 mb-2'>

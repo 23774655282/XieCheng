@@ -17,8 +17,11 @@ function AdminLayout() {
     return (
         <div className="min-h-screen bg-gray-100 flex flex-col">
             <header className="bg-white shadow py-3 px-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                    <button type="button" onClick={() => navigate(-1)} className="flex items-center gap-1 text-sm font-medium px-3 py-2 rounded-md bg-black text-white hover:bg-gray-800">← 返回</button>
+                    <NavLink to="/" className="text-sm font-medium px-3 py-2 rounded-md bg-black text-white hover:bg-gray-800">返回首页</NavLink>
+                </div>
                 <span className="font-bold text-lg">管理后台 — 酒店审核</span>
-                <NavLink to="/" className="text-blue-600 text-sm">返回首页</NavLink>
             </header>
             <div className="flex flex-1">
                 <aside className="w-56 bg-gray-200 p-4">

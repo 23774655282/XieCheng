@@ -1,4 +1,4 @@
-import { assets, cities } from "../assets/assets";
+import { assets } from "../assets/assets";
 import { IoIosCloseCircleOutline } from "react-icons/io";
 import { useAppContext } from "../context/AppContext";
 import { useState } from "react";
@@ -9,7 +9,6 @@ function HotelReg() {
 
 
   const [name, setName] = useState("");
-  const [nameEn, setNameEn] = useState("");
   const [contact, setContact] = useState("");
   const [address, setAddress] = useState("");
   const [city, setCity] = useState("");
@@ -25,7 +24,6 @@ function HotelReg() {
     try {
       const { data } = await axios.post(`/api/hotels/`, {
         name,
-        nameEn,
         contact,
         address,
         city,
@@ -46,13 +44,13 @@ function HotelReg() {
         setShowHotelReg(false);
         setIsOwner(true);
       } else {
-        toast.error(data?.message || "Failed to register hotel. Please try again.");
+        toast.error(data?.message || "酒店注册失败，请重试。");
         setShowHotelReg(false);
         setIsOwner(false); 
       }
     } catch (error) {
       console.error("Error registering hotel:", error);
-      toast.error("Failed to register hotel. Please try again.");
+      toast.error("酒店注册失败，请重试。");
     }
   }
 
@@ -70,7 +68,7 @@ function HotelReg() {
         <div className="hidden md:flex md:w-1/2 items-center justify-center p-4">
           <img
             src={assets.regImage}
-            alt="Register Hotel"
+            alt="入驻酒店"
             className="w-full h-auto rounded-xl object-cover"
           />
         </div>
@@ -79,9 +77,9 @@ function HotelReg() {
         <form onSubmit={handleSubmit} className="w-full md:w-1/2 flex flex-col gap-4 p-4">
           {/* Heading */}
           <div className="text-center md:text-left">
-            <p className="text-2xl font-bold">Register Your Hotel</p>
+            <p className="text-2xl font-bold">入驻酒店</p>
             <p className="text-sm text-gray-600">
-              Please fill in the details below to register your hotel.
+              请填写以下信息完成酒店注册。
             </p>
           </div>
 
@@ -89,10 +87,6 @@ function HotelReg() {
           <div>
             <label htmlFor="name" className="block mb-2 text-sm font-medium text-gray-700">酒店名（中文） *</label>
             <input id="name" value={name} onChange={(e) => setName(e.target.value)} type="text" placeholder="酒店名称" className="w-full p-2 border border-gray-300 rounded-md" required />
-          </div>
-          <div>
-            <label htmlFor="nameEn" className="block mb-2 text-sm font-medium text-gray-700">酒店名（英文）</label>
-            <input id="nameEn" value={nameEn} onChange={(e) => setNameEn(e.target.value)} type="text" placeholder="Hotel Name (English)" className="w-full p-2 border border-gray-300 rounded-md" />
           </div>
           <div>
             <label className="block mb-2 text-sm font-medium text-gray-700">星级</label>
@@ -111,14 +105,14 @@ function HotelReg() {
               htmlFor="contact"
               className="block mb-2 text-sm font-medium text-gray-700"
             >
-              Contact Number
+              联系电话
             </label>
             <input
               id="contact"
               type="text"
               value={contact}
               onChange={(e) => setContact(e.target.value)}
-              placeholder="Contact Number"
+              placeholder="联系电话"
               className="w-full p-2 border border-gray-300 rounded-md"
               required
             />
@@ -130,14 +124,14 @@ function HotelReg() {
               htmlFor="address"
               className="block mb-2 text-sm font-medium text-gray-700"
             >
-              Address
+              地址
             </label>
             <input
               id="address"
               type="text"
               value={address}
               onChange={(e) => setAddress(e.target.value)}
-              placeholder="Address"
+              placeholder="地址"
               className="w-full p-2 border border-gray-300 rounded-md"
               required
             />
@@ -146,10 +140,15 @@ function HotelReg() {
           {/* City */}
           <div>
             <label htmlFor="city" className="block mb-2 text-sm font-medium text-gray-700">城市 *</label>
-            <select id="city" value={city} onChange={(e) => setCity(e.target.value)} className="w-full p-2 border border-gray-300 rounded-md" required>
-              <option value="">选择城市</option>
-              {cities.map((c, index) => <option key={index} value={c}>{c}</option>)}
-            </select>
+            <input
+              id="city"
+              type="text"
+              value={city}
+              onChange={(e) => setCity(e.target.value)}
+              placeholder="请输入城市名称"
+              className="w-full p-2 border border-gray-300 rounded-md"
+              required
+            />
           </div>
           <div>
             <label className="block mb-2 text-sm font-medium text-gray-700">附近景点/交通/商场（每行一个）</label>
@@ -162,7 +161,7 @@ function HotelReg() {
 
           {/* Submit Button */}
           <button className="w-full bg-blue-500 text-white p-2 rounded-md hover:bg-blue-600 transition duration-300">
-            Register Hotel
+            提交注册
           </button>
         </form>
       </div>

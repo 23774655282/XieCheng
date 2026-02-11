@@ -146,7 +146,7 @@ function AuditHotels() {
                         <tbody>
                             {hotels.map((h) => (
                                 <tr key={h._id} className="border-t">
-                                    <td className="p-2">{h.name} {h.nameEn && ` / ${h.nameEn}`}</td>
+                                    <td className="p-2">{h.name}</td>
                                     <td className="p-2">{h.city}</td>
                                     <td className="p-2">{STATUS_MAP[h.status] || h.status}</td>
                                     <td className="p-2 text-red-600 text-sm">{h.rejectReason || "-"}</td>

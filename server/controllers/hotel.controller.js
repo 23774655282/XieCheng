@@ -33,6 +33,18 @@ export const listHotelsPublic = async (req, res) => {
     }
 };
 
+/** 用户端：获取当前所有已审核酒店的所在地（城市列表，去重） */
+export const getCities = async (req, res) => {
+    try {
+        const cities = await Hotel.find({ status: "approved" }).distinct("city");
+        const sorted = [...cities].filter(Boolean).sort((a, b) => String(a).localeCompare(String(b)));
+        return res.status(200).json({ success: true, cities: sorted });
+    } catch (error) {
+        console.error("Error fetching cities:", error);
+        return res.status(500).json({ success: false, message: "error in fetching cities" });
+    }
+};
+
 /** 商户：注册酒店，初始状态为待审核 */
 export const registerHotel = async (req, res) => {
     try {
@@ -91,12 +103,42 @@ export const getMyHotel = async (req, res) => {
     }
 };
 
-/** 商户：更新酒店信息（保存后实时更新） */
+/** 从 body 中解析数组字段（支持 JSON 字符串，如 FormData 提交） */
+function parseBodyArray(val) {
+    if (Array.isArray(val)) return val;
+    if (typeof val === "string") {
+        try {
+            const p = JSON.parse(val);
+            return Array.isArray(p) ? p : [];
+        } catch (_) {}
+    }
+    return val ? [val] : [];
+}
+
+/** 商户：更新酒店信息（保存后实时更新），支持上传酒店图片 */
 export const updateHotel = async (req, res) => {
     try {
-        const { name, nameEn, address, contact, city, starRating, openTime, nearbyAttractions, promotions } = req.body;
+        const { name, nameEn, address, contact, city, starRating, openTime, nearbyAttractions, promotions, existingImages } = req.body;
 
         let hotel = await Hotel.findOne({ owner: req.user._id });
+
+        // 处理酒店图片：保留已有 URL + 本次新上传
+        let imageUrls = [];
+        if (existingImages) {
+            try {
+                const parsed = typeof existingImages === "string" ? JSON.parse(existingImages) : existingImages;
+                if (Array.isArray(parsed)) imageUrls = parsed;
+            } catch (_) {}
+        }
+        if (req.files && req.files.length > 0) {
+            const baseUrl = `${req.protocol}://${req.get("host")}`;
+            const newUrls = req.files.map((f) => `${baseUrl}/uploads/hotels/${f.filename}`);
+            imageUrls = [...imageUrls, ...newUrls];
+        }
+        if (hotel) hotel.images = imageUrls;
+
+        const nearArr = parseBodyArray(nearbyAttractions);
+        const promArr = parseBodyArray(promotions);
 
         // 如果当前商户还没有酒店，视为首次保存，直接创建一条酒店记录
         if (!hotel) {
@@ -110,9 +152,10 @@ export const updateHotel = async (req, res) => {
                 city,
                 starRating: starRating ? Number(starRating) : 3,
                 openTime: openTime || undefined,
-                nearbyAttractions: Array.isArray(nearbyAttractions) ? nearbyAttractions : (nearbyAttractions ? [nearbyAttractions] : []),
-                promotions: Array.isArray(promotions) ? promotions : (promotions ? [promotions] : []),
+                nearbyAttractions: nearArr,
+                promotions: promArr,
                 status: "pending_audit",
+                images: imageUrls.length > 0 ? imageUrls : [],
             });
 
             // 首次创建酒店时，将用户角色设为商户
@@ -133,8 +176,9 @@ export const updateHotel = async (req, res) => {
         if (city !== undefined) hotel.city = city;
         if (starRating !== undefined) hotel.starRating = Number(starRating);
         if (openTime !== undefined) hotel.openTime = openTime ? new Date(openTime) : undefined;
-        if (nearbyAttractions !== undefined) hotel.nearbyAttractions = Array.isArray(nearbyAttractions) ? nearbyAttractions : [];
-        if (promotions !== undefined) hotel.promotions = Array.isArray(promotions) ? promotions : [];
+        if (nearbyAttractions !== undefined) hotel.nearbyAttractions = nearArr;
+        if (promotions !== undefined) hotel.promotions = promArr;
+        hotel.images = imageUrls;
         await hotel.save();
         return res.status(200).json({ success: true, message: "Hotel updated successfully", hotel });
     } catch (error) {

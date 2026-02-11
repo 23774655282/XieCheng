@@ -1,7 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useAppContext } from "../../context/AppContext";
 import toast from "react-hot-toast";
-import { cities } from "../../assets/assets";
+import { MdOutlineCloudUpload } from "react-icons/md";
+import { IoClose } from "react-icons/io5";
+
+const MAX_HOTEL_IMAGES = 6;
 
 function HotelInfo() {
     const { axios, getToken } = useAppContext();
@@ -9,15 +12,15 @@ function HotelInfo() {
     const [saving, setSaving] = useState(false);
     const [form, setForm] = useState({
         name: "",
-        nameEn: "",
         address: "",
         contact: "",
         city: "",
         starRating: 3,
         openTime: "",
         nearbyAttractions: "",
-        promotions: "",
     });
+    // 酒店展示图：每项为 { url }（已有）或 { file }（新选）
+    const [imageList, setImageList] = useState([]);
 
     useEffect(() => {
         (async () => {
@@ -28,15 +31,14 @@ function HotelInfo() {
                     const h = data.hotel;
                     setForm({
                         name: h.name || "",
-                        nameEn: h.nameEn || "",
                         address: h.address || "",
                         contact: h.contact || "",
                         city: h.city || "",
                         starRating: h.starRating ?? 3,
                         openTime: h.openTime ? h.openTime.slice(0, 10) : "",
                         nearbyAttractions: Array.isArray(h.nearbyAttractions) ? h.nearbyAttractions.join("\n") : "",
-                        promotions: Array.isArray(h.promotions) ? h.promotions.join("\n") : "",
                     });
+                    setImageList((Array.isArray(h.images) ? h.images : []).map((url) => ({ url })));
                 }
             } catch (e) {
                 toast.error("获取酒店信息失败");
@@ -46,20 +48,50 @@ function HotelInfo() {
         })();
     }, []);
 
+    const addImages = useCallback((files) => {
+        const list = Array.from(files || []).filter((f) => f.type.startsWith("image/"));
+        setImageList((prev) => {
+            const next = [...prev];
+            for (const file of list) {
+                if (next.length >= MAX_HOTEL_IMAGES) break;
+                next.push({ file });
+            }
+            return next;
+        });
+    }, []);
+
+    const removeImage = useCallback((index) => {
+        setImageList((prev) => prev.filter((_, i) => i !== index));
+    }, []);
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         setSaving(true);
         try {
             const token = await getToken();
-            const payload = {
-                ...form,
-                nearbyAttractions: form.nearbyAttractions ? form.nearbyAttractions.split("\n").map((s) => s.trim()).filter(Boolean) : [],
-                promotions: form.promotions ? form.promotions.split("\n").map((s) => s.trim()).filter(Boolean) : [],
-                openTime: form.openTime || undefined,
-            };
-            const { data } = await axios.put("/api/hotels/my", payload, { headers: { Authorization: `Bearer ${token}` } });
+            const formData = new FormData();
+            formData.append("name", form.name);
+            formData.append("address", form.address);
+            formData.append("contact", form.contact);
+            formData.append("city", form.city);
+            formData.append("starRating", String(form.starRating));
+            formData.append("openTime", form.openTime || "");
+            formData.append(
+                "nearbyAttractions",
+                JSON.stringify(form.nearbyAttractions ? form.nearbyAttractions.split("\n").map((s) => s.trim()).filter(Boolean) : [])
+            );
+            const existingUrls = imageList.filter((item) => item.url).map((item) => item.url);
+            const newFiles = imageList.filter((item) => item.file).map((item) => item.file);
+            formData.append("existingImages", JSON.stringify(existingUrls));
+            newFiles.forEach((file) => formData.append("images", file));
+            const { data } = await axios.put("/api/hotels/my", formData, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
             if (data.success) {
                 toast.success("保存成功，已实时更新");
+                if (data.hotel && Array.isArray(data.hotel.images)) {
+                    setImageList(data.hotel.images.map((url) => ({ url })));
+                }
             } else {
                 toast.error(data.message || "保存失败");
             }
@@ -87,16 +119,6 @@ function HotelInfo() {
                     />
                 </div>
                 <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">酒店名（英文）</label>
-                    <input
-                        type="text"
-                        value={form.nameEn}
-                        onChange={(e) => setForm((f) => ({ ...f, nameEn: e.target.value }))}
-                        className="w-full border rounded p-2"
-                        placeholder="Hotel Name in English"
-                    />
-                </div>
-                <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">地址 *</label>
                     <input
                         type="text"
@@ -118,17 +140,14 @@ function HotelInfo() {
                 </div>
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">城市 *</label>
-                    <select
+                    <input
+                        type="text"
                         value={form.city}
                         onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))}
                         className="w-full border rounded p-2"
+                        placeholder="请输入城市名称"
                         required
-                    >
-                        <option value="">请选择</option>
-                        {cities.map((c) => (
-                            <option key={c} value={c}>{c}</option>
-                        ))}
-                    </select>
+                    />
                 </div>
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">星级 (1-5)</label>
@@ -161,13 +180,39 @@ function HotelInfo() {
                     />
                 </div>
                 <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">优惠/促销（每行一个，如：节日8折）</label>
-                    <textarea
-                        value={form.promotions}
-                        onChange={(e) => setForm((f) => ({ ...f, promotions: e.target.value }))}
-                        className="w-full border rounded p-2 h-24"
-                        placeholder="如：节日优惠8折&#10;机酒套餐减100元"
-                    />
+                    <label className="block text-sm font-medium text-gray-700 mb-1">酒店展示图（最多 {MAX_HOTEL_IMAGES} 张，将展示给用户）</label>
+                    <div className="flex flex-wrap gap-3">
+                        {imageList.map((item, index) => (
+                            <div key={index} className="relative w-28 h-28 rounded-lg border border-gray-200 overflow-hidden bg-gray-100">
+                                {item.url ? (
+                                    <img src={item.url} alt="" className="w-full h-full object-cover" />
+                                ) : item.file ? (
+                                    <img src={URL.createObjectURL(item.file)} alt="" className="w-full h-full object-cover" />
+                                ) : null}
+                                <button
+                                    type="button"
+                                    onClick={() => removeImage(index)}
+                                    className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80"
+                                    aria-label="删除"
+                                >
+                                    <IoClose size={14} />
+                                </button>
+                            </div>
+                        ))}
+                        {imageList.length < MAX_HOTEL_IMAGES && (
+                            <label className="w-28 h-28 rounded-lg border-2 border-dashed border-gray-300 flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-gray-50 transition-colors">
+                                <MdOutlineCloudUpload className="text-2xl text-gray-400" />
+                                <span className="text-xs text-gray-500 mt-1">上传</span>
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    multiple
+                                    onChange={(e) => addImages(e.target.files)}
+                                />
+                            </label>
+                        )}
+                    </div>
                 </div>
                 <button type="submit" disabled={saving} className="w-full bg-blue-500 text-white py-2 rounded disabled:opacity-50">
                     {saving ? "保存中..." : "保存"}
