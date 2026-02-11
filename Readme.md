@@ -1,41 +1,6 @@
 # 🏨 Hotel Booking System
 
-A full-stack hotel booking platform built with React, Node.js, Express, MongoDB, and integrated with Clerk authentication and Stripe payments.
 
-## ✨ Features
-
-### 🔐 Authentication & User Management
-- **Clerk Authentication**: Seamless user registration and login
-- **Role-based Access**: Different interfaces for regular users and hotel owners
-- **User Profiles**: Manage user information and booking history
-
-### 🏨 Hotel Management
-- **Hotel Registration**: Hotel owners can register their properties
-- **Room Management**: Add, edit, and manage hotel rooms
-- **Availability Control**: Toggle room availability status
-- **Dashboard Analytics**: View booking statistics and revenue
-
-### 🔍 Room Discovery
-- **Advanced Search**: Filter rooms by type, price range, and destination
-- **Sorting Options**: Sort by price (low to high, high to low) and newest listings
-- **Real-time Availability**: Check room availability for specific dates
-- **Detailed Room Views**: High-quality images, amenities, and specifications
-
-### 📅 Booking System
-- **Date Selection**: Interactive check-in/check-out date picker
-- **Guest Management**: Specify number of guests
-- **Availability Checking**: Real-time room availability verification
-- **Booking Confirmation**: Instant booking confirmation with details
-
-### 💳 Payment Integration
-- **Multiple Payment Methods**: Pay at hotel or online via Stripe
-- **Secure Payments**: Stripe integration for secure online transactions
-- **Payment Status Tracking**: Track payment status for each booking
-
-### 📱 Responsive Design
-- **Mobile-First**: Fully responsive design for all devices
-- **Modern UI**: Clean, intuitive interface built with Tailwind CSS
-- **Interactive Components**: Smooth animations and transitions
 
 ## 🛠️ Tech Stack
 
@@ -99,12 +64,9 @@ hotel-booking/
 ### Installation
 
 1. **Clone the repository**
-   ```bash
-   git clone https://github.com/pratham40/Hotel-Booking.git
-   cd hotel-booking
-   ```
 
-2. **Install dependencies**
+
+2. **安装依赖，最先做**
    ```bash
    # Install server dependencies
    cd server
@@ -115,36 +77,8 @@ hotel-booking/
    npm install
    ```
 
-3. **Environment Variables**
 
-   Create a `.env` file in the server directory:
-   ```env
-   # Database
-   MONGO_URI="your_mongodb_connection_string"
-   PORT=3000
-   
-   # Clerk Authentication
-   CLERK_PUBLISHABLE_KEY="your_clerk_publishable_key"
-   CLERK_SECRET_KEY="your_clerk_secret_key"
-   CLERK_WEBHOOK_SECRET="your_clerk_webhook_secret"
-   
-   # Cloudinary
-   CLOUDINARY_CLOUD_NAME="your_cloudinary_cloud_name"
-   CLOUDINARY_API_KEY="your_cloudinary_api_key"
-   CLOUDINARY_API_SECRET="your_cloudinary_api_secret"
-   
-   # Stripe
-   STRIPE_SECRET_KEY="your_stripe_secret_key"
-   ```
-
-   Create a `.env` file in the client directory:
-   ```env
-   VITE_BACKEND_URL="http://localhost:3000"
-   VITE_CURRENCY="$"
-   VITE_CLERK_PUBLISHABLE_KEY="your_clerk_publishable_key"
-   ```
-
-4. **Run the application**
+4. **启动项目**
    ```bash
    # Start the server (from server directory)
    npm start
@@ -281,31 +215,3 @@ The server includes a `Dockerfile` for containerized deployment and can be deplo
 - AWS
 - Google Cloud Platform
 
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
-## 📝 License
-
-This project is licensed under the ISC License.
-
-## 👨‍💻 Author
-
-**Pratham40**
-- GitHub: [@pratham40](https://github.com/pratham40)
-
-## 🙏 Acknowledgments
-
-- Clerk for authentication services
-- Stripe for payment processing
-- Cloudinary for image management
-- MongoDB for database services
-- Vercel for hosting solutions
-
----
-
-⭐ If you found this project helpful, please give it a star on GitHub!
