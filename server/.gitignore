@@ -69,10 +69,13 @@ web_modules/
 # Yarn Integrity file
 .yarn-integrity
 
-# dotenv environment variables file
+# dotenv environment variables file（切勿提交，含密钥）
 .env
 .env.test
 .env.production
+
+# 用户上传的图片/文件（部署时由运行时生成）
+uploads/
 
 # parcel-bundler cache (https://parceljs.org/)
 .cache

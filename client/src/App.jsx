@@ -4,6 +4,9 @@ import NavBar from './components/NavBar'
 import Home from './pages/Home';
 import Footer from './components/Footer';
 import AllRooms from './pages/AllRooms';
+import SmartSearchResults from './pages/SmartSearchResults';
+import AiHotelChat from './pages/AiHotelChat';
+import TravelMap from './pages/TravelMap';
 import RoomDetail from './pages/RoomDetail';
 import HotelDetail from './pages/HotelDetail';
 import MyBooking from './pages/MyBooking';
@@ -44,6 +47,9 @@ function App() {
             <Route path='/login' element={<Login/>}/>
             <Route path='/register' element={<Register/>}/>
             <Route path='/rooms' element={<AllRooms/>}/>
+            <Route path='/rooms/smart-results' element={<SmartSearchResults/>}/>
+            <Route path='/ai-hotel' element={<AiHotelChat/>}/>
+            <Route path='/travel-map' element={<TravelMap/>}/>
             <Route path='/rooms/:id' element={<RoomDetail />}/>
             <Route path='/hotels/:id' element={<HotelDetail />}/>
             <Route path='/my-bookings' element= {<MyBooking/>}/>

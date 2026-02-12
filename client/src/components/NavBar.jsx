@@ -96,19 +96,27 @@ const NavBar = () => {
             </div>
 
             {/* Desktop Right Side */}
-            <div className="hidden md:flex items-center gap-4">
+            <div className="hidden md:flex items-center gap-3">
                 {isAuthenticated && (
-                    <button
-                        onClick={() => navigate("/my-bookings")}
-                        className="border px-4 py-1 text-sm font-light rounded-full cursor-pointer transition-all"
-                    >
-                        我的订单
-                    </button>
+                    <>
+                        <button
+                            onClick={() => navigate("/my-bookings")}
+                            className={`border px-4 py-1 text-sm font-light rounded-full cursor-pointer transition-all ${isScrolled ? 'text-gray-700 border-gray-700 hover:bg-gray-100' : 'text-white border-white hover:bg-white/10'}`}
+                        >
+                            我的订单
+                        </button>
+                        <button
+                            onClick={logout}
+                            className={`border px-4 py-1 text-sm font-light rounded-full cursor-pointer transition-all ${isScrolled ? 'text-gray-700 border-gray-700 hover:bg-gray-100' : 'text-white border-white hover:bg-white/10'}`}
+                        >
+                            退出登录
+                        </button>
+                    </>
                 )}
                 {!isAuthenticated && (
                     <button
                         onClick={() => navigate("/login")}
-                        className="bg-black text-white px-8 py-2.5 rounded-full transition-all duration-500"
+                        className={`px-6 py-2 text-sm font-medium rounded-full transition-all duration-500 ${isScrolled ? 'bg-gray-800 text-white hover:bg-gray-700' : 'bg-white text-gray-800 hover:bg-white/90'}`}
                     >
                         登录
                     </button>
@@ -179,6 +187,12 @@ const NavBar = () => {
                             className="border px-4 py-1 text-sm font-light rounded-full"
                         >
                             {isOwner ? "商户中心" : "入驻酒店"}
+                        </button>
+                        <button
+                            onClick={() => { setIsMenuOpen(false); logout(); }}
+                            className="border border-gray-800 px-4 py-1 text-sm font-light rounded-full text-gray-800"
+                        >
+                            退出登录
                         </button>
                     </>
                 ) : (

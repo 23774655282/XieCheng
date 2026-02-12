@@ -18,7 +18,7 @@ function Hero() {
     const [destinationOpen, setDestinationOpen] = useState(false);
     const destinationRef = useRef(null);
 
-    const { navigate, getToken, axios, setSearchCity, isAuthenticated, logout } = useAppContext();
+    const { navigate, getToken, axios, setSearchCity } = useAppContext();
 
     useEffect(() => {
         if (!destinationOpen) return;
@@ -113,7 +113,7 @@ function Hero() {
         <p className='font-playfair md:text-lg text-center text-white mt-4'>发现最适合您的酒店与体验。</p>
         <form
          onSubmit={handleSumbit}
-         className='bg-white/80 backdrop-blur-sm text-gray-500 rounded-lg px-6 py-4  flex flex-col md:flex-row max-md:items-start gap-4 max-md:mx-auto my-2'>
+         className='bg-white/80 backdrop-blur-sm text-gray-500 rounded-lg px-5 py-3 flex flex-col md:flex-row max-md:items-start gap-3 max-md:mx-auto my-2'>
 
             <div className="relative" ref={destinationRef}>
                 <div className='flex items-center gap-2'>
@@ -197,29 +197,34 @@ function Hero() {
                 <input min={1} max={4} step={1} id="guests" type="number" defaultValue={1} className="rounded-lg border border-gray-200 px-3 py-1.5 mt-1.5 text-sm outline-none max-w-16" placeholder="1" />
             </div>
 
-            <button className='flex items-center justify-center gap-1 rounded-md bg-black py-3 px-4 text-white my-auto cursor-pointer max-md:w-full max-md:py-1' >
-                <svg className="w-4 h-4 text-white" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24" >
-                    <path stroke="currentColor" strokeLinecap="round" strokeWidth="2" d="m21 21-3.5-3.5M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z" />
-                </svg>
-                <span>搜索</span>
-            </button>
+            <div className="flex flex-row gap-2 my-auto max-md:w-full max-md:flex-1">
+                <button
+                    type="button"
+                    onClick={() => navigate('/ai-hotel')}
+                    className="flex flex-1 items-center justify-center gap-1 rounded-md bg-black py-2 px-3 text-white text-sm whitespace-nowrap hover:bg-gray-800 min-w-0"
+                >
+                    AI选酒店
+                </button>
+                <button type="submit" className="flex flex-1 items-center justify-center gap-1 rounded-md bg-black py-2 px-3 text-white text-sm cursor-pointer min-w-0">
+                    <svg className="w-4 h-4 text-white" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24" >
+                        <path stroke="currentColor" strokeLinecap="round" strokeWidth="2" d="m21 21-3.5-3.5M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z" />
+                    </svg>
+                    <span>搜索</span>
+                </button>
+            </div>
         </form>
-        {/* 主页快捷登录 / 退出按钮 */}
-        {!isAuthenticated ? (
+        <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
           <button
-            onClick={() => navigate('/login')}
-            className="mt-4 px-6 py-2 rounded-full bg-white/90 text-gray-800 text-sm font-medium shadow hover:bg-white"
+            type="button"
+            onClick={() => navigate('/travel-map')}
+            className="px-5 py-2 rounded-full bg-white/90 text-gray-800 text-sm font-medium shadow hover:bg-white flex items-center gap-1.5"
           >
-            登录 / 注册
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+            </svg>
+            旅行地图
           </button>
-        ) : (
-          <button
-            onClick={() => logout()}
-            className="mt-4 px-6 py-2 rounded-full bg-white/90 text-gray-800 text-sm font-medium shadow hover:bg-white"
-          >
-            退出登录
-          </button>
-        )}
+        </div>
       </div>
     </div>
   )

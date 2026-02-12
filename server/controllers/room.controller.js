@@ -1,5 +1,6 @@
 import Hotel from "../models/hotel.model.js";
 import Room from "../models/room.model.js";
+import OpenAI from "openai";
 
 export const createRoom = async (req, res) => {
     try {
@@ -297,4 +298,128 @@ export const toggleRoomAvailability = async (req, res) => {
             message: "error in toggling room availability"
         });
     }
-}
+};
+
+const SMART_SEARCH_SYSTEM = `你是一个酒店预订助手的解析器。用户会用自然语言描述出行需求，可能不规范（如只说"我和我朋友去"、"一家四口"、景点名等），你需要理解真实意图并推断合理默认值。
+请只输出一个 JSON 对象，不要输出任何其他文字、解释或 markdown 标记。
+JSON 必须包含且仅包含以下 6 个字段（均为数字或字符串）：
+
+1. destination: 目的地**城市名称**。
+   - 若用户说的是景点、地标或俗称，请解析为所在城市。例如：中山陵→南京，外滩/塔里木外滩/上海外滩→上海，天安门/故宫→北京，西湖→杭州，兵马俑→西安，夫子庙→南京。
+   - 若用户本轮未提及且存在上一轮条件则保留上一轮值，否则填空字符串 ""。
+
+2. adults: 成人数，数字。从"我和我朋友"、"两人"等推断为 2；未提及则保留上一轮或填 1。
+
+3. children: 儿童数，数字。从"一家四口带两个小孩"等推断；未提及则保留上一轮或填 0。
+
+4. nights: 入住晚数，数字。未提及则保留上一轮或填 1。
+
+5. budget: 酒店总预算（单位：元），数字。未提及则保留上一轮或填 0。
+
+6. roomType: 推荐房型。根据人数与关系推断，**只能**从以下四选一填写，无法推断时填空字符串 ""：
+   - "Single Bed"：一人、单人出行
+   - "Double Bed"：两人、情侣、朋友、夫妻（如"我和我朋友"、"两个人"）
+   - "Luxury Room"：明确要豪华、高端
+   - "Family Suite"：一家多口、带小孩、家庭出游（如"一家四口"、"带两个孩子"）
+
+若请求中带有「上一轮条件」，则在上一轮基础上只更新用户本轮提到或可推断的字段，未提到的保持上一轮的值。`;
+
+/** 智能搜索：用 OpenAI 解析用户自然语言，再按条件筛选房间；支持多轮对话，可传 previousCriteria 合并上一轮条件 */
+export const smartSearchRooms = async (req, res) => {
+    try {
+        const query = (req.body?.query || "").trim();
+        if (!query) {
+            return res.status(400).json({ success: false, message: "请输入您的出行需求" });
+        }
+        const previousCriteria = req.body?.previousCriteria || null;
+        let userContent = query;
+        if (previousCriteria && typeof previousCriteria === "object") {
+            const prev = previousCriteria;
+            const parts = [];
+            if (prev.destination) parts.push(`目的地=${prev.destination}`);
+            if (prev.adults != null) parts.push(`成人数=${prev.adults}`);
+            if (prev.children != null) parts.push(`儿童数=${prev.children}`);
+            if (prev.nights != null) parts.push(`晚数=${prev.nights}`);
+            if (prev.budget != null && prev.budget > 0) parts.push(`预算=${prev.budget}元`);
+            if (prev.roomType) parts.push(`房型=${prev.roomType}`);
+            if (parts.length > 0) userContent = `【上一轮条件】${parts.join("，")}\n【用户本轮说】${query}`;
+        }
+        const apiKey = process.env.AI_API_KEY;
+        if (!apiKey) {
+            return res.status(503).json({
+                success: false,
+                message: "智能搜索暂未配置（缺少 AI_API_KEY），请联系管理员",
+            });
+        }
+        const baseURL = process.env.AI_API_BASE_URL || "https://api.deepseek.com/v1";
+        const model = process.env.AI_CHAT_MODEL || "deepseek-chat";
+        const client = new OpenAI({ apiKey, baseURL });
+        const completion = await client.chat.completions.create({
+            model,
+            messages: [
+                { role: "system", content: SMART_SEARCH_SYSTEM },
+                { role: "user", content: userContent },
+            ],
+            response_format: { type: "json_object" },
+            temperature: 0.2,
+        });
+        const raw = completion.choices[0]?.message?.content;
+        if (!raw) {
+            return res.status(502).json({ success: false, message: "AI 未返回有效结果，请重试" });
+        }
+        let criteria;
+        try {
+            const str = raw.replace(/^```(?:json)?\s*|\s*```$/g, "").trim();
+            criteria = JSON.parse(str);
+        } catch (e) {
+            console.error("Smart search parse error:", raw, e);
+            return res.status(502).json({ success: false, message: "解析结果格式异常，请换一种说法重试" });
+        }
+        const prev = previousCriteria && typeof previousCriteria === "object" ? previousCriteria : {};
+        const destStr = String(criteria.destination ?? "").trim();
+        const destination = destStr || prev.destination || null;
+        const parseNum = (val, fallback) => { const n = parseInt(val, 10); return Number.isNaN(n) ? (fallback != null ? Number(fallback) : null) : n; };
+        const adults = Math.max(0, parseNum(criteria.adults, prev.adults) || 1);
+        const children = Math.max(0, parseNum(criteria.children, prev.children) || 0);
+        const nights = Math.max(1, parseNum(criteria.nights, prev.nights) || 1);
+        const budget = Math.max(0, parseNum(criteria.budget, prev.budget) || 0);
+        const VALID_ROOM_TYPES = ["Single Bed", "Double Bed", "Luxury Room", "Family Suite"];
+        const rawRoomType = String(criteria.roomType ?? prev.roomType ?? "").trim();
+        const roomType = VALID_ROOM_TYPES.includes(rawRoomType) ? rawRoomType : null;
+        const criteriaOut = { destination: destination || null, adults, children, nights, budget: budget || null, roomType };
+        const hotelFilter = { status: "approved" };
+        if (destination) hotelFilter.city = new RegExp(destination, "i");
+        const approvedHotelIds = await Hotel.find(hotelFilter).distinct("_id").then((ids) => ids.map((id) => id.toString()));
+        const roomFilter = { isAvailable: true, hotel: { $in: approvedHotelIds } };
+        if (roomType) roomFilter.roomType = roomType;
+        if (budget > 0 && nights >= 1) {
+            const maxPricePerNight = Math.floor(budget / nights);
+            roomFilter.pricePerNight = { $lte: maxPricePerNight };
+        }
+        const rooms = await Room.find(roomFilter)
+            .populate({ path: "hotel" })
+            .sort({ pricePerNight: 1, createdAt: -1 })
+            .limit(50)
+            .lean();
+        return res.status(200).json({
+            success: true,
+            criteria: criteriaOut,
+            rooms,
+            total: rooms.length,
+        });
+    } catch (error) {
+        const errMsg = error?.message || String(error);
+        const errCode = error?.code || error?.status;
+        console.error("Smart search error:", errCode, errMsg);
+        let msg = "智能搜索失败，请稍后重试";
+        if (error?.status === 401 || errMsg?.includes("401")) msg = "AI 服务认证失败，请检查 .env 中的 AI_API_KEY 是否正确";
+        else if (error?.status === 402 || errMsg?.includes("402") || errMsg?.includes("Insufficient Balance"))
+            msg = "AI 账户余额不足，请前往 DeepSeek 控制台充值后再试";
+        else if (errMsg?.includes("timed out") || errMsg?.includes("timeout") || errCode === "ETIMEDOUT")
+            msg = "连接 AI 服务超时，请检查网络后重试";
+        else if (errCode === "ENOTFOUND" || errCode === "ECONNREFUSED" || errCode === "ECONNRESET" || errMsg?.includes("fetch") || errMsg?.includes("ECONNREFUSED"))
+            msg = "无法连接 AI 服务，请检查网络或 API 配置";
+        else if (errMsg) msg = errMsg;
+        return res.status(500).json({ success: false, message: msg });
+    }
+};
