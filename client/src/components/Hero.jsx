@@ -108,7 +108,6 @@ function Hero() {
         </div>
       )}
       <div className='relative z-10 flex flex-col items-center justify-center'>
-        <p className='bg-[#49b9ff]/50 px-3 py-1 rounded-full md:mt-20 mt-32'>极致酒店体验</p>
         <h1 className='md:text-5xl font-bold text-center  text-white'>找到您的理想住宿</h1>
         <p className='font-playfair md:text-lg text-center text-white mt-4'>发现最适合您的酒店与体验。</p>
         <form
