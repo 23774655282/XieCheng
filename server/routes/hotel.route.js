@@ -6,6 +6,7 @@ import {
     listHotelsPublic,
     getHotelPublicById,
     getCities,
+    listHotelsForMap,
     registerHotel,
     getMyHotel,
     updateHotel,
@@ -21,6 +22,7 @@ const hotelRouter = express.Router();
 // 用户端公开：已审核通过的酒店列表、单酒店详情（含房型列表）、城市列表
 hotelRouter.get("/public", listHotelsPublic);
 hotelRouter.get("/public/cities", getCities);
+hotelRouter.get("/public/map", listHotelsForMap);
 hotelRouter.get("/public/:id", getHotelPublicById);
 
 // 商户端

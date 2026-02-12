@@ -1,12 +1,13 @@
 import express from 'express';
 import upload from '../middlewares/multer.middleware.js';
 import {authMiddleware} from "../middlewares/auth.middleware.js"
-import { createRoom, getOwnerRooms, getOwnerRoomById, getRooms, getRoomById, toggleRoomAvailability, deleteRoom, updateRoom } from '../controllers/room.controller.js';
+import { createRoom, getOwnerRooms, getOwnerRoomById, getRooms, getRoomById, toggleRoomAvailability, deleteRoom, updateRoom, smartSearchRooms } from '../controllers/room.controller.js';
 const roomRouter = express.Router();
 
 roomRouter.post("/",upload.array("images",4),authMiddleware,createRoom)
 
 roomRouter.get("/", getRooms);
+roomRouter.post("/smart-search", smartSearchRooms);
 roomRouter.get("/owner", authMiddleware, getOwnerRooms);
 roomRouter.get("/owner/:id", authMiddleware, getOwnerRoomById);
 roomRouter.get("/:id", getRoomById);

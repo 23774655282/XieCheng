@@ -12,12 +12,15 @@ function HotelInfo() {
     const [saving, setSaving] = useState(false);
     const [form, setForm] = useState({
         name: "",
+        nameEn: "",
         address: "",
         contact: "",
         city: "",
         starRating: 3,
         openTime: "",
         nearbyAttractions: "",
+        longitude: "",
+        latitude: "",
     });
     // 酒店展示图：每项为 { url }（已有）或 { file }（新选）
     const [imageList, setImageList] = useState([]);
@@ -31,12 +34,15 @@ function HotelInfo() {
                     const h = data.hotel;
                     setForm({
                         name: h.name || "",
+                        nameEn: h.nameEn || "",
                         address: h.address || "",
                         contact: h.contact || "",
                         city: h.city || "",
                         starRating: h.starRating ?? 3,
                         openTime: h.openTime ? h.openTime.slice(0, 10) : "",
                         nearbyAttractions: Array.isArray(h.nearbyAttractions) ? h.nearbyAttractions.join("\n") : "",
+                        longitude: h.longitude != null ? String(h.longitude) : "",
+                        latitude: h.latitude != null ? String(h.latitude) : "",
                     });
                     setImageList((Array.isArray(h.images) ? h.images : []).map((url) => ({ url })));
                 }
@@ -71,6 +77,7 @@ function HotelInfo() {
             const token = await getToken();
             const formData = new FormData();
             formData.append("name", form.name);
+            formData.append("nameEn", form.nameEn || "");
             formData.append("address", form.address);
             formData.append("contact", form.contact);
             formData.append("city", form.city);
@@ -80,6 +87,8 @@ function HotelInfo() {
                 "nearbyAttractions",
                 JSON.stringify(form.nearbyAttractions ? form.nearbyAttractions.split("\n").map((s) => s.trim()).filter(Boolean) : [])
             );
+            formData.append("latitude", form.latitude === "" ? "" : form.latitude);
+            formData.append("longitude", form.longitude === "" ? "" : form.longitude);
             const existingUrls = imageList.filter((item) => item.url).map((item) => item.url);
             const newFiles = imageList.filter((item) => item.file).map((item) => item.file);
             formData.append("existingImages", JSON.stringify(existingUrls));
@@ -119,6 +128,16 @@ function HotelInfo() {
                     />
                 </div>
                 <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">酒店英文名</label>
+                    <input
+                        type="text"
+                        value={form.nameEn}
+                        onChange={(e) => setForm((f) => ({ ...f, nameEn: e.target.value }))}
+                        className="w-full border rounded p-2"
+                        placeholder="如：Sunrise Hotel"
+                    />
+                </div>
+                <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">地址 *</label>
                     <input
                         type="text"
@@ -149,6 +168,29 @@ function HotelInfo() {
                         required
                     />
                 </div>
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">经度（地图定位）</label>
+                        <input
+                            type="text"
+                            value={form.longitude}
+                            onChange={(e) => setForm((f) => ({ ...f, longitude: e.target.value }))}
+                            className="w-full border rounded p-2"
+                            placeholder="如：116.4074"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">纬度（地图定位）</label>
+                        <input
+                            type="text"
+                            value={form.latitude}
+                            onChange={(e) => setForm((f) => ({ ...f, latitude: e.target.value }))}
+                            className="w-full border rounded p-2"
+                            placeholder="如：39.9042"
+                        />
+                    </div>
+                </div>
+                <p className="text-xs text-gray-500 -mt-2">先填经度再纬度，填写后酒店将显示在首页地图上，可留空。可从高德/百度地图拾取坐标。</p>
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">星级 (1-5)</label>
                     <select

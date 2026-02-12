@@ -21,10 +21,11 @@ import closeMenu from './closeMenu.svg'
 import guestsIcon from './guestsIcon.svg'
 import regImage from './regImage.png'
 import heroImage from './heroImage.png'
-import home1 from './home1.jpg'
-import home2 from './home2.jpg'
-import home3 from './home3.jpg'
-import home4 from './home4.jpg'
+import home1 from './home1.webp'
+import home2 from './home2.webp'
+import home3 from './home3.webp'
+import home4 from './home4.webp'
+import home5 from './home5.webp'
 import exclusiveOfferCardImg1 from "./exclusiveOfferCardImg1.png";
 import exclusiveOfferCardImg2 from "./exclusiveOfferCardImg2.png";
 import exclusiveOfferCardImg3 from "./exclusiveOfferCardImg3.png";
@@ -68,7 +69,7 @@ export const assets = {
 }
 
 /** 首页 Hero 轮播背景图：将更多图片放入 assets 并在此数组中引入即可 */
-export const heroCarouselImages = [home1, home2, home3, home4];
+export const heroCarouselImages = [home1, home2, home3, home4, home5];
 
 export const cities = [
     "Dubai",

@@ -7,6 +7,9 @@ const hotelSchema = new Schema({
     contact: { type: String, required: true },
     owner: { type: String, ref: "User", required: true },
     city: { type: String, required: true },
+    /** 地图展示用：纬度、经度（可选，无则按城市中心展示） */
+    latitude: { type: Number, default: null },
+    longitude: { type: Number, default: null },
     // 大作业要求：酒店星级、开业时间、可选维度
     starRating: { type: Number, default: 3 }, // 1-5 星级
     openTime: { type: Date }, // 开业时间

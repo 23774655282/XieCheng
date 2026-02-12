@@ -33,6 +33,41 @@ export const listHotelsPublic = async (req, res) => {
     }
 };
 
+/** 用户端：地图用，按当前视野范围（bounds）返回已审核酒店，支持可选筛选 city、starRating */
+export const listHotelsForMap = async (req, res) => {
+    try {
+        const { minLat, maxLat, minLng, maxLng, city, starRating } = req.query;
+        const filter = { status: "approved" };
+        const minLatN = parseFloat(minLat);
+        const maxLatN = parseFloat(maxLat);
+        const minLngN = parseFloat(minLng);
+        const maxLngN = parseFloat(maxLng);
+        const hasValidBounds =
+            Number.isFinite(minLatN) && Number.isFinite(maxLatN) && Number.isFinite(minLngN) && Number.isFinite(maxLngN);
+        if (hasValidBounds) {
+            filter.latitude = { $gte: Math.min(minLatN, maxLatN), $lte: Math.max(minLatN, maxLatN) };
+            filter.longitude = { $gte: Math.min(minLngN, maxLngN), $lte: Math.max(minLngN, maxLngN) };
+        } else {
+            return res.status(200).json({ success: true, hotels: [] });
+        }
+        if (city && String(city).trim()) filter.city = new RegExp(String(city).trim(), "i");
+        if (starRating != null && starRating !== "") {
+            const r = Number(starRating);
+            if (Number.isFinite(r)) filter.starRating = r;
+        }
+        const hotels = await Hotel.find(filter)
+            .select("name address city starRating images latitude longitude")
+            .sort({ updatedAt: -1 })
+            .limit(500)
+            .lean();
+        const withPosition = hotels.map((h) => ({ ...h, _lat: h.latitude, _lng: h.longitude }));
+        return res.status(200).json({ success: true, hotels: withPosition });
+    } catch (error) {
+        console.error("Error listing hotels for map:", error);
+        return res.status(500).json({ success: false, message: "error in listing hotels for map" });
+    }
+};
+
 /** 用户端：获取当前所有已审核酒店的所在地（城市列表，去重） */
 export const getCities = async (req, res) => {
     try {
@@ -118,7 +153,7 @@ function parseBodyArray(val) {
 /** 商户：更新酒店信息（保存后实时更新），支持上传酒店图片 */
 export const updateHotel = async (req, res) => {
     try {
-        const { name, nameEn, address, contact, city, starRating, openTime, nearbyAttractions, promotions, existingImages } = req.body;
+        const { name, nameEn, address, contact, city, starRating, openTime, nearbyAttractions, promotions, existingImages, latitude, longitude } = req.body;
 
         let hotel = await Hotel.findOne({ owner: req.user._id });
 
@@ -143,6 +178,8 @@ export const updateHotel = async (req, res) => {
         // 如果当前商户还没有酒店，视为首次保存，直接创建一条酒店记录
         if (!hotel) {
             const owner = req.user._id;
+            const latVal = latitude === "" || latitude == null ? null : Number(latitude);
+            const lngVal = longitude === "" || longitude == null ? null : Number(longitude);
             hotel = await Hotel.create({
                 owner,
                 name,
@@ -156,6 +193,8 @@ export const updateHotel = async (req, res) => {
                 promotions: promArr,
                 status: "pending_audit",
                 images: imageUrls.length > 0 ? imageUrls : [],
+                latitude: Number.isFinite(latVal) ? latVal : null,
+                longitude: Number.isFinite(lngVal) ? lngVal : null,
             });
 
             // 首次创建酒店时，将用户角色设为商户
@@ -178,6 +217,14 @@ export const updateHotel = async (req, res) => {
         if (openTime !== undefined) hotel.openTime = openTime ? new Date(openTime) : undefined;
         if (nearbyAttractions !== undefined) hotel.nearbyAttractions = nearArr;
         if (promotions !== undefined) hotel.promotions = promArr;
+        if (latitude !== undefined) {
+            const v = latitude === "" || latitude == null ? null : Number(latitude);
+            hotel.latitude = Number.isFinite(v) ? v : null;
+        }
+        if (longitude !== undefined) {
+            const v = longitude === "" || longitude == null ? null : Number(longitude);
+            hotel.longitude = Number.isFinite(v) ? v : null;
+        }
         hotel.images = imageUrls;
         await hotel.save();
         return res.status(200).json({ success: true, message: "Hotel updated successfully", hotel });
