@@ -7,7 +7,7 @@ function ExclusiveOffer() {
     const navigate = useNavigate()
 
     return (
-        <div className="flex flex-col items-center px-6 md:px-16 pt-20 pb-30 bg-gray-50 min-h-screen">
+        <div className="flex flex-col items-center px-6 md:px-16 pt-12 md:pt-16 pb-24 md:pb-32 bg-gray-50">
             <div className="flex flex-col items-center md:flex-row justify-between w-full mb-8">
                 <Title align="left" title="限时优惠" subtitle="获取最佳入住优惠与折扣！" />
             </div>

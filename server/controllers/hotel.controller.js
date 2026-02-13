@@ -68,6 +68,26 @@ export const listHotelsForMap = async (req, res) => {
     }
 };
 
+/** 用户端：按关键字搜索酒店（支持酒店名称、城市），用于目的地下拉联想 */
+export const searchHotelsPublic = async (req, res) => {
+    try {
+        const q = (req.query.q || req.query.keyword || "").trim();
+        if (!q) return res.status(200).json({ success: true, hotels: [] });
+        const regex = new RegExp(q, "i");
+        const hotels = await Hotel.find({
+            status: "approved",
+            $or: [{ name: regex }, { city: regex }],
+        })
+            .select("name city")
+            .limit(10)
+            .lean();
+        return res.status(200).json({ success: true, hotels });
+    } catch (error) {
+        console.error("Error searching hotels:", error);
+        return res.status(500).json({ success: false, message: "error in searching hotels" });
+    }
+};
+
 /** 用户端：获取当前所有已审核酒店的所在地（城市列表，去重） */
 export const getCities = async (req, res) => {
     try {

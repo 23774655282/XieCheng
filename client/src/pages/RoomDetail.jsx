@@ -1,4 +1,6 @@
-import  { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { addDays } from 'date-fns';
+import { formatLocalDate, getTodayLocal, parseLocalDate } from '../utils/dateUtils';
 import { useParams } from 'react-router-dom';
 import { facilityIcons, roomCommonData } from '../assets/assets';
 import { FaLocationArrow } from 'react-icons/fa';
@@ -11,6 +13,13 @@ const facilityLabelMap = {
     'Room Service': '客房服务',
     'Mountain View': '山景',
     'Pool Access': '泳池使用',
+    'Parking': '免费停车',
+    'Gym': '健身房',
+    'Sea View': '海景',
+    'Air Conditioning': '空调',
+    'Spa': '水疗中心',
+    'Restaurant': '餐厅',
+    'Airport Shuttle': '机场接送',
 };
 const roomTypeLabelMap = {
     'Single Bed': '单人间',
@@ -194,7 +203,7 @@ function RoomDetail() {
                 <div className="flex flex-wrap gap-4 mb-4">
                     {room.amenties.map((item, index) => (
                         <div key={index} className='flex items-center gap-2 border px-3 py-2 rounded-full text-sm shadow-sm'>
-                            <img src={facilityIcons[item]} alt={facilityLabelMap[item] || item} className='w-5 h-5' />
+                            {facilityIcons[item] && <img src={facilityIcons[item]} alt="" className='w-5 h-5' />}
                             <span>{facilityLabelMap[item] || item}</span>
                         </div>
                     ))}
@@ -214,7 +223,7 @@ function RoomDetail() {
                         <input type="date" id="checkInDate" required className="border rounded-lg p-2 outline-none"
                         onChange={(e)=>setCheckInDate(e.target.value)}
                         value={checkInDate}
-                        min={checkInDate}
+                        min={getTodayLocal()}
                         
                         />
                     </div>
@@ -227,7 +236,7 @@ function RoomDetail() {
                             className="border rounded-lg p-2 outline-none"
                             onChange={(e) => setCheckOutDate(e.target.value)}
                             value={checkOutDate}
-                            min={new Date().toISOString().split("T")[0]}
+                            min={checkInDate ? formatLocalDate(addDays(parseLocalDate(checkInDate), 1)) : getTodayLocal()}
                             />
                     </div>
                     <div className="flex flex-col">

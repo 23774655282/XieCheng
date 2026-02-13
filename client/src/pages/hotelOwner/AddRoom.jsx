@@ -27,6 +27,13 @@ function AddRoom() {
       'Room Service': false,
       'Mountain View': false,
       'Pool Access': false,
+      'Parking': false,
+      'Gym': false,
+      'Sea View': false,
+      'Air Conditioning': false,
+      'Spa': false,
+      'Restaurant': false,
+      'Airport Shuttle': false,
     },
   });
 
@@ -36,6 +43,13 @@ function AddRoom() {
     'Room Service': '客房服务',
     'Mountain View': '山景',
     'Pool Access': '泳池使用',
+    'Parking': '免费停车',
+    'Gym': '健身房',
+    'Sea View': '海景',
+    'Air Conditioning': '空调',
+    'Spa': '水疗中心',
+    'Restaurant': '餐厅',
+    'Airport Shuttle': '机场接送',
   };
 
   const [newAmenity, setNewAmenity] = useState("");
@@ -124,6 +138,13 @@ function AddRoom() {
             'Room Service': false,
             'Mountain View': false,
             'Pool Access': false,
+            'Parking': false,
+            'Gym': false,
+            'Sea View': false,
+            'Air Conditioning': false,
+            'Spa': false,
+            'Restaurant': false,
+            'Airport Shuttle': false,
           },
         })
         setImages({

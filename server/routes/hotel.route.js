@@ -7,6 +7,7 @@ import {
     getHotelPublicById,
     getCities,
     listHotelsForMap,
+    searchHotelsPublic,
     registerHotel,
     getMyHotel,
     updateHotel,
@@ -23,6 +24,7 @@ const hotelRouter = express.Router();
 hotelRouter.get("/public", listHotelsPublic);
 hotelRouter.get("/public/cities", getCities);
 hotelRouter.get("/public/map", listHotelsForMap);
+hotelRouter.get("/public/search", searchHotelsPublic);
 hotelRouter.get("/public/:id", getHotelPublicById);
 
 // 商户端

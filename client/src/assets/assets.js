@@ -78,11 +78,26 @@ export const cities = [
     "London",
 ];
 
+/** 国内热门城市（与参考图一致） */
+export const domesticHotCities = [
+  "北京", "上海", "天津", "重庆", "大连", "青岛", "西安", "南京", "苏州", "杭州",
+  "厦门", "成都", "深圳", "广州", "三亚", "台北", "香港", "济南", "宁波", "沈阳",
+  "武汉", "郑州",
+];
+
+/** 海外热门城市（与参考图一致） */
+export const overseasHotCities = [
+  "首尔", "曼谷", "普吉岛", "东京", "新加坡", "大阪", "济州市", "巴厘岛", "清迈", "哥打京那巴鲁",
+  "京都", "吉隆坡", "芭堤雅", "那霸", "洛杉矶", "苏梅岛", "巴黎", "甲米", "拉斯维加斯", "伦敦",
+  "纽约", "芽庄", "悉尼",
+];
+
 // Exclusive Offers Dummy Data
 export const exclusiveOffers = [
     { _id: 1, title: "夏日畅享套餐", description: "享免费住宿一晚及每日早餐", priceOff: 25, expiryDate: "8月31日", image: exclusiveOfferCardImg1 },
     { _id: 2, title: "浪漫双人套餐", description: "专享双人套餐含 Spa 护理", priceOff: 20, expiryDate: "9月20日", image: exclusiveOfferCardImg2 },
     { _id: 3, title: "奢华度假", description: "提前 60 天预订，享全球奢华酒店优惠。", priceOff: 30, expiryDate: "9月25日", image: exclusiveOfferCardImg3 },
+    { _id: 4, title: "家庭亲子畅游", description: "两大一小专属优惠，含儿童乐园及亲子活动", priceOff: 35, expiryDate: "10月15日", image: "https://images.unsplash.com/photo-1582719508461-905c673771fd?w=800" },
 ]
 
 // Testimonials Dummy Data
