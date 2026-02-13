@@ -22,7 +22,44 @@ export function AppProvider({ children }) {
 
   const [showHotelReg, setShowHotelReg] = useState(false);
   const [searchCity, setSearchCity] = useState([]);
+  const [recentSearchRecords, setRecentSearchRecords] = useState(() => {
+    try {
+      const raw = localStorage.getItem("recentSearchRecords");
+      if (raw) {
+        const arr = JSON.parse(raw);
+        return Array.isArray(arr) ? arr.slice(0, 5) : [];
+      }
+    } catch (_) {}
+    return [];
+  });
   const [rooms, setRooms] = useState([]);
+
+  function addRecentSearch(record) {
+    const r = {
+      destination: record.destination?.trim() || "",
+      checkIn: record.checkIn || "",
+      checkOut: record.checkOut || "",
+      rooms: record.rooms ?? 1,
+      adults: record.adults ?? 2,
+    };
+    if (!r.destination) return;
+    setRecentSearchRecords((prev) => {
+      const filtered = prev.filter((x) => x.destination !== r.destination);
+      const next = [r, ...filtered].slice(0, 5);
+      try { localStorage.setItem("recentSearchRecords", JSON.stringify(next)); } catch (_) {}
+      return next;
+    });
+    setSearchCity((prev) => {
+      const updated = prev.includes(r.destination) ? prev : [r.destination, ...prev].slice(0, 5);
+      return updated;
+    });
+  }
+
+  function clearRecentSearch() {
+    setRecentSearchRecords([]);
+    setSearchCity([]);
+    try { localStorage.removeItem("recentSearchRecords"); } catch (_) {}
+  }
 
   async function fetchRooms(page = 1) {
     try {
@@ -58,7 +95,15 @@ export function AppProvider({ children }) {
         setRoleState(r);
         setIsOwner(r === "merchant" || r === "admin");
         setIsPlatformAdmin(r === "admin");
-        setSearchCity(data.recentSerachCities || []);
+        const apiCities = data.recentSerachCities || [];
+        setSearchCity(apiCities);
+        setRecentSearchRecords((prev) => {
+          const known = new Set(prev.map((x) => x.destination));
+          const fromApi = apiCities.filter((c) => !known.has(c)).map((c) => ({ destination: c }));
+          const merged = [...prev, ...fromApi].slice(0, 5);
+          try { localStorage.setItem('recentSearchRecords', JSON.stringify(merged)); } catch (_) {}
+          return merged;
+        });
         setIsAuthenticated(true);
         toast.success("用户信息加载成功");
       }
@@ -104,6 +149,8 @@ export function AppProvider({ children }) {
     setIsOwner(false);
     setIsPlatformAdmin(false);
     setSearchCity([]);
+    setRecentSearchRecords([]);
+    try { localStorage.removeItem("recentSearchRecords"); } catch (_) {}
   }
 
   const value = {
@@ -125,6 +172,9 @@ export function AppProvider({ children }) {
     setShowHotelReg,
     searchCity,
     setSearchCity,
+    recentSearchRecords,
+    addRecentSearch,
+    clearRecentSearch,
     rooms,
     setRooms,
   };

@@ -11,6 +11,13 @@ const facilityLabelMap = {
   'Room Service': '客房服务',
   'Mountain View': '山景',
   'Pool Access': '泳池使用',
+  'Parking': '免费停车',
+  'Gym': '健身房',
+  'Sea View': '海景',
+  'Air Conditioning': '空调',
+  'Spa': '水疗中心',
+  'Restaurant': '餐厅',
+  'Airport Shuttle': '机场接送',
 };
 
 function SmartSearchResults() {
@@ -67,9 +74,9 @@ function SmartSearchResults() {
                   <p className="text-sm text-gray-500 mb-2">{room.hotel.name} · {room.hotel.city}</p>
                 )}
                 <div className="flex flex-wrap gap-2 mb-3">
-                  {(room.amenties || []).slice(0, 4).map((item, index) => (
+                  {(room.amenties || []).slice(0, 5).map((item, index) => (
                     <div key={index} className="flex items-center gap-1">
-                      <img src={facilityIcons[item]} alt={facilityLabelMap[item] || item} className="w-4 h-4" />
+                      {facilityIcons[item] && <img src={facilityIcons[item]} alt="" className="w-3.5 h-3.5 flex-shrink-0" />}
                       <span className="text-xs text-gray-600">{facilityLabelMap[item] || item}</span>
                     </div>
                   ))}

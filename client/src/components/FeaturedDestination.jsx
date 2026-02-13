@@ -7,7 +7,7 @@ function FeaturedDestination() {
   const { rooms,navigate } = useAppContext();
 
   return rooms.length > 0 && (
-    <div className='flex flex-col items-center px-6  bg-slate-50 py-20'>
+    <div className='flex flex-col items-center px-6 bg-slate-50 py-12 md:py-14'>
       <Title title="精选目的地" subtitle="发现我们为您精选的下一站住宿" />
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-20 w-full max-w-6xl mx-auto">
             {rooms.slice(0, 6).map((room, index) => (

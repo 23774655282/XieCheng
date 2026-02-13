@@ -79,7 +79,10 @@ export const getRooms = async (req, res) => {
         const promo = req.query.promo ? parseInt(req.query.promo, 10) : null;
 
         const hotelFilter = { status: "approved" };
-        if (destination) hotelFilter.city = new RegExp(destination, "i");
+        if (destination) {
+            const re = new RegExp(destination, "i");
+            hotelFilter.$or = [{ city: re }, { name: re }];
+        }
         const approvedHotelIds = await Hotel.find(hotelFilter).distinct("_id").then(ids => ids.map(id => id.toString()));
         const filter = { isAvailable: true, hotel: { $in: approvedHotelIds } };
 
