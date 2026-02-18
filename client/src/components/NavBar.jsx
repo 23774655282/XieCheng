@@ -85,7 +85,6 @@ const NavBar = () => {
                     <button
                         onClick={() => {
                             if (isOwner) navigate("/owner");
-                            else if (role === "user") navigate("/choose-role");
                             else setShowHotelReg(true);
                         }}
                         className={`border px-4 py-1 text-sm font-light rounded-full cursor-pointer transition-all ${isScrolled ? 'text-black border-black' : 'text-white border-white'}`}
@@ -181,7 +180,6 @@ const NavBar = () => {
                             onClick={() => {
                                 setIsMenuOpen(false);
                                 if (isOwner) navigate("/owner");
-                                else if (role === "user") navigate("/choose-role");
                                 else setShowHotelReg(true);
                             }}
                             className="border px-4 py-1 text-sm font-light rounded-full"

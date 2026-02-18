@@ -39,4 +39,35 @@ const hotelStorage = multer.diskStorage({
 });
 
 export const uploadHotel = multer({ storage: hotelStorage });
+
+// 商户申请：营业执照上传目录 server/uploads/licenses
+const licenseUploadDir = path.join(__dirname, "..", "uploads", "licenses");
+fs.mkdirSync(licenseUploadDir, { recursive: true });
+const licenseStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, licenseUploadDir),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname) || ".jpg";
+    cb(null, `${Date.now()}-license${ext}`);
+  },
+});
+export const uploadLicense = multer({ storage: licenseStorage });
+
+// 商户申请：营业执照 + 酒店照片（外部/内部）
+const merchantApplyDir = path.join(__dirname, "..", "uploads", "merchant-apply");
+fs.mkdirSync(merchantApplyDir, { recursive: true });
+const merchantApplyStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, merchantApplyDir),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname) || ".jpg";
+    const field = file.fieldname;
+    cb(null, `${field}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`);
+  },
+});
+export const uploadMerchantApply = multer({
+  storage: merchantApplyStorage,
+}).fields([
+  { name: "license", maxCount: 1 },
+  { name: "exterior", maxCount: 5 },
+  { name: "interior", maxCount: 5 },
+]);
 export default upload;

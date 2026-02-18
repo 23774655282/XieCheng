@@ -38,11 +38,23 @@ const userSchema = new Schema({
     enum: ['user', 'merchant', 'admin'],  // user=普通用户, merchant=商户, admin=平台管理员
     default: 'user',
   },
+  /** 商户申请状态：none=未申请, pending=审核中, approved=已通过, rejected=已驳回 */
+  merchantApplicationStatus: {
+    type: String,
+    enum: ['none', 'pending', 'approved', 'rejected'],
+    default: 'none',
+  },
   recentSerachCities: [
     {
       type: String,
     },
   ],
+  /** 找回密码：验证码及过期时间 */
+  resetCode: { type: String },
+  resetCodeExpiresAt: { type: Date },
+  /** 验证码登录：验证码及过期时间 */
+  loginCode: { type: String },
+  loginCodeExpiresAt: { type: Date },
 }, { timestamps: true });
 
 const User = mongoose.model('User', userSchema);

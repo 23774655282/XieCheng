@@ -2,9 +2,11 @@ export const getUserData = (req, res) => {
     try {
         const role = req.user.role;
         const recentSerachCities = req.user.recentSerachCities;
+        const merchantApplicationStatus = req.user.merchantApplicationStatus || 'none';
         res.status(200).json({
             success: true,
             role,
+            merchantApplicationStatus,
             recentSerachCities,
         });
     } catch (error) {
@@ -16,24 +18,9 @@ export const getUserData = (req, res) => {
     }
 };
 
-/** 注册时选择角色：仅当当前角色为 user 时可设置一次为 merchant 或 admin */
+/** 已废弃：普通用户不能直接设 role。商户需通过 POST /merchant/apply 申请，由 admin 审核后批准 */
 export const setRole = async (req, res) => {
-    try {
-        const { role } = req.body;
-        if (!["merchant", "admin"].includes(role)) {
-            return res.status(400).json({ success: false, message: "Invalid role" });
-        }
-        const user = req.user;
-        if (user.role !== "user") {
-            return res.status(400).json({ success: false, message: "Role already set" });
-        }
-        user.role = role;
-        await user.save({ validateBeforeSave: false });
-        return res.status(200).json({ success: true, role: user.role });
-    } catch (error) {
-        console.error("Error setting role:", error);
-        res.status(500).json({ success: false, message: "error in setting role" });
-    }
+    return res.status(403).json({ success: false, message: "role cannot be set directly. Apply via /merchant/apply for merchant" });
 };
 
 

@@ -2,6 +2,7 @@ import { SlCalender } from 'react-icons/sl'
 import { LuMapPinCheckInside } from 'react-icons/lu'
 import { useState, useEffect, useRef } from 'react'
 import DatePicker from 'react-datepicker'
+import { flip, offset } from '@floating-ui/react'
 import { zhCN } from 'date-fns/locale/zh-CN'
 import { addDays, differenceInCalendarDays } from 'date-fns'
 import { formatLocalDate, formatDateShort, formatDateSuffix, getTodayLocal, parseLocalDate } from '../utils/dateUtils'
@@ -29,6 +30,7 @@ function Hero() {
     const [rooms, setRooms] = useState(1);
     const [pets, setPets] = useState(false);
     const [guestsOpen, setGuestsOpen] = useState(false);
+    const [datePickerOpen, setDatePickerOpen] = useState(false);
     const guestsRef = useRef(null);
 
     const { navigate, getToken, axios, addRecentSearch, recentSearchRecords, clearRecentSearch } = useAppContext();
@@ -159,7 +161,7 @@ function Hero() {
                     value={destination}
                     id="destinationInput"
                     type="text"
-                    className="rounded-lg border border-gray-200 px-3 py-2 mt-2 text-sm font-semibold text-gray-900 placeholder:font-normal placeholder:text-gray-400 outline-none w-full min-w-0 min-h-[56px]"
+                    className={`rounded-lg border px-3 py-2 mt-2 text-sm font-semibold text-gray-900 placeholder:font-normal placeholder:text-gray-400 outline-none w-full min-w-0 min-h-[56px] ${destinationOpen ? 'border-gray-700 bg-gray-100/50' : 'border-gray-200'}`}
                     placeholder="输入或选择目的地"
                     autoComplete="off"
                 />
@@ -203,12 +205,14 @@ function Hero() {
                       setCheckIn(start ? formatLocalDate(start) : '');
                       setCheckOut(end ? formatLocalDate(end) : '');
                     }}
+                    onCalendarOpen={() => setDatePickerOpen(true)}
+                    onCalendarClose={() => setDatePickerOpen(false)}
                     minDate={new Date()}
                     monthsShown={2}
                     customInput={
                       <button
                         type="button"
-                        className="rounded-lg border border-gray-200 px-0 py-2 mt-2 text-sm outline-none w-full min-w-[340px] cursor-pointer caret-transparent select-none text-left min-h-[56px] flex items-stretch overflow-hidden"
+                        className={`rounded-lg border px-0 py-2 mt-2 text-sm outline-none w-full min-w-[340px] cursor-pointer caret-transparent select-none text-left min-h-[56px] flex items-stretch overflow-hidden ${datePickerOpen ? 'border-gray-700 bg-gray-100/50' : 'border-gray-200'}`}
                       >
                         <div className="flex-1 flex flex-col justify-center px-4 text-left">
                           <div className="font-semibold text-gray-900">
@@ -230,6 +234,13 @@ function Hero() {
                       </button>
                     }
                     popperClassName="hero-datepicker-popper"
+                    popperPlacement="bottom-start"
+                    popperProps={{
+                      middleware: [
+                        flip({ padding: 15, mainAxis: false, fallbackPlacements: [], fallbackStrategy: 'initialPlacement' }),
+                        offset(10),
+                      ],
+                    }}
                     locale={zhCN}
                     calendarStartDay={0}
                     onKeyDown={(e) => { if (e.key !== 'Tab') e.preventDefault(); }}
@@ -242,19 +253,19 @@ function Hero() {
                     <label className="mb-1.5 md:mb-0">人数</label>
                 </div>
                 <div className="relative w-full min-w-[140px]">
-                <button type="button" onClick={() => setGuestsOpen((o) => !o)} className={`flex items-center gap-2 rounded-lg border px-3 py-2 mt-2 text-sm outline-none w-full min-w-0 min-h-[56px] text-left cursor-pointer ${guestsOpen ? 'border-blue-500 bg-blue-50/30' : 'border-gray-200'}`}>
+                <button type="button" onClick={() => setGuestsOpen((o) => !o)} className={`flex items-center gap-2 rounded-lg border px-3 py-2 mt-2 text-sm outline-none w-full min-w-0 min-h-[56px] text-left cursor-pointer ${guestsOpen ? 'border-gray-700 bg-gray-100/50' : 'border-gray-200'}`}>
                     <span className="text-gray-900 font-semibold flex-1 truncate">{adults}位成人 · {children}名儿童 · {rooms}间客房</span>
                     <svg className="w-4 h-4 flex-shrink-0 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                 </button>
                 {guestsOpen && (
-                    <div className="absolute top-full left-0 right-0 mt-2 py-4 px-4 rounded-lg bg-white/80 backdrop-blur-sm border border-gray-200/80 shadow-lg z-20 min-w-[220px]">
+                    <div className="absolute top-full left-0 right-0 mt-2 py-4 px-4 rounded-lg bg-white/95 backdrop-blur-sm border border-gray-200/80 shadow-lg z-20 min-w-[220px]">
                         <div className="space-y-4">
                             <div className="flex items-center justify-between">
                                 <span className="text-sm text-gray-700">成人</span>
                                 <div className="flex items-center gap-1">
                                     <button type="button" onClick={() => setAdults((a) => Math.max(1, a - 1))} disabled={adults <= 1} className="w-8 h-8 flex items-center justify-center rounded border border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">−</button>
                                     <span className="w-8 text-center text-sm font-medium">{adults}</span>
-                                    <button type="button" onClick={() => setAdults((a) => Math.min(9, a + 1))} disabled={adults >= 9} className="w-8 h-8 flex items-center justify-center rounded border border-blue-500 text-blue-600 hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed">+</button>
+                                    <button type="button" onClick={() => setAdults((a) => Math.min(9, a + 1))} disabled={adults >= 9} className="w-8 h-8 flex items-center justify-center rounded border border-gray-600 text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed">+</button>
                                 </div>
                             </div>
                             <div className="flex items-center justify-between">
@@ -262,7 +273,7 @@ function Hero() {
                                 <div className="flex items-center gap-1">
                                     <button type="button" onClick={() => setChildren((c) => Math.max(0, c - 1))} disabled={children <= 0} className="w-8 h-8 flex items-center justify-center rounded border border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">−</button>
                                     <span className="w-8 text-center text-sm font-medium">{children}</span>
-                                    <button type="button" onClick={() => setChildren((c) => Math.min(9, c + 1))} disabled={children >= 9} className="w-8 h-8 flex items-center justify-center rounded border border-blue-500 text-blue-600 hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed">+</button>
+                                    <button type="button" onClick={() => setChildren((c) => Math.min(9, c + 1))} disabled={children >= 9} className="w-8 h-8 flex items-center justify-center rounded border border-gray-600 text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed">+</button>
                                 </div>
                             </div>
                             <div className="flex items-center justify-between">
@@ -270,7 +281,7 @@ function Hero() {
                                 <div className="flex items-center gap-1">
                                     <button type="button" onClick={() => setRooms((r) => Math.max(1, r - 1))} disabled={rooms <= 1} className="w-8 h-8 flex items-center justify-center rounded border border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">−</button>
                                     <span className="w-8 text-center text-sm font-medium">{rooms}</span>
-                                    <button type="button" onClick={() => setRooms((r) => Math.min(9, r + 1))} disabled={rooms >= 9} className="w-8 h-8 flex items-center justify-center rounded border border-blue-500 text-blue-600 hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed">+</button>
+                                    <button type="button" onClick={() => setRooms((r) => Math.min(9, r + 1))} disabled={rooms >= 9} className="w-8 h-8 flex items-center justify-center rounded border border-gray-600 text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed">+</button>
                                 </div>
                             </div>
                             <div className="pt-2 border-t border-gray-100">

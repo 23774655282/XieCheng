@@ -12,11 +12,13 @@ import HotelDetail from './pages/HotelDetail';
 import MyBooking from './pages/MyBooking';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import ForgotPassword from './pages/ForgotPassword';
 import HotelReg from './components/HotalReg';
 import Layout from './pages/hotelOwner/Layout';
 import AdminLayout from './pages/admin/AdminLayout';
 import AuditHotels from './pages/admin/AuditHotels';
-import ChooseRole from './pages/ChooseRole';
+import MerchantApplications from './pages/admin/MerchantApplications';
+import ApplyMerchant from './pages/ApplyMerchant';
 import HotelInfo from './pages/hotelOwner/HotelInfo';
 import NotFound from './components/NotFound';
 import About from './pages/About';
@@ -46,6 +48,7 @@ function App() {
             <Route path='/' element={<Home/>}/>
             <Route path='/login' element={<Login/>}/>
             <Route path='/register' element={<Register/>}/>
+            <Route path='/forgot-password' element={<ForgotPassword/>}/>
             <Route path='/rooms' element={<AllRooms/>}/>
             <Route path='/rooms/smart-results' element={<SmartSearchResults/>}/>
             <Route path='/ai-hotel' element={<AiHotelChat/>}/>
@@ -55,7 +58,7 @@ function App() {
             <Route path='/my-bookings' element= {<MyBooking/>}/>
             <Route path='/about' element={<About/>}/>
             <Route path='/loader/:nextUrl' element={<Loader />} />
-            <Route path='/choose-role' element={<ChooseRole/>} />
+            <Route path='/apply-merchant' element={<ApplyMerchant/>} />
             <Route path='/owner' element={<Layout/>}>
               <Route index element={<Dashboard/>} />
               <Route path='hotel-info' element={<HotelInfo/>} />
@@ -65,6 +68,7 @@ function App() {
             </Route>
             <Route path='/admin' element={<AdminLayout/>}>
               <Route index element={<AuditHotels/>} />
+              <Route path='merchant-applications' element={<MerchantApplications/>} />
             </Route>
             <Route path='*' element={<NotFound/>}/>
 

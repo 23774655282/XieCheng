@@ -18,7 +18,7 @@ const CANCEL_REASONS = [
 
 function MyBooking() {
 
-    const {axios,getToken,user} = useAppContext();
+    const { axios, getToken, user, role, merchantApplicationStatus, navigate } = useAppContext();
 
     const [bookings, setBookings] = useState([]);
     const [cancelModal, setCancelModal] = useState({ open: false, bookingId: null, reason: '', otherText: '' });
@@ -108,6 +108,39 @@ function MyBooking() {
         align="left"
         className="pt-28 md:pt-36 mb-16"
     />
+
+    {/* 申请成为商户（仅普通用户显示） */}
+    {role === "user" && (
+        <div className="mb-8 p-4 bg-white rounded-xl shadow border border-gray-100">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div>
+                    <p className="font-medium text-gray-900">想成为商户？</p>
+                    <p className="text-sm text-gray-500 mt-1">
+                        {merchantApplicationStatus === "pending"
+                            ? "您的申请审核中，请等待管理员通过"
+                            : merchantApplicationStatus === "rejected"
+                            ? "您的申请未通过，如有疑问请联系客服"
+                            : "申请后可上传酒店、管理房型、接收订单"}
+                    </p>
+                </div>
+                {merchantApplicationStatus === "none" && (
+                    <button
+                        type="button"
+                        onClick={() => navigate("/apply-merchant")}
+                        className="shrink-0 px-5 py-2.5 bg-gray-800 text-white rounded-lg hover:bg-gray-700 text-sm font-medium"
+                    >
+                        申请成为商户
+                    </button>
+                )}
+                {merchantApplicationStatus === "pending" && (
+                    <span className="shrink-0 px-4 py-2 bg-amber-100 text-amber-800 rounded-lg text-sm">审核中</span>
+                )}
+                {merchantApplicationStatus === "rejected" && (
+                    <span className="shrink-0 px-4 py-2 bg-red-50 text-red-700 rounded-lg text-sm">已驳回</span>
+                )}
+            </div>
+        </div>
+    )}
 
     {/* Table Headers */}
     <div className="hidden lg:grid grid-cols-12 gap-4 text-sm font-semibold text-gray-500 uppercase border-b pb-4">

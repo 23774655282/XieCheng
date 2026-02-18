@@ -1,6 +1,6 @@
-/* 首页日期选择器弹层：圆角 + 70% 透明，与搜索区域一致 */
+/* 首页日期选择器弹层：圆角 + 95% 透明，与目的地下拉一致 */
 .hero-datepicker-popper .react-datepicker {
-  background: rgba(255, 255, 255, 0.7) !important;
+  background: rgba(255, 255, 255, 0.95) !important;
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
   border-radius: 0.5rem;
@@ -24,14 +24,17 @@
 }
 
 .hero-datepicker-popper .react-datepicker__day:hover,
-.hero-datepicker-popper .react-datepicker__day--selected {
-  background: rgba(255, 255, 255, 0.8);
+.hero-datepicker-popper .react-datepicker__day--selected,
+.hero-datepicker-popper .react-datepicker__day--in-selecting-range {
+  background: rgba(229, 231, 235, 0.9) !important;
   border-radius: 0.375rem;
+  color: #111827 !important;
 }
 
 .hero-datepicker-popper .react-datepicker__day--keyboard-selected {
-  background: rgba(255, 255, 255, 0.6);
+  background: rgba(229, 231, 235, 0.7) !important;
   border-radius: 0.375rem;
+  color: #111827 !important;
 }
 
 /* 非当月日期：数字透明、不可点击，仅当月天数可见 */
@@ -51,27 +54,37 @@
   font-weight: 600;
 }
 
-/* 入住、退房及区间内：统一浅白背景、加粗，悬停时保持背景不变 */
+/* 入住、退房当天：中灰背景，与日历背景形成明显区分 */
 .hero-datepicker-popper .react-datepicker__day--range-start,
-.hero-datepicker-popper .react-datepicker__day--range-end,
-.hero-datepicker-popper .react-datepicker__day--in-range {
-  background: rgba(248, 250, 252, 0.95) !important;
-  color: #111827;
+.hero-datepicker-popper .react-datepicker__day--range-end {
+  background: #d1d5db !important;
+  color: #111827 !important;
   font-weight: 600;
   border-radius: 0.375rem;
 }
 .hero-datepicker-popper .react-datepicker__day--range-start:hover,
-.hero-datepicker-popper .react-datepicker__day--range-end:hover,
-.hero-datepicker-popper .react-datepicker__day--in-range:hover {
-  background: rgba(248, 250, 252, 0.95) !important;
+.hero-datepicker-popper .react-datepicker__day--range-end:hover {
+  background: #d1d5db !important;
   color: #111827 !important;
 }
-/* 覆盖 keyboard-selected 悬停时字变白（react-datepicker 默认将 hover 时 color 设为 #fff） */
+
+/* 中间日期区间：浅灰背景，保持与入住退房视觉层次 */
+.hero-datepicker-popper .react-datepicker__day--in-range:not(.react-datepicker__day--range-start):not(.react-datepicker__day--range-end) {
+  background: #e5e7eb !important;
+  color: #111827 !important;
+  font-weight: 500;
+  border-radius: 0;
+}
+.hero-datepicker-popper .react-datepicker__day--in-range:not(.react-datepicker__day--range-start):not(.react-datepicker__day--range-end):hover {
+  background: #e5e7eb !important;
+  color: #111827 !important;
+}
+
+/* 覆盖 keyboard-selected 悬停时字变白 */
 .hero-datepicker-popper .react-datepicker__day--range-start.react-datepicker__day--keyboard-selected:hover,
 .hero-datepicker-popper .react-datepicker__day--range-end.react-datepicker__day--keyboard-selected:hover,
 .hero-datepicker-popper .react-datepicker__day--in-range.react-datepicker__day--keyboard-selected:hover {
   color: #111827 !important;
-  background: rgba(248, 250, 252, 0.95) !important;
 }
 
 .hero-datepicker-popper .react-datepicker__day--disabled {
