@@ -34,6 +34,14 @@ function AdminLayout() {
                     >
                         酒店审核/发布/下线
                     </NavLink>
+                    <NavLink
+                        to="/admin/merchant-applications"
+                        className={({ isActive }) =>
+                            `block p-2 rounded mb-2 ${isActive ? "bg-blue-500 text-white" : "text-gray-700 hover:bg-gray-300"}`
+                        }
+                    >
+                        商户申请审核
+                    </NavLink>
                 </aside>
                 <main className="flex-1 p-6 overflow-auto">
                     <Outlet />

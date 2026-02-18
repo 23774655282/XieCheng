@@ -5,6 +5,7 @@ import { configDotenv } from 'dotenv';
 configDotenv();
 import userRouter from './routes/user.route.js';
 import authRouter from './routes/auth.route.js';
+import merchantRouter from './routes/merchant.route.js';
 import morgan from 'morgan';
 import hotelRouter from './routes/hotel.route.js';
 import roomRouter from './routes/room.routes.js';
@@ -36,6 +37,7 @@ app.get('/', (req, res) => {
 
 app.use("/api/auth", authRouter);
 app.use("/api/users", userRouter);
+app.use("/api/merchant", merchantRouter);
 app.use("/api/hotels", hotelRouter);
 app.use("/api/rooms", roomRouter);
 app.use("/api/bookings", bookingRouter);

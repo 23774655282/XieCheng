@@ -92,6 +92,131 @@ export const overseasHotCities = [
   "纽约", "芽庄", "悉尼",
 ];
 
+/** 各城市当地热门地点推荐（用于目的地下拉） icon: location | building | airplane */
+export const popularPlacesByCity = {
+  东京: [
+    { name: "东京", subtitle: "东京都, 日本", icon: "location" },
+    { name: "东京市中心", subtitle: "东京, 东京都, 日本", icon: "location" },
+    { name: "东京站", subtitle: "东京, 东京都, 日本", icon: "building" },
+    { name: "东京羽田机场", subtitle: "东京, 东京都, 日本", icon: "airplane" },
+    { name: "东京迪士尼乐园", subtitle: "东京, 东京都, 日本", icon: "building" },
+  ],
+  大阪: [
+    { name: "大阪", subtitle: "大阪府, 日本", icon: "location" },
+    { name: "大阪市中心", subtitle: "大阪, 大阪府, 日本", icon: "location" },
+    { name: "大阪站", subtitle: "大阪, 大阪府, 日本", icon: "building" },
+    { name: "关西国际机场", subtitle: "大阪, 日本", icon: "airplane" },
+    { name: "难波", subtitle: "大阪, 大阪府, 日本", icon: "building" },
+  ],
+  京都: [
+    { name: "京都", subtitle: "京都府, 日本", icon: "location" },
+    { name: "京都市中心", subtitle: "京都, 京都府, 日本", icon: "location" },
+    { name: "京都站", subtitle: "京都, 京都府, 日本", icon: "building" },
+    { name: "祇园", subtitle: "京都, 京都府, 日本", icon: "building" },
+  ],
+  首尔: [
+    { name: "首尔", subtitle: "首尔特别市, 韩国", icon: "location" },
+    { name: "首尔市中心", subtitle: "首尔, 韩国", icon: "location" },
+    { name: "明洞", subtitle: "首尔, 韩国", icon: "building" },
+    { name: "仁川国际机场", subtitle: "首尔, 韩国", icon: "airplane" },
+    { name: "江南区", subtitle: "首尔, 韩国", icon: "building" },
+  ],
+  曼谷: [
+    { name: "曼谷", subtitle: "曼谷都会区, 泰国", icon: "location" },
+    { name: "曼谷市中心", subtitle: "曼谷, 泰国", icon: "location" },
+    { name: "素万那普机场", subtitle: "曼谷, 泰国", icon: "airplane" },
+    { name: "暹罗", subtitle: "曼谷, 泰国", icon: "building" },
+  ],
+  北京: [
+    { name: "北京", subtitle: "北京市, 中国", icon: "location" },
+    { name: "北京市中心", subtitle: "北京, 中国", icon: "location" },
+    { name: "北京首都国际机场", subtitle: "北京, 中国", icon: "airplane" },
+    { name: "北京南站", subtitle: "北京, 中国", icon: "building" },
+    { name: "故宫", subtitle: "北京, 中国", icon: "building" },
+  ],
+  上海: [
+    { name: "上海", subtitle: "上海市, 中国", icon: "location" },
+    { name: "上海市中心", subtitle: "上海, 中国", icon: "location" },
+    { name: "上海浦东国际机场", subtitle: "上海, 中国", icon: "airplane" },
+    { name: "上海虹桥机场", subtitle: "上海, 中国", icon: "airplane" },
+    { name: "外滩", subtitle: "上海, 中国", icon: "building" },
+  ],
+  广州: [
+    { name: "广州", subtitle: "广东省, 中国", icon: "location" },
+    { name: "广州市中心", subtitle: "广州, 中国", icon: "location" },
+    { name: "广州白云国际机场", subtitle: "广州, 中国", icon: "airplane" },
+    { name: "广州南站", subtitle: "广州, 中国", icon: "building" },
+  ],
+  深圳: [
+    { name: "深圳", subtitle: "广东省, 中国", icon: "location" },
+    { name: "深圳市中心", subtitle: "深圳, 中国", icon: "location" },
+    { name: "深圳宝安国际机场", subtitle: "深圳, 中国", icon: "airplane" },
+    { name: "福田", subtitle: "深圳, 中国", icon: "building" },
+  ],
+  杭州: [
+    { name: "杭州", subtitle: "浙江省, 中国", icon: "location" },
+    { name: "杭州市中心", subtitle: "杭州, 中国", icon: "location" },
+    { name: "杭州萧山国际机场", subtitle: "杭州, 中国", icon: "airplane" },
+    { name: "西湖", subtitle: "杭州, 中国", icon: "building" },
+  ],
+  成都: [
+    { name: "成都", subtitle: "四川省, 中国", icon: "location" },
+    { name: "成都市中心", subtitle: "成都, 中国", icon: "location" },
+    { name: "成都双流国际机场", subtitle: "成都, 中国", icon: "airplane" },
+    { name: "春熙路", subtitle: "成都, 中国", icon: "building" },
+  ],
+  香港: [
+    { name: "香港", subtitle: "香港特别行政区", icon: "location" },
+    { name: "香港市中心", subtitle: "香港", icon: "location" },
+    { name: "香港国际机场", subtitle: "香港", icon: "airplane" },
+    { name: "尖沙咀", subtitle: "香港", icon: "building" },
+  ],
+  三亚: [
+    { name: "三亚", subtitle: "海南省, 中国", icon: "location" },
+    { name: "三亚湾", subtitle: "三亚, 中国", icon: "location" },
+    { name: "亚龙湾", subtitle: "三亚, 中国", icon: "building" },
+    { name: "凤凰国际机场", subtitle: "三亚, 中国", icon: "airplane" },
+  ],
+  新加坡: [
+    { name: "新加坡", subtitle: "新加坡", icon: "location" },
+    { name: "新加坡市中心", subtitle: "新加坡", icon: "location" },
+    { name: "樟宜机场", subtitle: "新加坡", icon: "airplane" },
+    { name: "滨海湾", subtitle: "新加坡", icon: "building" },
+  ],
+  纽约: [
+    { name: "纽约", subtitle: "纽约州, 美国", icon: "location" },
+    { name: "曼哈顿", subtitle: "纽约, 美国", icon: "building" },
+    { name: "肯尼迪国际机场", subtitle: "纽约, 美国", icon: "airplane" },
+    { name: "时代广场", subtitle: "纽约, 美国", icon: "building" },
+  ],
+  巴黎: [
+    { name: "巴黎", subtitle: "法兰西岛, 法国", icon: "location" },
+    { name: "巴黎市中心", subtitle: "巴黎, 法国", icon: "location" },
+    { name: "戴高乐机场", subtitle: "巴黎, 法国", icon: "airplane" },
+    { name: "埃菲尔铁塔", subtitle: "巴黎, 法国", icon: "building" },
+  ],
+  伦敦: [
+    { name: "伦敦", subtitle: "英格兰, 英国", icon: "location" },
+    { name: "伦敦市中心", subtitle: "伦敦, 英国", icon: "location" },
+    { name: "希思罗机场", subtitle: "伦敦, 英国", icon: "airplane" },
+    { name: "国王十字站", subtitle: "伦敦, 英国", icon: "building" },
+  ],
+};
+
+/** 为未预设城市生成默认热门地点（国内城市用“中国”，海外用城市名） */
+export function getPopularPlacesForCity(cityName, isDomestic = false) {
+  if (!cityName || !String(cityName).trim()) return [];
+  const city = String(cityName).trim();
+  if (popularPlacesByCity[city]) return popularPlacesByCity[city];
+  const subtitle = isDomestic ? `${city}, 中国` : city;
+  return [
+    { name: city, subtitle, icon: "location" },
+    { name: `${city}市中心`, subtitle, icon: "location" },
+    { name: `${city}站`, subtitle, icon: "building" },
+    { name: `${city}机场`, subtitle, icon: "airplane" },
+  ];
+}
+
 // Exclusive Offers Dummy Data
 export const exclusiveOffers = [
     { _id: 1, title: "夏日畅享套餐", description: "享免费住宿一晚及每日早餐", priceOff: 25, expiryDate: "8月31日", image: exclusiveOfferCardImg1 },

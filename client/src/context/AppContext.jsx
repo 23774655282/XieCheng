@@ -16,6 +16,7 @@ export function AppProvider({ children }) {
   const getToken = async () => localStorage.getItem("token");
 
   const [role, setRoleState] = useState(null); // 'user' | 'merchant' | 'admin'
+  const [merchantApplicationStatus, setMerchantApplicationStatus] = useState(null); // 'none' | 'pending' | 'approved' | 'rejected'
   const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem("token"));
   const [isOwner, setIsOwner] = useState(false);   // 商户：可访问 /owner
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false); // 平台管理员：可访问 /admin
@@ -82,6 +83,7 @@ export function AppProvider({ children }) {
       if (!token) {
         setIsAuthenticated(false);
         setRoleState(null);
+        setMerchantApplicationStatus(null);
         setIsOwner(false);
         setIsPlatformAdmin(false);
         return;
@@ -93,6 +95,7 @@ export function AppProvider({ children }) {
       if (data.success) {
         const r = data.role || "user";
         setRoleState(r);
+        setMerchantApplicationStatus(data.merchantApplicationStatus || "none");
         setIsOwner(r === "merchant" || r === "admin");
         setIsPlatformAdmin(r === "admin");
         const apiCities = data.recentSerachCities || [];
@@ -108,6 +111,11 @@ export function AppProvider({ children }) {
         toast.success("用户信息加载成功");
       }
     } catch (error) {
+      setIsAuthenticated(false);
+      setRoleState(null);
+      setMerchantApplicationStatus(null);
+      setIsOwner(false);
+      setIsPlatformAdmin(false);
       toast.error("获取用户信息失败，请稍后重试。");
     }
   }
@@ -120,20 +128,13 @@ export function AppProvider({ children }) {
     fetchRooms(1);
   }, []);
 
-  async function setRole(roleChoice) {
+  async function applyMerchant() {
     try {
       const token = await getToken();
       if (!token) return false;
-
-      const { data } = await axios.post(
-        "/api/users/set-role",
-        { role: roleChoice },
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
+      const { data } = await axios.post("/api/merchant/apply", {}, { headers: { Authorization: `Bearer ${token}` } });
       if (data.success) {
-        setRoleState(data.role);
-        setIsOwner(data.role === "merchant" || data.role === "admin");
-        setIsPlatformAdmin(data.role === "admin");
+        setMerchantApplicationStatus("pending");
         return true;
       }
       return false;
@@ -146,6 +147,7 @@ export function AppProvider({ children }) {
     localStorage.removeItem("token");
     setIsAuthenticated(false);
     setRoleState(null);
+    setMerchantApplicationStatus(null);
     setIsOwner(false);
     setIsPlatformAdmin(false);
     setSearchCity([]);
@@ -159,11 +161,12 @@ export function AppProvider({ children }) {
     user,
     getToken,
     role,
+    merchantApplicationStatus,
     isAuthenticated,
     isOwner,
     setIsOwner,
     isPlatformAdmin,
-    setRole,
+    applyMerchant,
     logout,
     fetchUser,
     fetchRooms,

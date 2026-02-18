@@ -5,7 +5,7 @@ import { useState } from "react";
 import toast from "react-hot-toast";
 
 function HotelReg() {
-  const { setShowHotelReg,axios,getToken,setIsOwner } = useAppContext();
+  const { setShowHotelReg, axios, getToken, setIsOwner, role, navigate } = useAppContext();
 
 
   const [name, setName] = useState("");
@@ -54,6 +54,37 @@ function HotelReg() {
     }
   }
 
+
+  // 普通用户（或角色未加载）：显示提示页，引导去申请成为商户
+  if (role !== "merchant" && role !== "admin") {
+    return (
+      <div className="fixed top-0 bottom-0 left-0 right-0 z-[100] flex items-center justify-center bg-black/50">
+        <div className="w-11/12 md:max-w-md bg-white rounded-xl p-8 relative">
+          <IoIosCloseCircleOutline
+            className="absolute top-6 right-6 text-2xl cursor-pointer text-gray-700 hover:text-red-500 transition"
+            onClick={() => setShowHotelReg(false)}
+          />
+          <div className="flex flex-col items-center text-center pt-6">
+            <img src={assets.regImage} alt="入驻酒店" className="w-full max-h-48 object-cover rounded-lg mb-6" />
+            <p className="text-xl font-bold text-gray-900 mb-2">入驻酒店</p>
+            <p className="text-sm text-gray-600 mb-6">
+              申请成为商户后，可上传酒店信息、管理房型、接收预订订单。
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setShowHotelReg(false);
+                navigate("/apply-merchant");
+              }}
+              className="w-full py-3 px-4 bg-gray-800 hover:bg-gray-700 text-white rounded-full font-medium"
+            >
+              开始申请
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed top-0 bottom-0 left-0 right-0 z-[100] flex items-center justify-center bg-black/50">
