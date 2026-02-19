@@ -31,9 +31,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-app.get('/', (req, res) => {
-  res.send('API is running...');
-});
+app.get('/favicon.ico', (req, res) => res.status(204).end());
 
 app.use("/api/auth", authRouter);
 app.use("/api/users", userRouter);
@@ -41,6 +39,19 @@ app.use("/api/merchant", merchantRouter);
 app.use("/api/hotels", hotelRouter);
 app.use("/api/rooms", roomRouter);
 app.use("/api/bookings", bookingRouter);
+
+// 生产环境：托管前端构建，访问根路径可打开网站（阿里云单机部署）
+const clientDist = path.join(__dirname, "../client/dist");
+const { existsSync } = await import("fs");
+if (existsSync(clientDist)) {
+  app.use(express.static(clientDist));
+  app.get("*", (req, res, next) => {
+    if (req.path.startsWith("/api")) return next();
+    res.sendFile(path.join(clientDist, "index.html"));
+  });
+} else {
+  app.get("/", (req, res) => res.send("API is running..."));
+}
 
 const PORT = process.env.PORT || 5000;
 
