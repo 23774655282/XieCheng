@@ -12,7 +12,7 @@ function Layout() {
   useEffect(()=>{
     if (!isOwner) {
       navigate('/');
-      alert('您无权访问商家后台，请先登录商家账号');
+      alert('You are not authorized to access this page.');
     }
   },[isOwner])
 

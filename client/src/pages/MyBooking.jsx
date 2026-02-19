@@ -24,6 +24,18 @@ function MyBooking() {
     const [bookings, setBookings] = useState([]);
     const [cancelModal, setCancelModal] = useState({ open: false, bookingId: null, reason: '', otherText: '' });
     const [payQRModal, setPayQRModal] = useState({ open: false, bookingId: null, payUrl: '' });
+    const [reviewModal, setReviewModal] = useState({
+        open: false,
+        bookingId: null,
+        hotelId: null,
+        hotelName: '',
+    });
+    const [reviewSubmitting, setReviewSubmitting] = useState(false);
+    const [reviewForm, setReviewForm] = useState({
+        rating: 5,
+        comment: '',
+        images: [],
+    });
     const pollRef = useRef(null);
 
     async function fetchBookings(silent = false) {
@@ -90,6 +102,76 @@ function MyBooking() {
             }
         } catch (error) {
             toast.error(error.response?.data?.message || "获取支付二维码失败，请稍后重试。");
+        }
+    }
+
+    async function handleCompleteBooking(booking) {
+        try {
+            const token = await getToken();
+            const { data } = await axios.patch(
+                `/api/bookings/${booking._id}/complete`,
+                {},
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+            if (data.success) {
+                toast.success('订单已标记为完成');
+                await fetchBookings(true);
+                setReviewModal({
+                    open: true,
+                    bookingId: booking._id,
+                    hotelId: booking.hotel?._id || booking.hotel,
+                    hotelName: booking.hotel?.name || '',
+                });
+            } else {
+                toast.error(data.message || '标记完成失败');
+            }
+        } catch (e) {
+            toast.error(e.response?.data?.message || '标记完成失败');
+        }
+    }
+
+    function handleReviewImagesChange(e) {
+        const files = Array.from(e.target.files || []);
+        const limited = files.slice(0, 3);
+        setReviewForm((prev) => ({ ...prev, images: limited }));
+    }
+
+    async function handleSubmitReview(e) {
+        e.preventDefault();
+        if (!reviewModal.bookingId || !reviewModal.hotelId) return;
+        if (!reviewForm.comment.trim()) {
+            toast.error('请输入评价内容');
+            return;
+        }
+        setReviewSubmitting(true);
+        try {
+            const token = await getToken();
+            const formData = new FormData();
+            formData.append('hotelId', reviewModal.hotelId);
+            formData.append('bookingId', reviewModal.bookingId);
+            formData.append('rating', String(reviewForm.rating));
+            formData.append('comment', reviewForm.comment.trim());
+            reviewForm.images.forEach((file) => {
+                formData.append('images', file);
+            });
+            const { data } = await axios.post('/api/reviews', formData, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'multipart/form-data',
+                },
+            });
+            if (data.success) {
+                toast.success('评价提交成功');
+                setReviewModal({ open: false, bookingId: null, hotelId: null, hotelName: '' });
+                setReviewForm({ rating: 5, comment: '', images: [] });
+                fetchBookings(true);
+            } else {
+                toast.error(data.message || '评价提交失败');
+            }
+        } catch (error) {
+            toast.error(error.response?.data?.message || '评价提交失败');
+        } finally {
+            setReviewSubmitting(false);
         }
     }
 
@@ -270,6 +352,20 @@ function MyBooking() {
                             取消订单
                         </button>
                     )}
+                    {booking.status !== 'cancelled' && booking.isPaid && !booking.isCompleted && (
+                        <button
+                            type="button"
+                            onClick={() => handleCompleteBooking(booking)}
+                            className="mt-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm shadow transition"
+                        >
+                            完成订单
+                        </button>
+                    )}
+                    {booking.isCompleted && (
+                        <span className="mt-2 inline-flex items-center px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-medium">
+                            已完成{booking.hasReview ? ' · 已评价' : ''}
+                        </span>
+                    )}
                 </div>
             </div>
         );})}
@@ -341,6 +437,111 @@ function MyBooking() {
                         确定取消
                     </button>
                 </div>
+            </div>
+        </div>
+    )}
+
+    {/* 订单评价弹窗 */}
+    {reviewModal.open && (
+        <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+            onClick={() => {
+                if (!reviewSubmitting) {
+                    setReviewModal({ open: false, bookingId: null, hotelId: null, hotelName: '' });
+                    setReviewForm({ rating: 5, comment: '', images: [] });
+                }
+            }}
+        >
+            <div
+                className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                    评价酒店 {reviewModal.hotelName || ''}
+                </h3>
+                <p className="text-sm text-gray-600 mb-4">
+                    您已完成该订单，是否愿意给本次入住体验打个分并留下评价？
+                </p>
+                <form onSubmit={handleSubmitReview} className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                            评分
+                        </label>
+                        <div className="flex items-center gap-2">
+                            {[1, 2, 3, 4, 5].map((star) => (
+                                <button
+                                    key={star}
+                                    type="button"
+                                    disabled={reviewSubmitting}
+                                    onClick={() =>
+                                        setReviewForm((prev) => ({ ...prev, rating: star }))
+                                    }
+                                    className="text-yellow-400"
+                                >
+                                    <span className={`text-xl ${star <= reviewForm.rating ? '' : 'opacity-30'}`}>
+                                        ★
+                                    </span>
+                                </button>
+                            ))}
+                            <span className="text-sm text-gray-600 ml-1">
+                                {reviewForm.rating} 分
+                            </span>
+                        </div>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                            评价内容
+                        </label>
+                        <textarea
+                            rows={4}
+                            value={reviewForm.comment}
+                            onChange={(e) =>
+                                setReviewForm((prev) => ({ ...prev, comment: e.target.value }))
+                            }
+                            disabled={reviewSubmitting}
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="可以从卫生、服务、位置、设施等方面分享您的真实体验。"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                            上传图片（最多 3 张，选填）
+                        </label>
+                        <input
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            onChange={handleReviewImagesChange}
+                            disabled={reviewSubmitting}
+                            className="text-sm text-gray-700"
+                        />
+                        {reviewForm.images.length > 0 && (
+                            <p className="mt-1 text-xs text-gray-500">
+                                已选择 {reviewForm.images.length} 张图片
+                            </p>
+                        )}
+                    </div>
+                    <div className="flex gap-3 pt-2">
+                        <button
+                            type="button"
+                            disabled={reviewSubmitting}
+                            onClick={() => {
+                                setReviewModal({ open: false, bookingId: null, hotelId: null, hotelName: '' });
+                                setReviewForm({ rating: 5, comment: '', images: [] });
+                            }}
+                            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                        >
+                            暂不评价
+                        </button>
+                        <button
+                            type="submit"
+                            disabled={reviewSubmitting}
+                            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                        >
+                            {reviewSubmitting ? '提交中...' : '提交评价'}
+                        </button>
+                    </div>
+                </form>
             </div>
         </div>
     )}

@@ -3,16 +3,15 @@ import { facilityIcons } from '../assets/assets';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { CiLocationOn } from 'react-icons/ci';
 import { useAppContext } from '../context/AppContext';
-import SearchBar from '../components/SearchBar';
 
 function CheckBox({ label, selected = false, onChange }) {
   return (
-    <label className="flex items-center gap-2 cursor-pointer">
+    <label className="flex items-center gap-2 cursor-pointer py-0.5">
       <input
         type="checkbox"
         checked={selected}
         onChange={(e) => onChange(e.target.checked, label)}
-        className="w-3.5 h-3.5 rounded border-gray-300"
+        className="w-3.5 h-3.5 rounded border-gray-300 flex-shrink-0"
       />
       <span className="text-xs text-gray-700 select-none">{label}</span>
     </label>
@@ -44,6 +43,9 @@ function AllRooms() {
   const roomsSource = promo ? promoRooms : (destination ? localRooms : contextRooms);
   const hasMoreSource = promo ? promoHasMore : (destination ? localHasMore : hasMore);
   const loadingMoreSource = promo ? loadingPromo : (destination ? loadingSearch : loadingMore);
+  
+  const checkIn = searchParams.get('checkIn') || '';
+  const checkOut = searchParams.get('checkOut') || '';
 
   useEffect(() => {
     if (!destination) return;
@@ -121,6 +123,42 @@ function AllRooms() {
     return () => observer.disconnect();
   }, [loadMore]);
 
+  // 检查房间可用性（当有日期选择时）
+  useEffect(() => {
+    if (!checkIn || !checkOut || promo) {
+      setRoomAvailability({});
+      return;
+    }
+    
+    const checkRoomsAvailability = async () => {
+      setCheckingAvailability(true);
+      const availabilityMap = {};
+      // 使用roomsSource而不是filteredRooms，避免循环依赖
+      const roomsToCheck = roomsSource;
+      
+      // 批量检查房间可用性
+      const checkPromises = roomsToCheck.map(async (room) => {
+        try {
+          const { data } = await axios.post('/api/bookings/check-availability', {
+            room: room._id,
+            checkInDate: checkIn,
+            checkOutDate: checkOut,
+          });
+          availabilityMap[room._id] = data.success && data.isAvail;
+        } catch (error) {
+          // 如果检查失败，默认设为不可用
+          availabilityMap[room._id] = false;
+        }
+      });
+      
+      await Promise.all(checkPromises);
+      setRoomAvailability(availabilityMap);
+      setCheckingAvailability(false);
+    };
+    
+    checkRoomsAvailability();
+  }, [checkIn, checkOut, roomsSource, promo, axios]);
+
   const [selectedFilters, setSelectedFilters] = useState({
     roomType: [],
     priceRange: [],
@@ -130,6 +168,8 @@ function AllRooms() {
   });
 
   const [selectSort, setSelectSort] = useState("");
+  const [roomAvailability, setRoomAvailability] = useState({}); // 房间可用性缓存 { roomId: boolean }
+  const [checkingAvailability, setCheckingAvailability] = useState(false);
 
   const roomTypes = ['单床', '双床', '大床房', '豪华房', '家庭套房', '标准间', '商务房', '海景房', '套房'];
   const roomTypeToEn = { '单床': 'Single Bed', '双床': 'Double Bed', '大床房': 'King Bed', '豪华房': 'Luxury Room', '家庭套房': 'Family Suite', '标准间': 'Standard Room', '商务房': 'Business Room', '海景房': 'Sea View Room', '套房': 'Suite' };
@@ -236,8 +276,20 @@ function AllRooms() {
   };
 
   const filteredRooms = useMemo(() => {
-    if (promo) return roomsSource;
-    return roomsSource
+    if (promo) {
+      // 优惠模式：如果有日期选择，按可用性排序：可预订的在前面
+      if (checkIn && checkOut && Object.keys(roomAvailability).length > 0) {
+        return roomsSource.sort((a, b) => {
+          const aAvailable = roomAvailability[a._id] !== false; // 未检查的默认为可用
+          const bAvailable = roomAvailability[b._id] !== false;
+          if (aAvailable === bAvailable) return 0;
+          return aAvailable ? -1 : 1; // 可预订的排在前面
+        });
+      }
+      return roomsSource;
+    }
+    
+    const filtered = roomsSource
       .filter(
         (room) =>
           matchRoomType(room) &&
@@ -246,9 +298,22 @@ function AllRooms() {
           matchAmenities(room) &&
           matchHasPromo(room) &&
           filterDestination(room)
-      )
-      .sort(sortRooms);
-  }, [roomsSource, selectedFilters, selectSort, searchParams, promo]);
+      );
+    
+    // 如果有日期选择，按可用性排序：可预订的在前面
+    if (checkIn && checkOut && Object.keys(roomAvailability).length > 0) {
+      return filtered.sort((a, b) => {
+        const aAvailable = roomAvailability[a._id] !== false; // 未检查的默认为可用
+        const bAvailable = roomAvailability[b._id] !== false;
+        if (aAvailable === bAvailable) {
+          return sortRooms(a, b);
+        }
+        return aAvailable ? -1 : 1; // 可预订的排在前面
+      });
+    }
+    
+    return filtered.sort(sortRooms);
+  }, [roomsSource, selectedFilters, selectSort, searchParams, promo, checkIn, checkOut, roomAvailability]);
 
   /** 按酒店分组：{ hotelId: { hotel, rooms } }（非 promo 时使用） */
   const roomsByHotel = useMemo(() => {
@@ -262,8 +327,19 @@ function AllRooms() {
       }
       map[hid].rooms.push(room);
     });
+    // 如果有日期选择，对每个酒店的 rooms 按可用性排序：可预订的在前面
+    if (checkIn && checkOut && Object.keys(roomAvailability).length > 0) {
+      Object.values(map).forEach(({ rooms }) => {
+        rooms.sort((a, b) => {
+          const aAvailable = roomAvailability[a._id] !== false;
+          const bAvailable = roomAvailability[b._id] !== false;
+          if (aAvailable === bAvailable) return 0;
+          return aAvailable ? -1 : 1;
+        });
+      });
+    }
     return Object.values(map);
-  }, [filteredRooms, promo]);
+  }, [filteredRooms, promo, checkIn, checkOut, roomAvailability]);
 
   const clearFilters = () => {
     setSelectedFilters({
@@ -282,19 +358,8 @@ function AllRooms() {
   const isPromoMode = Boolean(promo);
 
   return (
-    <div className="pt-28 md:pt-36 px-4 md:px-8 lg:px-12 mb-16 max-w-6xl mx-auto">
-      <div className="mb-6 w-full relative z-10">
-        <SearchBar />
-      </div>
-      <div className="flex flex-wrap items-center gap-4 mb-4">
-        <button
-          type="button"
-          onClick={() => navigate('/')}
-          className="flex items-center gap-1 text-sm font-medium px-3 py-2 rounded-md bg-black text-white hover:bg-gray-800"
-        >
-          <span className="text-lg leading-none">←</span>
-          <span>返回</span>
-        </button>
+    <div className="pt-28 md:pt-32 px-4 md:px-8 lg:px-12 mb-16 max-w-6xl mx-auto">
+      <div className="mb-4 mt-4">
         <h1 className="font-playfair text-2xl md:text-3xl lg:text-4xl font-bold">
           {isPromoMode ? `限时优惠 · ${promo}% 优惠` : '全部房间'}
         </h1>
@@ -303,21 +368,63 @@ function AllRooms() {
         {isPromoMode ? '以下为享受该优惠力度的房型，下拉加载更多。' : '浏览并预订可用的房型。'}
       </p>
 
-      <div className="flex flex-col lg:flex-row gap-10">
+      {/* PC 端：左侧为固定宽度筛选栏，右侧为自适应内容；移动端上下排列 */}
+      <div className="flex flex-col lg:flex-row lg:items-start gap-10">
         {!isPromoMode && (
-        <aside className="w-full lg:w-56 flex-shrink-0 order-2 lg:order-1">
-          <div className="sticky top-24 z-0 border border-gray-200 rounded-xl p-4 bg-white shadow-sm" onClick={(e) => { if (!e.target.closest('input, button, label, a')) document.activeElement?.blur?.(); }}>
+        <aside className="w-full lg:w-64 lg:max-w-xs flex-shrink-0 order-2 lg:order-1">
+          <div
+            className="sticky top-24 z-10 border border-gray-200 rounded-xl p-4 bg-white shadow-sm"
+            onClick={(e) => { if (!e.target.closest('input, button, label, a')) document.activeElement?.blur?.(); }}
+          >
             <div className="flex items-center justify-between mb-4">
               <p className="text-sm font-semibold text-gray-800">筛选条件</p>
               <button type="button" onClick={clearFilters} className="text-xs font-medium px-2.5 py-1 rounded-md border border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400 transition-colors">清除全部</button>
             </div>
             <div className="space-y-4">
-              <div><p className="text-xs font-medium text-gray-700 mb-1.5">房型</p><div className="flex flex-col gap-1.5">{roomTypes.map((type) => <CheckBox key={type} label={type} selected={selectedFilters.roomType.includes(type)} onChange={(checked) => handleFilterChange(checked, type, 'roomType')} />)}</div></div>
-              <div><p className="text-xs font-medium text-gray-700 mb-1.5">价格区间</p><div className="flex flex-col gap-1.5">{priceRanges.map((range) => <CheckBox key={range} label={range} selected={selectedFilters.priceRange.includes(range)} onChange={(checked) => handleFilterChange(checked, range, 'priceRange')} />)}</div></div>
-              <div><p className="text-xs font-medium text-gray-700 mb-1.5">酒店星级</p><div className="flex flex-col gap-1.5">{starRatings.map((star) => <CheckBox key={star} label={star} selected={selectedFilters.starRating.includes(star)} onChange={(checked) => handleFilterChange(checked, star, 'starRating')} />)}</div></div>
-              <div><p className="text-xs font-medium text-gray-700 mb-1.5">设施</p><div className="flex flex-col gap-1.5">{amenityOptions.map((key) => <CheckBox key={key} label={facilityLabelMap[key] || key} selected={selectedFilters.amenities.includes(key)} onChange={(checked) => handleFilterChange(checked, key, 'amenities')} />)}</div></div>
-              <div><p className="text-xs font-medium text-gray-700 mb-1.5">优惠</p><CheckBox label="仅看有优惠" selected={selectedFilters.hasPromo} onChange={(checked) => handleFilterChange(checked, true, 'hasPromo')} /></div>
-              <div><p className="text-xs font-medium text-gray-700 mb-1.5">排序</p><div className="flex flex-col gap-1.5">{sortOptions.map((opt) => <CheckBox key={opt} label={opt} selected={selectSort === opt} onChange={(checked) => handleSortChange(checked ? opt : '')} />)}</div></div>
+              <div className="pb-2">
+                <p className="text-xs font-medium text-gray-700 mb-1.5">房型</p>
+                <div className="flex flex-col gap-1.5">
+                  {roomTypes.map((type) => (
+                    <CheckBox key={type} label={type} selected={selectedFilters.roomType.includes(type)} onChange={(checked) => handleFilterChange(checked, type, 'roomType')} />
+                  ))}
+                </div>
+              </div>
+              <div className="pb-2">
+                <p className="text-xs font-medium text-gray-700 mb-1.5">价格区间</p>
+                <div className="flex flex-col gap-1.5">
+                  {priceRanges.map((range) => (
+                    <CheckBox key={range} label={range} selected={selectedFilters.priceRange.includes(range)} onChange={(checked) => handleFilterChange(checked, range, 'priceRange')} />
+                  ))}
+                </div>
+              </div>
+              <div className="pb-2">
+                <p className="text-xs font-medium text-gray-700 mb-1.5">酒店星级</p>
+                <div className="flex flex-col gap-1.5">
+                  {starRatings.map((star) => (
+                    <CheckBox key={star} label={star} selected={selectedFilters.starRating.includes(star)} onChange={(checked) => handleFilterChange(checked, star, 'starRating')} />
+                  ))}
+                </div>
+              </div>
+              <div className="pb-2">
+                <p className="text-xs font-medium text-gray-700 mb-1.5">设施</p>
+                <div className="flex flex-col gap-1.5">
+                  {amenityOptions.map((key) => (
+                    <CheckBox key={key} label={facilityLabelMap[key] || key} selected={selectedFilters.amenities.includes(key)} onChange={(checked) => handleFilterChange(checked, key, 'amenities')} />
+                  ))}
+                </div>
+              </div>
+              <div className="pb-2">
+                <p className="text-xs font-medium text-gray-700 mb-1.5">优惠</p>
+                <CheckBox label="仅看有优惠" selected={selectedFilters.hasPromo} onChange={(checked) => handleFilterChange(checked, true, 'hasPromo')} />
+              </div>
+              <div className="pb-2">
+                <p className="text-xs font-medium text-gray-700 mb-1.5">排序</p>
+                <div className="flex flex-col gap-1.5">
+                  {sortOptions.map((opt) => (
+                    <CheckBox key={opt} label={opt} selected={selectSort === opt} onChange={(checked) => handleSortChange(checked ? opt : '')} />
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         </aside>
@@ -335,44 +442,58 @@ function AllRooms() {
             /* 优惠档位：平铺列表，每行 3 个，首屏 6 间，下拉加载 */
             <>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filteredRooms.map((room) => (
-                  <div
-                    key={room._id}
-                    className="flex flex-col bg-white rounded-xl border border-gray-100 overflow-hidden hover:shadow-md transition duration-200"
-                  >
-                    <img
-                      onClick={() => { navigate(`/rooms/${room._id}`); scrollTo(0, 0); }}
-                      src={room.images?.[0]}
-                      alt="房间"
-                      title="查看房间详情"
-                      className="w-full h-40 object-cover cursor-pointer"
-                    />
-                    <div className="p-4 flex flex-col flex-1">
-                      <p className="text-base font-semibold text-gray-800 mb-2">{getRoomTypeLabel(room.roomType)}</p>
-                      <div className="flex flex-wrap gap-2 mb-3">
-                        {room.amenties?.slice(0, 5).map((item, index) => (
-                          <div key={index} className="flex items-center gap-1">
-                            {facilityIcons[item] && <img src={facilityIcons[item]} alt="" className="w-3.5 h-3.5 flex-shrink-0" />}
-                            <span className="text-xs text-gray-600">{facilityLabelMap[item] || item}</span>
-                          </div>
-                        ))}
-                      </div>
-                      <div className="mt-auto flex items-center justify-between">
-                        <p>
-                          <span className="text-lg font-bold text-gray-800">{room.pricePerNight} 元</span>
-                          <span className="text-sm text-gray-500 ml-0.5">/晚</span>
-                        </p>
-                        <button
-                          type="button"
+                {filteredRooms.map((room) => {
+                  const isUnavailable = checkIn && checkOut && roomAvailability[room._id] === false;
+                  return (
+                    <div
+                      key={room._id}
+                      className={`flex flex-col bg-white rounded-xl border border-gray-100 overflow-hidden hover:shadow-md transition duration-200 relative ${isUnavailable ? 'opacity-60' : ''}`}
+                    >
+                      <div className="relative">
+                        <img
                           onClick={() => { navigate(`/rooms/${room._id}`); scrollTo(0, 0); }}
-                          className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
-                        >
-                          预订
-                        </button>
+                          src={room.images?.[0]}
+                          alt="房间"
+                          title="查看房间详情"
+                          className="w-full h-40 object-cover cursor-pointer"
+                        />
+                        {isUnavailable && (
+                          <>
+                            <div className="absolute inset-0 bg-white/70 backdrop-blur-sm" />
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <span className="bg-gray-800/90 text-white px-4 py-2 rounded-lg text-sm font-semibold shadow-lg">已预订</span>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                      <div className="p-4 flex flex-col flex-1">
+                        <p className="text-base font-semibold text-gray-800 mb-2">{getRoomTypeLabel(room.roomType)}</p>
+                        <div className="flex flex-wrap gap-2 mb-3">
+                          {room.amenties?.slice(0, 5).map((item, index) => (
+                            <div key={index} className="flex items-center gap-1">
+                              {facilityIcons[item] && <img src={facilityIcons[item]} alt="" className="w-3.5 h-3.5 flex-shrink-0" />}
+                              <span className="text-xs text-gray-600">{facilityLabelMap[item] || item}</span>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="mt-auto flex items-center justify-between">
+                          <p>
+                            <span className="text-lg font-bold text-gray-800">{room.pricePerNight} 元</span>
+                            <span className="text-sm text-gray-500 ml-0.5">/晚</span>
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => { navigate(`/rooms/${room._id}`); scrollTo(0, 0); }}
+                            disabled={isUnavailable}
+                            className={`px-3 py-1.5 text-white text-sm rounded-lg transition-colors ${isUnavailable ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
+                          >
+                            预订
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
               <div ref={bottomRef} className="h-14 flex items-center justify-center">
                 {loadingPromo && <span className="text-gray-500">加载中...</span>}
@@ -413,47 +534,61 @@ function AllRooms() {
                   </div>
                   {/* 该酒店下的房型列表：最多展示 4 间，多则显示「查看更多」 */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-5">
-                    {rooms.slice(0, 4).map((room) => (
-                      <div
-                        key={room._id}
-                        className="flex flex-col bg-white rounded-xl border border-gray-100 overflow-hidden hover:shadow-md transition duration-200"
-                      >
-                        <img
-                          onClick={() => {
-                            navigate(`/rooms/${room._id}`);
-                            scrollTo(0, 0);
-                          }}
-                          src={room.images?.[0]}
-                          alt="房间"
-                          title="查看房间详情"
-                          className="w-full h-40 object-cover cursor-pointer"
-                        />
-                        <div className="p-4 flex flex-col flex-1">
-                          <p className="text-base font-semibold text-gray-800 mb-2">{getRoomTypeLabel(room.roomType)}</p>
-                          <div className="flex flex-wrap gap-2 mb-3">
-                            {room.amenties?.slice(0, 5).map((item, index) => (
-                              <div key={index} className="flex items-center gap-1">
-                                {facilityIcons[item] && <img src={facilityIcons[item]} alt="" className="w-3.5 h-3.5 flex-shrink-0" />}
-                                <span className="text-xs text-gray-600">{facilityLabelMap[item] || item}</span>
-                              </div>
-                            ))}
+                    {rooms.slice(0, 4).map((room) => {
+                      const isUnavailable = checkIn && checkOut && roomAvailability[room._id] === false;
+                      return (
+                        <div
+                          key={room._id}
+                          className={`flex flex-col bg-white rounded-xl border border-gray-100 overflow-hidden hover:shadow-md transition duration-200 relative ${isUnavailable ? 'opacity-60' : ''}`}
+                        >
+                          <div className="relative">
+                            <img
+                              onClick={() => {
+                                navigate(`/rooms/${room._id}`);
+                                scrollTo(0, 0);
+                              }}
+                              src={room.images?.[0]}
+                              alt="房间"
+                              title="查看房间详情"
+                              className="w-full h-40 object-cover cursor-pointer"
+                            />
+                            {isUnavailable && (
+                              <>
+                                <div className="absolute inset-0 bg-white/70 backdrop-blur-sm" />
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                  <span className="bg-gray-800/90 text-white px-4 py-2 rounded-lg text-sm font-semibold shadow-lg">已预订</span>
+                                </div>
+                              </>
+                            )}
                           </div>
-                          <div className="mt-auto flex items-center justify-between">
-                            <p>
-                              <span className="text-lg font-bold text-gray-800">{room.pricePerNight} 元</span>
-                              <span className="text-sm text-gray-500 ml-0.5">/晚</span>
-                            </p>
-                            <button
-                              type="button"
-                              onClick={() => { navigate(`/rooms/${room._id}`); scrollTo(0, 0); }}
-                              className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
-                            >
-                              预订
-                            </button>
+                          <div className="p-4 flex flex-col flex-1">
+                            <p className="text-base font-semibold text-gray-800 mb-2">{getRoomTypeLabel(room.roomType)}</p>
+                            <div className="flex flex-wrap gap-2 mb-3">
+                              {room.amenties?.slice(0, 5).map((item, index) => (
+                                <div key={index} className="flex items-center gap-1">
+                                  {facilityIcons[item] && <img src={facilityIcons[item]} alt="" className="w-3.5 h-3.5 flex-shrink-0" />}
+                                  <span className="text-xs text-gray-600">{facilityLabelMap[item] || item}</span>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="mt-auto flex items-center justify-between">
+                              <p>
+                                <span className="text-lg font-bold text-gray-800">{room.pricePerNight} 元</span>
+                                <span className="text-sm text-gray-500 ml-0.5">/晚</span>
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => { navigate(`/rooms/${room._id}`); scrollTo(0, 0); }}
+                                disabled={isUnavailable}
+                                className={`px-3 py-1.5 text-white text-sm rounded-lg transition-colors ${isUnavailable ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
+                              >
+                                预订
+                              </button>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                   {rooms.length > 4 && (
                     <div className="px-5 pb-5">

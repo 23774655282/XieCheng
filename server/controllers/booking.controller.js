@@ -389,4 +389,41 @@ async function cancelBooking(req, res) {
     }
 }
 
-export { checkAvailabilityApi, createBooking, getUserBooking, getHotelBooking, stripePayment, getPayQr, confirmPayment, cancelBooking };
+// 用户：标记订单已完成（入住结束后）
+async function completeBooking(req, res) {
+    try {
+        const { id } = req.params;
+        const userId = req.user._id;
+
+        const booking = await Booking.findById(id);
+        if (!booking) {
+            return res.status(404).json({ success: false, message: "订单不存在" });
+        }
+        if (String(booking.user) !== String(userId)) {
+            return res.status(403).json({ success: false, message: "无权操作该订单" });
+        }
+        if (booking.status === "cancelled") {
+            return res.status(400).json({ success: false, message: "已取消的订单无法标记完成" });
+        }
+        if (!booking.isPaid) {
+            return res.status(400).json({ success: false, message: "未支付的订单无法标记完成" });
+        }
+        if (booking.isCompleted) {
+            return res.status(200).json({ success: true, message: "订单已是完成状态", booking });
+        }
+
+        booking.isCompleted = true;
+        await booking.save();
+
+        return res.status(200).json({
+            success: true,
+            message: "订单已标记为完成",
+            booking,
+        });
+    } catch (error) {
+        console.error("Error completing booking:", error);
+        return res.status(500).json({ success: false, message: "标记订单完成失败" });
+    }
+}
+
+export { checkAvailabilityApi, createBooking, getUserBooking, getHotelBooking, stripePayment, getPayQr, confirmPayment, cancelBooking, completeBooking };

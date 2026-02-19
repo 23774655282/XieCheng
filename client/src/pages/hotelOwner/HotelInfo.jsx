@@ -18,7 +18,7 @@ function HotelInfo() {
         city: "",
         starRating: 3,
         openTime: "",
-        nearbyAttractions: "",
+        hotelIntro: "",
         longitude: "",
         latitude: "",
     });
@@ -40,7 +40,7 @@ function HotelInfo() {
                         city: h.city || "",
                         starRating: h.starRating ?? 3,
                         openTime: h.openTime ? h.openTime.slice(0, 10) : "",
-                        nearbyAttractions: Array.isArray(h.nearbyAttractions) ? h.nearbyAttractions.join("\n") : "",
+                        hotelIntro: h.hotelIntro || "",
                         longitude: h.longitude != null ? String(h.longitude) : "",
                         latitude: h.latitude != null ? String(h.latitude) : "",
                     });
@@ -83,10 +83,7 @@ function HotelInfo() {
             formData.append("city", form.city);
             formData.append("starRating", String(form.starRating));
             formData.append("openTime", form.openTime || "");
-            formData.append(
-                "nearbyAttractions",
-                JSON.stringify(form.nearbyAttractions ? form.nearbyAttractions.split("\n").map((s) => s.trim()).filter(Boolean) : [])
-            );
+            formData.append("hotelIntro", form.hotelIntro || "");
             formData.append("latitude", form.latitude === "" ? "" : form.latitude);
             formData.append("longitude", form.longitude === "" ? "" : form.longitude);
             const existingUrls = imageList.filter((item) => item.url).map((item) => item.url);
@@ -213,12 +210,12 @@ function HotelInfo() {
                     />
                 </div>
                 <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">附近热门景点/交通/商场（每行一个）</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">酒店介绍</label>
                     <textarea
-                        value={form.nearbyAttractions}
-                        onChange={(e) => setForm((f) => ({ ...f, nearbyAttractions: e.target.value }))}
-                        className="w-full border rounded p-2 h-24"
-                        placeholder="如：外滩&#10;南京路步行街"
+                        value={form.hotelIntro}
+                        onChange={(e) => setForm((f) => ({ ...f, hotelIntro: e.target.value }))}
+                        className="w-full border rounded p-2 h-28"
+                        placeholder="介绍酒店亮点、位置优势、服务特色等内容，将展示在用户端详情页。"
                     />
                 </div>
                 <div>

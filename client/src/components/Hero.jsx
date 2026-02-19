@@ -149,8 +149,8 @@ function Hero() {
         >
         <form
          onSubmit={handleSumbit}
-         className='bg-white/80 backdrop-blur-sm text-gray-500 rounded-lg px-6 py-5 flex flex-col md:flex-row max-md:items-start gap-4 max-md:mx-auto my-2'>
-            <div className="relative" ref={destinationRef}>
+         className='bg-white/80 backdrop-blur-sm text-gray-500 rounded-lg px-6 py-5 flex flex-col md:flex-row md:items-end max-md:items-start gap-3 max-md:mx-auto my-2 shadow-lg w-full'>
+            <div className="relative w-full md:flex-shrink-0 md:w-[240px]" ref={destinationRef}>
                 <div className='flex items-center gap-2'>
                     <SlCalender/>
                     <label htmlFor="destinationInput">目的地</label>
@@ -184,15 +184,15 @@ function Hero() {
                 )}
             </div>
 
-            <div className="min-w-[340px]">
-                <div className="flex items-center justify-between w-full">
+            <div className="w-full md:flex-1 md:min-w-0">
+                <div className="flex items-center justify-between w-full mb-2">
                     <div className="flex items-center gap-2">
                         <svg className="w-4 h-4 text-gray-800" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
                             <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 10h16M8 14h8m-4-7V4M7 7V4m10 3V4M5 20h14a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1Z" />
                         </svg>
                         <span className="cursor-default">入住</span>
                     </div>
-                    <span className="cursor-default pr-4">退房</span>
+                    <span className="cursor-default">退房</span>
                 </div>
                 <DatePicker
                     id="checkInOut"
@@ -212,21 +212,21 @@ function Hero() {
                     customInput={
                       <button
                         type="button"
-                        className={`rounded-lg border px-0 py-2 mt-2 text-sm outline-none w-full min-w-[340px] cursor-pointer caret-transparent select-none text-left min-h-[56px] flex items-stretch overflow-hidden ${datePickerOpen ? 'border-gray-700 bg-gray-100/50' : 'border-gray-200'}`}
+                        className={`rounded-lg border px-0 py-2 text-sm outline-none w-full cursor-pointer caret-transparent select-none text-left min-h-[56px] flex items-stretch overflow-hidden ${datePickerOpen ? 'border-gray-700 bg-gray-100/50' : 'border-gray-200'}`}
                       >
-                        <div className="flex-1 flex flex-col justify-center px-4 text-left">
-                          <div className="font-semibold text-gray-900">
+                        <div className="flex-1 flex flex-col justify-center px-3 text-left min-w-0">
+                          <div className="font-semibold text-gray-900 truncate">
                             {checkIn ? formatDateShort(parseLocalDate(checkIn)) : '—'}
                             {checkIn && <span className="text-xs font-normal text-gray-500 ml-1">{formatDateSuffix(parseLocalDate(checkIn))}</span>}
                           </div>
                         </div>
-                        <div className="flex items-center justify-center gap-2 px-4 text-gray-500 text-sm shrink-0 cursor-default" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-center gap-1 px-2 text-gray-500 text-sm shrink-0 cursor-default" onClick={(e) => e.stopPropagation()}>
                           <span className="text-gray-400">—</span>
-                          <span>{checkIn && checkOut ? differenceInCalendarDays(parseLocalDate(checkOut), parseLocalDate(checkIn)) : 0}晚</span>
+                          <span className="whitespace-nowrap">{checkIn && checkOut ? differenceInCalendarDays(parseLocalDate(checkOut), parseLocalDate(checkIn)) : 0}晚</span>
                           <span className="text-gray-400">—</span>
                         </div>
-                        <div className="flex-1 flex flex-col justify-center px-4 text-right">
-                          <div className="font-semibold text-gray-900">
+                        <div className="flex-1 flex flex-col justify-center px-3 text-right min-w-0">
+                          <div className="font-semibold text-gray-900 truncate">
                             {checkOut ? formatDateShort(parseLocalDate(checkOut)) : '—'}
                             {checkOut && <span className="text-xs font-normal text-gray-500 ml-1">{formatDateSuffix(parseLocalDate(checkOut))}</span>}
                           </div>
@@ -247,18 +247,18 @@ function Hero() {
                 />
             </div>
 
-            <div className="relative flex md:flex-col max-md:gap-2 max-md:items-center" ref={guestsRef}>
+            <div className="relative flex md:flex-col max-md:gap-2 max-md:items-center w-full md:flex-shrink-0 md:w-[240px]" ref={guestsRef}>
                 <div className="flex items-center gap-2">
                     <img src={assets.guestsIcon} alt="" className="w-4 h-4 flex-shrink-0 opacity-70" />
                     <label className="mb-1.5 md:mb-0">人数</label>
                 </div>
-                <div className="relative w-full min-w-[140px]">
+                <div className="relative w-full min-w-0">
                 <button type="button" onClick={() => setGuestsOpen((o) => !o)} className={`flex items-center gap-2 rounded-lg border px-3 py-2 mt-2 text-sm outline-none w-full min-w-0 min-h-[56px] text-left cursor-pointer ${guestsOpen ? 'border-gray-700 bg-gray-100/50' : 'border-gray-200'}`}>
                     <span className="text-gray-900 font-semibold flex-1 truncate">{adults}位成人 · {children}名儿童 · {rooms}间客房</span>
                     <svg className="w-4 h-4 flex-shrink-0 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                 </button>
                 {guestsOpen && (
-                    <div className="absolute top-full left-0 right-0 mt-2 py-4 px-4 rounded-lg bg-white/95 backdrop-blur-sm border border-gray-200/80 shadow-lg z-20 min-w-[220px]">
+                    <div className="absolute top-full left-0 right-0 mt-2 py-4 px-4 rounded-lg bg-white/95 backdrop-blur-sm border border-gray-200/80 shadow-lg z-20 w-full md:min-w-[220px]">
                         <div className="space-y-4">
                             <div className="flex items-center justify-between">
                                 <span className="text-sm text-gray-700">成人</span>
@@ -300,9 +300,9 @@ function Hero() {
                 </div>
             </div>
 
-            <div className="flex flex-row gap-2 my-auto max-md:w-full max-md:flex-1">
-                <button type="submit" className="flex flex-1 items-center justify-center gap-1 rounded-md bg-black py-2.5 px-4 text-white text-sm cursor-pointer min-w-0">
-                    <svg className="w-4 h-4 text-white" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24" >
+            <div className="flex flex-row gap-2 w-full md:flex-shrink-0 md:w-[120px] max-md:flex-1">
+                <button type="submit" className="flex flex-1 md:w-full items-center justify-center gap-1 rounded-md bg-black py-2.5 px-4 text-white text-sm cursor-pointer min-w-0 min-h-[56px]">
+                    <svg className="w-4 h-4 text-white flex-shrink-0" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24" >
                         <path stroke="currentColor" strokeLinecap="round" strokeWidth="2" d="m21 21-3.5-3.5M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z" />
                     </svg>
                     <span>搜索</span>

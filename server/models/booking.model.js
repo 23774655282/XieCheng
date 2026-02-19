@@ -55,6 +55,16 @@ const bookingSchema = new Schema({
         type: Boolean,
         default: false,
     },
+    /** 用户入住后主动标记“已完成”的状态，用于驱动评价入口等 */
+    isCompleted: {
+        type: Boolean,
+        default: false,
+    },
+    /** 该订单是否已经发表过评价（防止重复评价） */
+    hasReview: {
+        type: Boolean,
+        default: false,
+    },
     /** 扫码付款：一次性确认 token，手机打开 pay-success 页后带此 token 调用 confirm-payment 即视为已付款 */
     paymentConfirmToken: { type: String, default: null },
     paymentConfirmTokenExpiresAt: { type: Date, default: null },

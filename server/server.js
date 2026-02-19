@@ -10,11 +10,10 @@ import morgan from 'morgan';
 import hotelRouter from './routes/hotel.route.js';
 import roomRouter from './routes/room.routes.js';
 import bookingRouter from './routes/booking.route.js';
+import reviewRouter from './routes/review.route.js';
 import stripeWebhook from './controllers/stripe.webhook.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
-
-connectDB();
 
 const app = express();
 app.use(cors());
@@ -39,14 +38,16 @@ app.use("/api/merchant", merchantRouter);
 app.use("/api/hotels", hotelRouter);
 app.use("/api/rooms", roomRouter);
 app.use("/api/bookings", bookingRouter);
+app.use("/api/reviews", reviewRouter);
 
 // 生产环境：托管前端构建，访问根路径可打开网站（阿里云单机部署）
 const clientDist = path.join(__dirname, "../client/dist");
 const { existsSync } = await import("fs");
 if (existsSync(clientDist)) {
   app.use(express.static(clientDist));
-  app.get("*", (req, res, next) => {
-    if (req.path.startsWith("/api")) return next();
+  // 用中间件做 SPA 回退，避免 Express 5 通配符路由 path-to-regexp 报错
+  app.use((req, res, next) => {
+    if (req.path.startsWith("/api") || req.path.startsWith("/uploads")) return next();
     res.sendFile(path.join(clientDist, "index.html"));
   });
 } else {
@@ -55,6 +56,8 @@ if (existsSync(clientDist)) {
 
 const PORT = process.env.PORT || 5000;
 
+// 先连接数据库，再启动监听，避免监听后因 MongoDB 未就绪而 process.exit(1)
+await connectDB();
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });

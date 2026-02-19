@@ -114,14 +114,14 @@ export default function DestinationDropdown({
 
   if (!hasAny) {
     return (
-      <div className="absolute top-full left-0 mt-1 min-w-[480px] max-w-[95vw] py-4 px-4 rounded-lg bg-white/95 backdrop-blur-sm border border-gray-200/80 shadow-xl z-[100]">
+      <div className="absolute top-full left-0 mt-1 w-full md:min-w-[480px] md:max-w-[95vw] py-4 px-4 rounded-lg bg-white/95 backdrop-blur-sm border border-gray-200/80 shadow-xl z-[100]">
         <p className="text-sm text-gray-500">未找到匹配的目的地或酒店</p>
       </div>
     );
   }
 
   return (
-    <div className="absolute top-full left-0 mt-1 min-w-[480px] max-w-[95vw] py-3 max-h-[70vh] overflow-y-auto rounded-lg bg-white/95 backdrop-blur-sm border border-gray-200/80 shadow-xl z-[100]">
+    <div className="absolute top-full left-0 mt-1 w-full md:min-w-[480px] md:max-w-[95vw] py-3 max-h-[70vh] overflow-y-auto rounded-lg bg-white/95 backdrop-blur-sm border border-gray-200/80 shadow-xl z-[100]">
       {popularPlaces.length > 0 && (
         <div className="mb-4 px-4">
           <p className="text-sm font-medium text-gray-700 mb-2">当地热门地点推荐</p>
@@ -203,7 +203,7 @@ export default function DestinationDropdown({
         <div className="mb-4 px-4">
           <p className="text-sm font-medium text-gray-700 mb-2">国内热门城市</p>
           <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
-            {domestic.map((c) => (
+            {domestic.slice(0, 6).map((c) => (
               <button
                 key={c}
                 type="button"
@@ -221,7 +221,7 @@ export default function DestinationDropdown({
         <div className="mb-4 px-4">
           <p className="text-sm font-medium text-gray-700 mb-2">海外热门城市</p>
           <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
-            {overseas.map((c) => (
+            {overseas.slice(0, 6).map((c) => (
               <button
                 key={c}
                 type="button"
