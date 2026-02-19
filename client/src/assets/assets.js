@@ -21,11 +21,12 @@ import closeMenu from './closeMenu.svg'
 import guestsIcon from './guestsIcon.svg'
 import regImage from './regImage.png'
 import heroImage from './heroImage.png'
-import home1 from './home1.webp'
-import home2 from './home2.webp'
-import home3 from './home3.webp'
-import home4 from './home4.webp'
-import home5 from './home5.webp'
+// 首页 Hero 轮播图：建议使用高清图，规格见下方 heroCarouselImages 注释
+import home1 from './home1.jpg'
+import home2 from './home2.jpg'
+import home3 from './home3.jpg'
+import home4 from './home4.jpg'
+import home5 from './home5.jpg'
 import exclusiveOfferCardImg1 from "./exclusiveOfferCardImg1.png";
 import exclusiveOfferCardImg2 from "./exclusiveOfferCardImg2.png";
 import exclusiveOfferCardImg3 from "./exclusiveOfferCardImg3.png";
@@ -68,7 +69,16 @@ export const assets = {
     totalRevenueIcon,
 }
 
-/** 首页 Hero 轮播背景图：将更多图片放入 assets 并在此数组中引入即可 */
+/**
+ * 首页 Hero 轮播背景图：将更多图片放入 assets 并在此数组中引入即可。
+ *
+ * 【高清图选图建议】
+ * - 分辨率：至少 1920×1080（Full HD）；有 Retina 屏或大屏需求建议 2560×1440 或 3840×2160。
+ * - 比例：16:9 最适配全屏横屏展示，避免拉伸变形。
+ * - 格式：JPG 质量 85–90% 或 WebP（体积更小）。
+ * - 单张体积：建议 200KB–600KB，兼顾清晰度与首屏加载。
+ * - 内容：酒店/旅行场景、光线充足、主体清晰，避免过暗或文字过多。
+ */
 export const heroCarouselImages = [home1, home2, home3, home4, home5];
 
 export const cities = [
