@@ -34,7 +34,7 @@ export const applyMerchant = async (req, res) => {
       return res.status(400).json({ success: false, message: "请上传至少一张酒店内部照片" });
     }
 
-    const baseUrl = `${req.protocol}://${req.get("host")}`;
+    const baseUrl = process.env.PUBLIC_URL || `${req.protocol}://${req.get("host")}`;
     const licenseUrl = `${baseUrl}/uploads/merchant-apply/${licenseFiles[0].filename}`;
     const hotelExteriorImages = exteriorFiles.map((f) => `${baseUrl}/uploads/merchant-apply/${f.filename}`);
     const hotelInteriorImages = interiorFiles.map((f) => `${baseUrl}/uploads/merchant-apply/${f.filename}`);

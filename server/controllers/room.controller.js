@@ -18,7 +18,7 @@ export const createRoom = async (req, res) => {
         // 本地图片：由 multer 保存到 server/uploads/rooms 下，这里生成可访问的 URL
         let images = [];
         if (req.files && req.files.length > 0) {
-            const baseUrl = `${req.protocol}://${req.get("host")}`;
+            const baseUrl = process.env.PUBLIC_URL || `${req.protocol}://${req.get("host")}`;
             images = req.files.map((file) => `${baseUrl}/uploads/rooms/${file.filename}`);
         }
 
@@ -232,7 +232,7 @@ export const updateRoom = async (req, res) => {
             room.promoDiscount = val === 0 ? null : val;
         }
         if (req.files && req.files.length > 0) {
-            const baseUrl = `${req.protocol}://${req.get("host")}`;
+            const baseUrl = process.env.PUBLIC_URL || `${req.protocol}://${req.get("host")}`;
             room.images = req.files.map((f) => `${baseUrl}/uploads/rooms/${f.filename}`);
         }
         await room.save({ validateBeforeSave: false });
