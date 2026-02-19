@@ -3,6 +3,7 @@ import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { useNavigate } from 'react-router-dom';
 import { useAppContext } from '../context/AppContext';
+import { geocodeAmap, wgs84ToGcj02, AMAP_TILE_URL } from '../utils/amap';
 import 'leaflet/dist/leaflet.css';
 
 delete L.Icon.Default.prototype._getIconUrl;
@@ -12,19 +13,16 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
 });
 
-const DEFAULT_CENTER = [39.9042, 116.4074];
+const DEFAULT_CENTER = [39.9042, 116.4074]; // 北京，GCJ-02
 const DEFAULT_ZOOM = 4;
 
-async function geocode(query) {
-  const q = encodeURIComponent(String(query).trim());
-  if (!q) return null;
-  const res = await fetch(
-    `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=1`,
-    { headers: { 'Accept-Language': 'zh-CN', 'User-Agent': 'HotelBookingApp/1.0' } }
-  );
-  const data = await res.json();
-  if (!data || data.length === 0) return null;
-  return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+/** 去掉右下角版权里的 "Leaflet" 前缀 */
+function AttributionNoLeafletPrefix() {
+  const map = useMap();
+  useEffect(() => {
+    if (map.attributionControl) map.attributionControl.setPrefix('');
+  }, [map]);
+  return null;
 }
 
 function MapFlyTo({ center, zoom }) {
@@ -132,7 +130,7 @@ function TravelMap() {
     if (!q) return;
     setLoadingGeo(true);
     try {
-      const coords = await geocode(q);
+      const coords = await geocodeAmap(import.meta.env.VITE_AMAP_KEY, q);
       if (coords) {
         setMapCenter([coords.lat, coords.lng]);
         setMapZoom(12);
@@ -144,52 +142,53 @@ function TravelMap() {
 
   return (
     <div className="flex flex-col h-screen pt-16">
-      <div className="flex-shrink-0 flex flex-wrap items-center gap-3 px-4 py-3 border-b border-gray-200 bg-white">
-        <button
-          type="button"
-          onClick={() => navigate(-1)}
-          className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"
-          aria-label="返回"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-        </button>
-        <div className="flex-1 flex flex-wrap gap-2 min-w-0">
+      {/* 搜索栏：移动端两行（搜索行 + 筛选行），桌面端一行 */}
+      <div className="flex-shrink-0 flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2 sm:gap-3 px-3 sm:px-4 py-3 border-b border-gray-200 bg-white">
+        <div className="flex items-center gap-2 w-full sm:flex-1 sm:min-w-0 min-h-[44px]">
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            className="flex-shrink-0 p-2.5 -ml-1 rounded-lg hover:bg-gray-100 text-gray-600 touch-manipulation"
+            aria-label="返回"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
           <input
             type="text"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
             placeholder="输入城市或地点定位"
-            className="flex-1 min-w-[120px] max-w-xs rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="flex-1 min-w-0 rounded-lg border border-gray-200 px-3 py-2.5 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
           <button
             type="button"
             onClick={handleSearch}
             disabled={loadingGeo}
-            className="rounded-lg bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
+            className="flex-shrink-0 rounded-lg bg-blue-600 px-4 py-2.5 text-sm text-white hover:bg-blue-700 disabled:opacity-50 min-h-[44px] touch-manipulation"
           >
             {loadingGeo ? '定位中…' : '定位'}
           </button>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <label className="text-sm text-gray-600">城市</label>
+        <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap min-h-[44px]">
+          <label className="text-sm text-gray-600 shrink-0">城市</label>
           <select
             value={filterCity}
             onChange={(e) => setFilterCity(e.target.value)}
-            className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="flex-1 sm:flex-none min-w-0 rounded-lg border border-gray-200 px-3 py-2.5 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
           >
             <option value="">全部</option>
             {cities.map((c) => (
               <option key={c} value={c}>{c}</option>
             ))}
           </select>
-          <label className="text-sm text-gray-600">星级</label>
+          <label className="text-sm text-gray-600 shrink-0">星级</label>
           <select
             value={filterStar}
             onChange={(e) => setFilterStar(e.target.value)}
-            className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="flex-1 sm:flex-none min-w-0 rounded-lg border border-gray-200 px-3 py-2.5 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
           >
             <option value="">全部</option>
             {[1, 2, 3, 4, 5].map((n) => (
@@ -198,34 +197,39 @@ function TravelMap() {
           </select>
         </div>
       </div>
-      <div className="flex-1 flex min-h-0">
-        <div className="flex-1 min-w-0 relative">
+      <div className="flex-1 flex flex-col sm:flex-row min-h-0 overflow-hidden">
+        <div className="flex-1 min-h-0 min-w-0 relative">
           <MapContainer
             center={mapCenter}
             zoom={mapZoom}
             className="w-full h-full"
           >
             <TileLayer
-              attribution='&copy; OpenStreetMap'
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              attribution='&copy; 高德地图'
+              url={AMAP_TILE_URL}
+              subdomains="1234"
             />
+            <AttributionNoLeafletPrefix />
             <MapFlyTo center={mapCenter} zoom={mapZoom} />
             <MapBoundsListener onBoundsChange={onBoundsChange} />
-            {hotels.map((h) => (
-              <Marker
-                key={h._id}
-                position={[h._lat, h._lng]}
-                icon={hotelIcon}
-                eventHandlers={{ click: () => setSelectedHotel(h) }}
-              />
-            ))}
+            {hotels.map((h) => {
+              const [lat, lng] = wgs84ToGcj02(h._lat, h._lng);
+              return (
+                <Marker
+                  key={h._id}
+                  position={[lat, lng]}
+                  icon={hotelIcon}
+                  eventHandlers={{ click: () => setSelectedHotel(h) }}
+                />
+              );
+            })}
           </MapContainer>
-          <div className="absolute bottom-4 left-4 rounded-lg bg-white/95 shadow px-3 py-2 text-sm text-gray-600 z-[1000]">
+          <div className="absolute bottom-3 left-3 right-3 sm:right-auto sm:left-4 sm:max-w-[280px] rounded-lg bg-white/95 shadow px-3 py-2 text-sm text-gray-600 z-[1000]">
             {loadingHotels ? '加载中…' : `当前范围 ${hotels.length} 家酒店`}
           </div>
         </div>
         {selectedHotel && (
-          <div className="w-full sm:w-96 flex-shrink-0 border-l border-gray-200 bg-white shadow-xl flex flex-col overflow-hidden">
+          <div className="w-full sm:w-96 flex-shrink-0 border-t sm:border-t-0 sm:border-l border-gray-200 bg-white shadow-xl flex flex-col overflow-hidden max-h-[70vh] sm:max-h-none">
             <div className="flex items-center justify-between p-3 border-b border-gray-100">
               <h3 className="font-semibold text-gray-800">酒店信息</h3>
               <button

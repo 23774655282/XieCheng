@@ -107,7 +107,7 @@ function Hero() {
           {heroCarouselImages.map((src, i) => (
             <div
               key={i}
-              className="flex-shrink-0 w-full h-full bg-cover bg-center bg-no-repeat"
+              className="flex-shrink-0 w-full h-full bg-cover bg-center bg-no-repeat bg-gray-900"
               style={{
                 width: `${100 / heroCarouselImages.length}%`,
                 backgroundImage: `url(${typeof src === 'string' ? src : src})`,
