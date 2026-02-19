@@ -183,3 +183,90 @@ pm2 logs hotel-api --lines 50
 - **前端请求接口 404 / 跨域**：确认 `client/.env` 中 `VITE_BACKEND_URL` 与浏览器访问的地址一致，且已重新执行 `npm run build`。
 
 更多排查步骤见 **DEPLOY_TROUBLESHOOT.md**。
+
+---
+
+## 十一、如何检查服务器环境是否配好
+
+在服务器上 SSH 登录后，按顺序执行下面命令做自检。
+
+### 1. Node 与 npm
+
+```bash
+node -v    # 应显示 v18 或 v20.x
+npm -v     # 应显示 9.x 或 10.x
+```
+
+若报错或版本过旧，需先安装/升级 Node（见上文「二、服务器环境准备」）。
+
+### 2. PM2（若用 PM2 启动）
+
+```bash
+pm2 -v     # 应显示版本号
+```
+
+若无，执行：`sudo npm install -g pm2`。
+
+### 3. 项目目录与前端构建
+
+进入你的项目根目录（替换成你的实际路径）：
+
+```bash
+cd /root/Hotel-Booking-main   # 改成你的路径
+ls client/dist/index.html     # 应存在，说明前端已构建
+ls server/node_modules        # 应为目录，说明后端依赖已安装
+```
+
+若没有 `client/dist`，需要到 `client` 下执行 `npm run build`。
+
+### 4. 后端环境变量（不查看具体值，只确认文件存在）
+
+```bash
+ls server/.env    # 应存在
+```
+
+`.env` 里至少要有 **MONGO_URI**、**PORT**、**JWT_SECRET**。不要用 `cat server/.env` 在公屏展示，避免泄露密钥。
+
+### 5. 应用是否在跑、数据库是否连上
+
+若已用 PM2 启动：
+
+```bash
+pm2 list
+pm2 logs hotel-api --lines 20
+```
+
+- `pm2 list` 里 **hotel-api** 状态应为 **online**。
+- `pm2 logs` 里应看到 **MongoDB Connected** 和 **Server is running on port 5000**（或你设的 PORT）。若出现 `ECONNREFUSED 127.0.0.1:27017`，说明 MongoDB 未连上，需检查 MONGO_URI 或本机 MongoDB 是否启动。
+
+若还未用 PM2，可先手动跑一次看是否报错：
+
+```bash
+cd server
+node server.js
+```
+
+看到 `MongoDB Connected` 和 `Server is running on port xxx` 后按 Ctrl+C 停掉，再用 `pm2 start ecosystem.config.cjs` 正式启动。
+
+### 6. 本机能否访问服务
+
+在服务器上执行（把 5000 换成你实际端口）：
+
+```bash
+curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:5000/
+```
+
+应返回 **200**。若返回 000 或连不上，说明进程没监听或端口不对。
+
+### 7. 外网能否访问（在你自己电脑上测）
+
+在**你本地电脑**浏览器或命令行访问：
+
+- 浏览器打开：`http://你的公网IP:5000`
+- 或本机执行：`curl -I http://你的公网IP:5000`
+
+能打开页面或返回 200 即表示外网可达。若不行，多半是**安全组没放行该端口**，到阿里云控制台 → ECS → 安全组 → 入方向规则里放行 5000（或你的 PORT）。
+
+---
+
+**总结**：上面 1～4 检查环境和文件，5～6 检查进程和数据库，7 检查外网访问。全部通过即说明服务器环境已配好。

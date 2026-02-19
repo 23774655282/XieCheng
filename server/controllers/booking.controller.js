@@ -271,12 +271,16 @@ async function stripePayment(req,res) {
 async function getPayQr(req, res) {
     try {
         const { id: bookingId } = req.params;
-        const userId = req.user._id;
+        const userId = req.user?._id;
+        if (!userId) {
+            return res.status(401).json({ success: false, message: "未登录" });
+        }
         const booking = await Booking.findById(bookingId);
         if (!booking) {
             return res.status(404).json({ success: false, message: "订单不存在" });
         }
-        if (booking.user.toString() !== userId.toString()) {
+        // booking.user 是 String 类型，userId 可能是 ObjectId，统一转字符串比较
+        if (String(booking.user) !== String(userId)) {
             return res.status(403).json({ success: false, message: "无权操作该订单" });
         }
         if (booking.status === "cancelled") {
@@ -290,10 +294,18 @@ async function getPayQr(req, res) {
         booking.paymentConfirmToken = token;
         booking.paymentConfirmTokenExpiresAt = expiresAt;
         await booking.save();
-        return res.status(200).json({ success: true, token });
+        // 返回完整支付链接，优先使用 PUBLIC_URL（部署时配置），确保二维码链接是公网地址
+        const baseUrl = process.env.PUBLIC_URL || `${req.protocol}://${req.get("host")}`;
+        const payUrl = `${baseUrl}/pay-success?bookingId=${bookingId}&token=${token}`;
+        return res.status(200).json({ success: true, token, payUrl });
     } catch (error) {
         console.error("getPayQr error:", error);
-        return res.status(500).json({ success: false, message: "获取支付二维码失败" });
+        console.error("Error stack:", error.stack);
+        return res.status(500).json({ 
+            success: false, 
+            message: "获取支付二维码失败",
+            error: process.env.NODE_ENV === "production" ? undefined : error.message
+        });
     }
 }
 

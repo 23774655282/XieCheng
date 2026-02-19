@@ -186,7 +186,7 @@ export const updateHotel = async (req, res) => {
             } catch (_) {}
         }
         if (req.files && req.files.length > 0) {
-            const baseUrl = `${req.protocol}://${req.get("host")}`;
+            const baseUrl = process.env.PUBLIC_URL || `${req.protocol}://${req.get("host")}`;
             const newUrls = req.files.map((f) => `${baseUrl}/uploads/hotels/${f.filename}`);
             imageUrls = [...imageUrls, ...newUrls];
         }

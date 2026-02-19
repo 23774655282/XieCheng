@@ -82,7 +82,8 @@ function MyBooking() {
                 headers: { Authorization: `Bearer ${token}` }
             });
             if (data.success && data.token) {
-                const payUrl = `${window.location.origin}/pay-success?bookingId=${bookingId}&token=${data.token}`;
+                // 优先使用后端返回的 payUrl（已包含 PUBLIC_URL），确保二维码链接是公网地址
+                const payUrl = data.payUrl || `${window.location.origin}/pay-success?bookingId=${bookingId}&token=${data.token}`;
                 setPayQRModal({ open: true, bookingId, payUrl });
             } else {
                 toast.error(data.message || "获取支付二维码失败，请重试。");
