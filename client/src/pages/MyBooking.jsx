@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import Title from '../components/Title';
 import { FaLocationArrow } from 'react-icons/fa';
 import { CiUser } from 'react-icons/ci';
+import { QRCodeSVG } from 'qrcode.react';
 import { useAppContext } from '../context/AppContext';
 import toast from 'react-hot-toast';
 
@@ -22,8 +23,10 @@ function MyBooking() {
 
     const [bookings, setBookings] = useState([]);
     const [cancelModal, setCancelModal] = useState({ open: false, bookingId: null, reason: '', otherText: '' });
+    const [payQRModal, setPayQRModal] = useState({ open: false, bookingId: null, payUrl: '' });
+    const pollRef = useRef(null);
 
-    async function fetchBookings() {
+    async function fetchBookings(silent = false) {
         try {
             const token  = await getToken();
             if (!token) {
@@ -34,15 +37,15 @@ function MyBooking() {
                 headers: { Authorization: `Bearer ${token}` }
             });
             if (data.success && Array.isArray(data.bookings)) {
-                toast.success("订单加载成功");
+                if (!silent) toast.success("订单加载成功");
                 setBookings(data.bookings);
             } else {
                 setBookings([]);
-                if (data && !data.success) toast.error(data.message || "加载订单失败");
+                if (!silent && data && !data.success) toast.error(data.message || "加载订单失败");
             }
         } catch (error) {
             setBookings([]);
-            toast.error(error.response?.data?.message || error.message || "加载订单失败");
+            if (!silent) toast.error(error.response?.data?.message || error.message || "加载订单失败");
         }
     }
 
@@ -73,32 +76,51 @@ function MyBooking() {
     }
 
     async function handlePayment(bookingId) {
-        try{
+        try {
             const token = await getToken();
-            const {data} = await axios.post('api/bookings/stripe-payment', {
-                bookingId
-            },{
-                headers: {
-                    Authorization: `Bearer ${token}`
-                }
-            })
-
-            if (data.success) {
-                window.location.href = data.url;
-            }else{
-                toast.error(data.message || "发起支付失败，请重试。"); 
+            const { data } = await axios.get(`/api/bookings/${bookingId}/pay-qr`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (data.success && data.token) {
+                const payUrl = `${window.location.origin}/pay-success?bookingId=${bookingId}&token=${data.token}`;
+                setPayQRModal({ open: true, bookingId, payUrl });
+            } else {
+                toast.error(data.message || "获取支付二维码失败，请重试。");
             }
         } catch (error) {
-            toast.error("支付失败，请稍后重试。");
-            console.error("Payment error:", error);
+            toast.error(error.response?.data?.message || "获取支付二维码失败，请稍后重试。");
         }
     }
 
-    useEffect(()=>{
+    useEffect(() => {
         if (user) {
             fetchBookings();
         }
-    },[user])
+    }, [user]);
+
+    // 扫码付款：轮询订单状态，支付成功后关闭二维码弹窗并提示
+    useEffect(() => {
+        if (!payQRModal.open || !payQRModal.bookingId) return;
+        pollRef.current = setInterval(() => {
+            getToken().then((token) => {
+                if (!token) return;
+                axios.get("/api/bookings/user", { headers: { Authorization: `Bearer ${token}` } })
+                    .then(({ data }) => {
+                        if (data.success && Array.isArray(data.bookings)) {
+                            const paid = data.bookings.find((b) => b._id === payQRModal.bookingId && b.isPaid);
+                            if (paid) {
+                                if (pollRef.current) clearInterval(pollRef.current);
+                                setPayQRModal({ open: false, bookingId: null, payUrl: '' });
+                                setBookings(data.bookings);
+                                toast.success("付款成功");
+                            }
+                        }
+                    })
+                    .catch(() => {});
+            });
+        }, 2000);
+        return () => { if (pollRef.current) clearInterval(pollRef.current); };
+    }, [payQRModal.open, payQRModal.bookingId]);
 
     return (
         <div className="px-4 py-20 md:px-16 lg:px-24 xl:px-32 bg-gray-50 min-h-screen">
@@ -251,6 +273,26 @@ function MyBooking() {
             </div>
         );})}
     </div>
+
+    {/* 扫码付款二维码弹窗 */}
+    {payQRModal.open && payQRModal.payUrl && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setPayQRModal({ open: false, bookingId: null, payUrl: '' })}>
+            <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm mx-4 flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
+                <h3 className="text-lg font-semibold text-gray-900 mb-1">扫码付款</h3>
+                <p className="text-sm text-gray-500 mb-4">请使用手机扫描二维码完成支付</p>
+                <div className="bg-white p-3 rounded-xl border border-gray-200 mb-4">
+                    <QRCodeSVG value={payQRModal.payUrl} size={220} level="M" />
+                </div>
+                <button
+                    type="button"
+                    onClick={() => setPayQRModal({ open: false, bookingId: null, payUrl: '' })}
+                    className="w-full py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+                >
+                    关闭
+                </button>
+            </div>
+        </div>
+    )}
 
     {/* 取消订单原因弹窗 */}
     {cancelModal.open && (

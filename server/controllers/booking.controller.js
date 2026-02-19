@@ -4,6 +4,7 @@ import Room from "../models/room.model.js";
 import Hotel from "../models/hotel.model.js";
 import transporter from "../utils/mailer.js";
 import Stripe from "stripe";
+import crypto from "crypto";
 
 async function checkAvailability({checkInDate,checkOutDate,room}) {
     const bookings = await Booking.find({
@@ -266,6 +267,67 @@ async function stripePayment(req,res) {
     }
 }
 
+/** 获取扫码付款用的一次性 token，前端用此生成二维码链接 */
+async function getPayQr(req, res) {
+    try {
+        const { id: bookingId } = req.params;
+        const userId = req.user._id;
+        const booking = await Booking.findById(bookingId);
+        if (!booking) {
+            return res.status(404).json({ success: false, message: "订单不存在" });
+        }
+        if (booking.user.toString() !== userId.toString()) {
+            return res.status(403).json({ success: false, message: "无权操作该订单" });
+        }
+        if (booking.status === "cancelled") {
+            return res.status(400).json({ success: false, message: "订单已取消" });
+        }
+        if (booking.isPaid) {
+            return res.status(400).json({ success: false, message: "订单已支付" });
+        }
+        const token = crypto.randomBytes(24).toString("hex");
+        const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 分钟有效
+        booking.paymentConfirmToken = token;
+        booking.paymentConfirmTokenExpiresAt = expiresAt;
+        await booking.save();
+        return res.status(200).json({ success: true, token });
+    } catch (error) {
+        console.error("getPayQr error:", error);
+        return res.status(500).json({ success: false, message: "获取支付二维码失败" });
+    }
+}
+
+/** 手机扫码打开 pay-success 页后调用，校验 token 并标记订单已支付（无需登录） */
+async function confirmPayment(req, res) {
+    try {
+        const { bookingId, token } = req.body || {};
+        if (!bookingId || !token) {
+            return res.status(400).json({ success: false, message: "缺少 bookingId 或 token" });
+        }
+        const booking = await Booking.findById(bookingId);
+        if (!booking) {
+            return res.status(404).json({ success: false, message: "订单不存在" });
+        }
+        if (booking.isPaid) {
+            return res.status(200).json({ success: true, message: "已支付" });
+        }
+        if (booking.paymentConfirmToken !== token) {
+            return res.status(400).json({ success: false, message: "无效的支付链接" });
+        }
+        if (booking.paymentConfirmTokenExpiresAt && new Date() > booking.paymentConfirmTokenExpiresAt) {
+            return res.status(400).json({ success: false, message: "支付链接已过期，请刷新订单页重新获取二维码" });
+        }
+        booking.isPaid = true;
+        booking.paymentConfirmToken = null;
+        booking.paymentConfirmTokenExpiresAt = null;
+        await booking.save();
+        return res.status(200).json({ success: true, message: "付款成功" });
+    } catch (error) {
+        console.error("confirmPayment error:", error);
+        return res.status(500).json({ success: false, message: "确认支付失败" });
+    }
+}
+
 async function cancelBooking(req, res) {
     try {
         const { id } = req.params;
@@ -315,4 +377,4 @@ async function cancelBooking(req, res) {
     }
 }
 
-export { checkAvailabilityApi, createBooking, getUserBooking, getHotelBooking, stripePayment, cancelBooking };
+export { checkAvailabilityApi, createBooking, getUserBooking, getHotelBooking, stripePayment, getPayQr, confirmPayment, cancelBooking };

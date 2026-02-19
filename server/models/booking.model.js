@@ -54,7 +54,10 @@ const bookingSchema = new Schema({
     isPaid:{
         type: Boolean,
         default: false,
-    }
+    },
+    /** 扫码付款：一次性确认 token，手机打开 pay-success 页后带此 token 调用 confirm-payment 即视为已付款 */
+    paymentConfirmToken: { type: String, default: null },
+    paymentConfirmTokenExpiresAt: { type: Date, default: null },
 },{timestamps: true});
 
 

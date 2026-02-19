@@ -28,6 +28,7 @@ import Dashboard from './pages/hotelOwner/Dashboard';
 import ListRoom from './pages/hotelOwner/ListRoom';
 import { useAppContext } from './context/AppContext';
 import Loader from './components/Loader';
+import PaySuccess from './pages/PaySuccess';
 
 
 
@@ -58,6 +59,7 @@ function App() {
             <Route path='/my-bookings' element= {<MyBooking/>}/>
             <Route path='/about' element={<About/>}/>
             <Route path='/loader/:nextUrl' element={<Loader />} />
+            <Route path='/pay-success' element={<PaySuccess />} />
             <Route path='/apply-merchant' element={<ApplyMerchant/>} />
             <Route path='/owner' element={<Layout/>}>
               <Route index element={<Dashboard/>} />
