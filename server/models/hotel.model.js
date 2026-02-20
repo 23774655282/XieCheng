@@ -13,7 +13,9 @@ const hotelSchema = new Schema({
     // 大作业要求：酒店星级、开业时间、可选维度
     starRating: { type: Number, default: 3 }, // 1-5 星级
     openTime: { type: Date }, // 开业时间
-    nearbyAttractions: [{ type: String }], // 附近热门景点/交通/商场
+    /** 商家维护的酒店整体介绍文案，展示在详情页酒店信息区域 */
+    hotelIntro: { type: String, default: "" },
+    nearbyAttractions: [{ type: String }], // 附近热门景点/交通/商场（旧字段，兼容保留）
     promotions: [{ type: String }], // 优惠描述，如 "节日8折"、"机酒套餐减100"
     // 审核与上下线：审核中/通过/不通过，下线可恢复
     status: {

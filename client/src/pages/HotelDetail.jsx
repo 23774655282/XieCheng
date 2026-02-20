@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useAppContext } from "../context/AppContext";
+import HotelReviews from "../components/HotelReviews";
 
 const roomTypeToCn = { 'Single Bed': '单人间', 'Double Bed': '双人间', 'Luxury Room': '豪华房', 'Family Suite': '家庭套房' };
 const getRoomTypeLabel = (roomType) => roomTypeToCn[roomType] || roomType;
@@ -20,6 +21,7 @@ function HotelDetail() {
     const { id } = useParams();
     const navigate = useNavigate();
     const { axios } = useAppContext();
+    const [searchParams] = useSearchParams();
     const [hotel, setHotel] = useState(null);
     const [rooms, setRooms] = useState([]);
     const [displayedCount, setDisplayedCount] = useState(ROOMS_PER_PAGE);
@@ -64,6 +66,13 @@ function HotelDetail() {
 
     const displayedRooms = rooms.slice(0, displayedCount);
     const hasMore = displayedCount < rooms.length;
+
+    // 当前搜索条件（从 URL 读取），仅用于展示，不含具体目的地
+    const checkIn = searchParams.get("checkIn") || "";
+    const checkOut = searchParams.get("checkOut") || "";
+    const adults = Number(searchParams.get("adults") || 0);
+    const children = Number(searchParams.get("children") || 0);
+    const roomsCount = Number(searchParams.get("rooms") || 0);
 
     const images = [];
     if (hotel?.images?.length) images.push(...hotel.images);
@@ -113,14 +122,49 @@ function HotelDetail() {
                 )}
             </div>
 
-            {/* 酒店基础信息 */}
+            {/* 酒店基础信息 + 酒店介绍 */}
             <div className="bg-white rounded-xl shadow p-6 mb-6">
                 <p className="text-gray-600">星级：{"★".repeat(hotel.starRating || 0)}</p>
                 <p className="text-gray-600 mt-1">地址：{hotel.address}</p>
-                {hotel.nearbyAttractions?.length > 0 && (
-                    <p className="text-gray-600 mt-1">附近：{hotel.nearbyAttractions.join("、")}</p>
+                {hotel.hotelIntro && (
+                    <div className="mt-3">
+                        <h2 className="text-base font-semibold text-gray-800 mb-1">酒店介绍</h2>
+                        <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">
+                            {hotel.hotelIntro}
+                        </p>
+                    </div>
                 )}
             </div>
+
+            {/* 当前搜索筛选条件（无具体地点） */}
+            <div className="bg-white rounded-xl shadow p-6 mb-6">
+                <h2 className="text-lg font-semibold text-gray-800 mb-3">当前搜索条件</h2>
+                {!checkIn && !checkOut && !adults && !children && !roomsCount ? (
+                    <p className="text-sm text-gray-500">暂未选择日期和人数。</p>
+                ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-gray-700">
+                        <div>
+                            <p className="text-gray-500 mb-1">入住日期</p>
+                            <p className="font-medium">{checkIn || "未选择"}</p>
+                        </div>
+                        <div>
+                            <p className="text-gray-500 mb-1">退房日期</p>
+                            <p className="font-medium">{checkOut || "未选择"}</p>
+                        </div>
+                        <div>
+                            <p className="text-gray-500 mb-1">人数与房间</p>
+                            <p className="font-medium">
+                                {adults || 0} 位成人
+                                {typeof children === "number" && children > 0 ? ` · ${children} 名儿童` : ""}
+                                {typeof roomsCount === "number" && roomsCount > 0 ? ` · ${roomsCount} 间客房` : ""}
+                            </p>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* 用户评价 */}
+            <HotelReviews hotelId={id} />
 
             {/* 房型价格列表：先显示 5 间，滚动到底部加载更多 */}
             <h2 className="text-lg font-bold mb-4">房型与价格{rooms.length > 0 ? `（共 ${rooms.length} 间）` : ""}</h2>

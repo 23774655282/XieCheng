@@ -70,4 +70,19 @@ export const uploadMerchantApply = multer({
   { name: "exterior", maxCount: 5 },
   { name: "interior", maxCount: 5 },
 ]);
+
+// 用户评价图片上传目录 server/uploads/reviews
+const reviewUploadDir = path.join(__dirname, "..", "uploads", "reviews");
+fs.mkdirSync(reviewUploadDir, { recursive: true });
+const reviewStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, reviewUploadDir),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname) || ".jpg";
+    const base = path.basename(file.originalname, ext).replace(/\s+/g, "-");
+    cb(null, `${Date.now()}-${base}${ext}`);
+  },
+});
+export const uploadReview = multer({
+  storage: reviewStorage,
+});
 export default upload;

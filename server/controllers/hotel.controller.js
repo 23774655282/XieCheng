@@ -103,7 +103,7 @@ export const getCities = async (req, res) => {
 /** 商户：注册酒店，初始状态为待审核 */
 export const registerHotel = async (req, res) => {
     try {
-        const { name, nameEn, address, contact, city, starRating, openTime, nearbyAttractions, promotions } = req.body;
+        const { name, nameEn, address, contact, city, starRating, openTime, nearbyAttractions, promotions, hotelIntro } = req.body;
         const owner = req.user._id;
 
         const existing = await Hotel.findOne({ owner });
@@ -123,6 +123,7 @@ export const registerHotel = async (req, res) => {
             city,
             starRating: starRating ? Number(starRating) : 3,
             openTime: openTime || undefined,
+            hotelIntro: hotelIntro || "",
             nearbyAttractions: Array.isArray(nearbyAttractions) ? nearbyAttractions : (nearbyAttractions ? [nearbyAttractions] : []),
             promotions: Array.isArray(promotions) ? promotions : (promotions ? [promotions] : []),
             status: "pending_audit",
@@ -173,7 +174,7 @@ function parseBodyArray(val) {
 /** 商户：更新酒店信息（保存后实时更新），支持上传酒店图片 */
 export const updateHotel = async (req, res) => {
     try {
-        const { name, nameEn, address, contact, city, starRating, openTime, nearbyAttractions, promotions, existingImages, latitude, longitude } = req.body;
+        const { name, nameEn, address, contact, city, starRating, openTime, nearbyAttractions, promotions, existingImages, latitude, longitude, hotelIntro } = req.body;
 
         let hotel = await Hotel.findOne({ owner: req.user._id });
 
@@ -209,6 +210,7 @@ export const updateHotel = async (req, res) => {
                 city,
                 starRating: starRating ? Number(starRating) : 3,
                 openTime: openTime || undefined,
+                hotelIntro: hotelIntro || "",
                 nearbyAttractions: nearArr,
                 promotions: promArr,
                 status: "pending_audit",
@@ -237,6 +239,7 @@ export const updateHotel = async (req, res) => {
         if (openTime !== undefined) hotel.openTime = openTime ? new Date(openTime) : undefined;
         if (nearbyAttractions !== undefined) hotel.nearbyAttractions = nearArr;
         if (promotions !== undefined) hotel.promotions = promArr;
+        if (hotelIntro !== undefined) hotel.hotelIntro = hotelIntro;
         if (latitude !== undefined) {
             const v = latitude === "" || latitude == null ? null : Number(latitude);
             hotel.latitude = Number.isFinite(v) ? v : null;

@@ -38,7 +38,9 @@ const NavBar = () => {
         return () => window.removeEventListener('scroll', handleScroll);
     }, [location.pathname]);
 
-    const showBackButton = location.pathname !== '/' && location.pathname !== '/rooms';
+    // 不在首页和酒店详情页显示返回按钮（酒店详情页有自己的返回按钮）
+    const showBackButton = location.pathname !== '/' && !location.pathname.startsWith('/hotels/');
+    const isLoginPath = location.pathname === '/login';
 
     return (
         <nav className={`fixed top-0 left-0 w-full flex items-center justify-between px-4 md:px-16 lg:px-24 xl:px-32 z-50 transition-all duration-500 ${isScrolled ? 'bg-white/80 shadow-md backdrop-blur-lg py-3 md:py-4 text-gray-700' : 'bg-black/20 backdrop-blur-sm py-4 md:py-6 text-white'}`}>
@@ -50,8 +52,7 @@ const NavBar = () => {
                     onClick={() => navigate(-1)}
                     className="flex items-center gap-1 text-sm font-medium px-3 py-2 rounded-md bg-black text-white hover:bg-gray-800"
                 >
-                    <span className="text-lg leading-none">←</span>
-                    <span>返回</span>
+                    返回
                 </button>
             )}
             {/* Logo */}
@@ -112,7 +113,7 @@ const NavBar = () => {
                         </button>
                     </>
                 )}
-                {!isAuthenticated && (
+                {!isAuthenticated && !isLoginPath && (
                     <button
                         onClick={() => navigate("/login")}
                         className={`px-6 py-2 text-sm font-medium rounded-full transition-all duration-500 ${isScrolled ? 'bg-gray-800 text-white hover:bg-gray-700' : 'bg-white text-gray-800 hover:bg-white/90'}`}
@@ -122,10 +123,28 @@ const NavBar = () => {
                 )}
             </div>
 
-            {/* Mobile Menu Button */}
-            <div className="flex items-center md:hidden">
+            {/* Mobile Left Side Login / Logout (仅在非登录页显示) */}
+            <div className="flex items-center gap-2 md:hidden">
+                {!isLoginPath && (
+                    isAuthenticated ? (
+                        <button
+                            onClick={logout}
+                            className="px-3 py-1.5 rounded-md bg-black text-white text-xs font-medium"
+                        >
+                            退出登录
+                        </button>
+                    ) : (
+                        <button
+                            onClick={() => navigate('/login')}
+                            className="px-3 py-1.5 rounded-md bg-black text-white text-xs font-medium"
+                        >
+                            登录
+                        </button>
+                    )
+                )}
+                {/* Mobile Menu Button */}
                 <button onClick={() => setIsMenuOpen(!isMenuOpen)} aria-label="打开菜单">
-                    < CiMenuFries className={`h-4 ${isScrolled ? 'invert' : ''}`} />
+                    <CiMenuFries className={`h-4 ${isScrolled ? 'invert' : ''}`} />
                 </button>
             </div>
 
@@ -186,20 +205,9 @@ const NavBar = () => {
                         >
                             {isOwner ? "商户中心" : "入驻酒店"}
                         </button>
-                        <button
-                            onClick={() => { setIsMenuOpen(false); logout(); }}
-                            className="border border-gray-800 px-4 py-1 text-sm font-light rounded-full text-gray-800"
-                        >
-                            退出登录
-                        </button>
                     </>
                 ) : (
-                    <button
-                        onClick={() => { setIsMenuOpen(false); navigate("/login"); }}
-                        className="bg-black text-white px-8 py-2.5 rounded-full transition-all duration-500"
-                    >
-                        登录
-                    </button>
+                    <></>
                 )}
             </div>
         </nav>

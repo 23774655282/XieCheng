@@ -22,6 +22,20 @@ function ListRoom() {
     'Pool Access': '泳池使用',
   };
 
+  const roomTypeToCn = {
+    'Single Bed': '单人间',
+    'Double Bed': '双人间',
+    'King Bed': '大床房',
+    'Luxury Room': '豪华房',
+    'Family Suite': '家庭套房',
+    'Standard Room': '标准间',
+    'Business Room': '商务房',
+    'Sea View Room': '海景房',
+    'Suite': '套房',
+  };
+
+  const getRoomTypeLabel = (roomType) => roomTypeToCn[roomType] || roomType;
+
   async function fetchRooms() {
     try {
       const token = await getToken()
@@ -158,7 +172,7 @@ async function toggleRoomAvailability(roomId) {
                       )}
                     </td>
                     <td className="p-4 font-medium text-gray-800">
-                      {room.roomType}
+                      {getRoomTypeLabel(room.roomType)}
                     </td>
                     <td className="p-4 text-gray-600">
                       {room.amenties.map((a, i) =>

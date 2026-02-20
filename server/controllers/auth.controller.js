@@ -122,17 +122,21 @@ export const register = async (req, res) => {
 export const login = async (req, res) => {
   try {
     const { phone, password } = req.body;
-    if (!phone || !password) {
+    const p = phone != null ? String(phone).trim() : "";
+    const pw = password != null ? String(password) : "";
+    if (!p || !pw) {
       return res.status(400).json({ success: false, message: "缺少手机号或密码" });
     }
 
-    const user = await User.findOne({ phone });
+    const user = await User.findOne({ phone: p });
     if (!user || !user.passwordHash) {
+      console.log("[login] 用户不存在或无密码", { phone: p, userFound: !!user, hasPasswordHash: !!(user && user.passwordHash) });
       return res.status(400).json({ success: false, message: "手机号或密码错误" });
     }
 
-    const match = await bcrypt.compare(password, user.passwordHash);
+    const match = await bcrypt.compare(pw, user.passwordHash);
     if (!match) {
+      console.log("[login] 密码不匹配", { phone: p });
       return res.status(400).json({ success: false, message: "手机号或密码错误" });
     }
 

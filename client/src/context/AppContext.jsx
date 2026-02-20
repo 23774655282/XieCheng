@@ -15,6 +15,19 @@ export function AppProvider({ children }) {
   const [user] = useState({ username: 'Local User', email: 'local@example.com' });
   const getToken = async () => localStorage.getItem("token");
 
+  /** 仅解码 JWT payload 判断是否过期，不校验签名 */
+  function isTokenExpired(token) {
+    if (!token || typeof token !== "string") return true;
+    try {
+      const parts = token.split(".");
+      if (parts.length !== 3) return true;
+      const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
+      return payload.exp != null && payload.exp * 1000 < Date.now();
+    } catch {
+      return true;
+    }
+  }
+
   const [role, setRoleState] = useState(null); // 'user' | 'merchant' | 'admin'
   const [merchantApplicationStatus, setMerchantApplicationStatus] = useState(null); // 'none' | 'pending' | 'approved' | 'rejected'
   const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem("token"));
@@ -88,11 +101,24 @@ export function AppProvider({ children }) {
         setIsPlatformAdmin(false);
         return;
       }
+      if (isTokenExpired(token)) {
+        localStorage.removeItem("token");
+        setIsAuthenticated(false);
+        setRoleState(null);
+        setMerchantApplicationStatus(null);
+        setIsOwner(false);
+        setIsPlatformAdmin(false);
+        return;
+      }
 
-      const { data } = await axios.get("/api/users", {
+      const res = await axios.get("/api/users", {
         headers: { Authorization: `Bearer ${token}` },
+      }).catch((err) => {
+        if (err.response?.status === 401) return { data: { success: false } };
+        throw err;
       });
-      if (data.success) {
+      const data = res?.data;
+      if (data?.success) {
         const r = data.role || "user";
         setRoleState(r);
         setMerchantApplicationStatus(data.merchantApplicationStatus || "none");
@@ -109,14 +135,24 @@ export function AppProvider({ children }) {
         });
         setIsAuthenticated(true);
         toast.success("用户信息加载成功");
+      } else {
+        localStorage.removeItem("token");
+        setIsAuthenticated(false);
+        setRoleState(null);
+        setMerchantApplicationStatus(null);
+        setIsOwner(false);
+        setIsPlatformAdmin(false);
       }
     } catch (error) {
+      if (error.response?.status === 401) localStorage.removeItem("token");
       setIsAuthenticated(false);
       setRoleState(null);
       setMerchantApplicationStatus(null);
       setIsOwner(false);
       setIsPlatformAdmin(false);
-      toast.error("获取用户信息失败，请稍后重试。");
+      if (error.response?.status !== 401) {
+        toast.error("获取用户信息失败，请稍后重试。");
+      }
     }
   }
 

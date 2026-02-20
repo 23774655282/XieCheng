@@ -24,9 +24,15 @@ function Login() {
 
   async function handleSubmitPassword(e) {
     e.preventDefault();
+    const p = String(phone ?? "").trim();
+    const pw = String(password ?? "").trim();
+    if (!p || !pw) {
+      toast.error("请输入手机号和密码");
+      return;
+    }
     setLoading(true);
     try {
-      const { data } = await axios.post("/api/auth/login", { phone, password });
+      const { data } = await axios.post("/api/auth/login", { phone: p, password: pw });
       if (data.success) {
         localStorage.setItem("token", data.token);
         await fetchUser();
@@ -38,7 +44,7 @@ function Login() {
         toast.error(data.message || "登录失败");
       }
     } catch (e) {
-      toast.error("登录失败");
+      toast.error(e.response?.data?.message || "登录失败");
     } finally {
       setLoading(false);
     }
