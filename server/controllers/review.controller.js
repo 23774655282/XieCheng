@@ -170,9 +170,9 @@ export const getHotelReviews = async (req, res) => {
 
         const total = await Review.countDocuments({ hotel: hotelId });
 
-        // 计算平均评分
+        // 计算平均评分（Review 模型中 hotel 存的是 String，用 hotelId 字符串匹配）
         const avgRatingResult = await Review.aggregate([
-            { $match: { hotel: new mongoose.Types.ObjectId(hotelId) } },
+            { $match: { hotel: String(hotelId) } },
             { $group: { _id: null, avgRating: { $avg: "$rating" } } },
         ]);
         const avgRating = avgRatingResult.length > 0 ? avgRatingResult[0].avgRating : 0;

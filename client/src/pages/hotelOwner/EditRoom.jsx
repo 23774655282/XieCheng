@@ -189,13 +189,13 @@ function EditRoom() {
 
   if (!room) {
     return (
-      <div className="max-w-3xl mx-auto p-6">
+      <div className="max-w-3xl mx-auto p-3 sm:p-6 min-w-0">
         <button
           type="button"
           onClick={() => navigate('/owner/list-rooms')}
           className="flex items-center gap-1 text-sm font-medium px-3 py-2 rounded-md bg-black text-white hover:bg-gray-800 mb-4"
         >
-          <span>←</span> 返回房间列表
+          返回房间列表
         </button>
         <p className="text-gray-600">未找到该房间</p>
       </div>
@@ -204,13 +204,13 @@ function EditRoom() {
 
   if (!canEdit) {
     return (
-      <div className="max-w-3xl mx-auto p-6 bg-white shadow-md rounded-lg">
+      <div className="max-w-3xl mx-auto p-3 sm:p-6 bg-white shadow-md rounded-lg min-w-0">
         <button
           type="button"
           onClick={() => navigate('/owner/list-rooms')}
           className="flex items-center gap-1 text-sm font-medium px-3 py-2 rounded-md bg-black text-white hover:bg-gray-800 mb-4"
         >
-          <span>←</span> 返回房间列表
+          返回房间列表
         </button>
         <Title align="left" font="outfit" title="编辑房间" subtitle="仅当酒店被管理员下线后可编辑房间" />
         <p className="text-amber-600 mt-4">当前酒店状态不可编辑房间，请等待管理员将酒店下线后再操作。</p>
@@ -219,13 +219,13 @@ function EditRoom() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="max-w-3xl mx-auto p-6 bg-white shadow-md rounded-lg">
+    <form onSubmit={handleSubmit} className="w-full max-w-3xl mx-auto min-w-0 p-3 sm:p-6 bg-white shadow-md rounded-lg">
       <button
         type="button"
         onClick={() => navigate('/owner/list-rooms')}
         className="flex items-center gap-1 text-sm font-medium px-3 py-2 rounded-md bg-black text-white hover:bg-gray-800 mb-4"
       >
-        <span>←</span> 返回房间列表
+        返回房间列表
       </button>
       <Title align="left" font="outfit" title="编辑房间" subtitle={room.roomType || '修改房型信息'} />
 

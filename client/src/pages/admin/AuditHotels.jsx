@@ -108,13 +108,13 @@ function AuditHotels() {
     };
 
     return (
-        <div>
-            <h1 className="text-xl font-bold mb-4">酒店信息审核 / 发布 / 下线</h1>
+        <div className="min-w-0">
+            <h1 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4">酒店信息审核 / 发布 / 下线</h1>
             <div className="mb-4 flex gap-2 flex-wrap">
                 <button
                     type="button"
                     onClick={() => setFilter("")}
-                    className={`px-3 py-1 rounded ${!filter ? "bg-blue-500 text-white" : "bg-gray-200"}`}
+                    className={`px-2.5 py-1.5 min-h-[36px] rounded text-sm ${!filter ? "bg-blue-500 text-white" : "bg-gray-200 hover:bg-gray-300"}`}
                 >
                     全部
                 </button>
@@ -123,82 +123,84 @@ function AuditHotels() {
                         key={key}
                         type="button"
                         onClick={() => setFilter(key)}
-                        className={`px-3 py-1 rounded ${filter === key ? "bg-blue-500 text-white" : "bg-gray-200"}`}
+                        className={`px-2.5 py-1.5 min-h-[36px] rounded text-sm ${filter === key ? "bg-blue-500 text-white" : "bg-gray-200 hover:bg-gray-300"}`}
                     >
                         {label}
                     </button>
                 ))}
             </div>
             {loading ? (
-                <p>加载中...</p>
+                <p className="text-gray-500">加载中...</p>
             ) : (
-                <div className="bg-white rounded-lg shadow overflow-hidden">
-                    <table className="w-full text-left">
-                        <thead className="bg-gray-100">
+                <div className="bg-white rounded-lg shadow overflow-x-auto -mx-1 px-1">
+                    <table className="w-full min-w-[520px] text-left">
+                        <thead className="bg-gray-100 sticky top-0 z-10">
                             <tr>
-                                <th className="p-2">酒店名</th>
-                                <th className="p-2">城市</th>
-                                <th className="p-2">状态</th>
-                                <th className="p-2">不通过原因</th>
-                                <th className="p-2">操作</th>
+                                <th className="p-2 sm:p-3 text-left text-gray-600 font-medium text-xs sm:text-sm">酒店名</th>
+                                <th className="p-2 sm:p-3 text-left text-gray-600 font-medium text-xs sm:text-sm">城市</th>
+                                <th className="p-2 sm:p-3 text-left text-gray-600 font-medium text-xs sm:text-sm">状态</th>
+                                <th className="p-2 sm:p-3 text-left text-gray-600 font-medium text-xs sm:text-sm hidden md:table-cell">不通过原因</th>
+                                <th className="p-2 sm:p-3 text-left text-gray-600 font-medium text-xs sm:text-sm">操作</th>
                             </tr>
                         </thead>
                         <tbody>
                             {hotels.map((h) => (
-                                <tr key={h._id} className="border-t">
-                                    <td className="p-2">{h.name}</td>
-                                    <td className="p-2">{h.city}</td>
-                                    <td className="p-2">{STATUS_MAP[h.status] || h.status}</td>
-                                    <td className="p-2 text-red-600 text-sm">{h.rejectReason || "-"}</td>
-                                    <td className="p-2 flex flex-wrap gap-1">
-                                        {h.status === "pending_audit" && (
-                                            <>
+                                <tr key={h._id} className="border-t border-gray-200 hover:bg-gray-50">
+                                    <td className="p-2 sm:p-3 text-gray-800 text-sm">{h.name}</td>
+                                    <td className="p-2 sm:p-3 text-gray-600 text-sm">{h.city}</td>
+                                    <td className="p-2 sm:p-3 text-sm">{STATUS_MAP[h.status] || h.status}</td>
+                                    <td className="p-2 sm:p-3 text-red-600 text-xs sm:text-sm hidden md:table-cell max-w-[120px] truncate" title={h.rejectReason || ""}>{h.rejectReason || "-"}</td>
+                                    <td className="p-2 sm:p-3">
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {h.status === "pending_audit" && (
+                                                <>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleApprove(h._id)}
+                                                        className="px-2 py-1 min-h-[32px] text-green-600 text-xs sm:text-sm font-medium rounded hover:bg-green-50"
+                                                    >
+                                                        通过
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setRejectModal({ open: true, hotelId: h._id, reason: "" })}
+                                                        className="px-2 py-1 min-h-[32px] text-red-600 text-xs sm:text-sm font-medium rounded hover:bg-red-50"
+                                                    >
+                                                        不通过
+                                                    </button>
+                                                </>
+                                            )}
+                                            {h.status === "approved" && (
                                                 <button
                                                     type="button"
-                                                    onClick={() => handleApprove(h._id)}
-                                                    className="text-green-600 text-sm underline"
+                                                    onClick={() => handleOffline(h._id)}
+                                                    className="px-2 py-1 min-h-[32px] text-orange-600 text-xs sm:text-sm font-medium rounded hover:bg-orange-50"
                                                 >
-                                                    通过
+                                                    下线
                                                 </button>
+                                            )}
+                                            {h.status === "offline" && (
                                                 <button
                                                     type="button"
-                                                    onClick={() => setRejectModal({ open: true, hotelId: h._id, reason: "" })}
-                                                    className="text-red-600 text-sm underline"
+                                                    onClick={() => handleRestore(h._id)}
+                                                    className="px-2 py-1 min-h-[32px] text-blue-600 text-xs sm:text-sm font-medium rounded hover:bg-blue-50"
                                                 >
-                                                    不通过
+                                                    恢复
                                                 </button>
-                                            </>
-                                        )}
-                                        {h.status === "approved" && (
-                                            <button
-                                                type="button"
-                                                onClick={() => handleOffline(h._id)}
-                                                className="text-orange-600 text-sm underline"
-                                            >
-                                                下线
-                                            </button>
-                                        )}
-                                        {h.status === "offline" && (
-                                            <button
-                                                type="button"
-                                                onClick={() => handleRestore(h._id)}
-                                                className="text-blue-600 text-sm underline"
-                                            >
-                                                恢复
-                                            </button>
-                                        )}
+                                            )}
+                                        </div>
                                     </td>
                                 </tr>
                             ))}
                         </tbody>
                     </table>
-                    {hotels.length === 0 && <p className="p-4 text-gray-500">暂无数据</p>}
+                    {hotels.length === 0 && <p className="p-4 text-gray-500 text-sm">暂无数据</p>}
                 </div>
             )}
 
             {rejectModal.open && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-lg p-6 max-w-md w-full">
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-3 sm:p-4">
+                    <div className="bg-white rounded-lg p-4 sm:p-6 max-w-md w-full max-h-[90vh] overflow-auto">
                         <h3 className="font-bold mb-2">不通过原因</h3>
                         <textarea
                             value={rejectModal.reason}

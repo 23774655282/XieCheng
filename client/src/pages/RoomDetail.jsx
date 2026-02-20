@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { addDays } from 'date-fns';
 import { formatLocalDate, getTodayLocal, parseLocalDate } from '../utils/dateUtils';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { facilityIcons, roomCommonData } from '../assets/assets';
 import { FaLocationArrow } from 'react-icons/fa';
 import { useAppContext } from '../context/AppContext';
@@ -33,26 +33,31 @@ function getRoomTypeLabel(roomType) {
 
 function RoomDetail() {
     const { id } = useParams();
-    const {rooms,getToken,axios,navigate} = useAppContext(); 
+    const [searchParams] = useSearchParams();
+    const { rooms, getToken, axios, navigate } = useAppContext();
     const [room, setRoom] = useState(null);
     const [mainImage, setMainImage] = useState(null);
     const [lightboxOpen, setLightboxOpen] = useState(false);
     const [lightboxImage, setLightboxImage] = useState(null);
 
-    const [checkInDate,setCheckInDate] = useState(null);
-
-    const [guests, setGuests] = useState(1);
-
-    const [isAvailable, setIsAvailable] = useState(false)
-
-
+    const [checkInDate, setCheckInDate] = useState(null);
     const [checkOutDate, setCheckOutDate] = useState(null);
+    const [guests, setGuests] = useState(1);
+    const [isAvailable, setIsAvailable] = useState(false);
+    const [roomNotFound, setRoomNotFound] = useState(false);
 
-
-
-    console.log(rooms)
+    // 从 URL 预填首页带来的入住/退房日期，避免用户二次选择
+    useEffect(() => {
+        const cIn = searchParams.get("checkIn");
+        const cOut = searchParams.get("checkOut");
+        if (cIn) setCheckInDate(cIn);
+        if (cOut) setCheckOutDate(cOut);
+        const a = searchParams.get("adults");
+        if (a && Number(a) >= 1) setGuests(Number(a));
+    }, [searchParams]);
 
     useEffect(() => {
+        setRoomNotFound(false);
         const selectedRoom = rooms.find((r) => r._id === id);
         if (selectedRoom) {
             setRoom(selectedRoom);
@@ -64,8 +69,12 @@ function RoomDetail() {
             if (data.success && data.room) {
                 setRoom(data.room);
                 setMainImage(data.room.images?.[0]);
+            } else {
+                setRoomNotFound(true);
             }
-        }).catch(() => {});
+        }).catch((err) => {
+            if (err.response?.status === 404) setRoomNotFound(true);
+        });
     }, [rooms, id]);
 
 
@@ -81,8 +90,6 @@ function RoomDetail() {
                 checkInDate,
                 checkOutDate
             })
-
-            console.log(data)
 
             if (data.success) {
                 if (data.isAvail) {
@@ -103,36 +110,60 @@ function RoomDetail() {
     async function handleSubmit(e) {
         e.preventDefault();
         const token = await getToken();
+        if (!token) {
+            toast.error("请先登录后再预订");
+            navigate(`/login?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}`);
+            return;
+        }
         try {
             if (!isAvailable) {
                 return checkAvailability();
-            }else{
-                const {data} = await axios.post("/api/bookings/book",{
-                    room:id,
-                    checkInDate,
-                    checkOutDate,
-                    guests,
-                    paymentMethod:"Pay At Hotel"
-                },{
-                    headers:{
-                        Authorization:`Bearer ${token}`
-                    }
-                })
-
-                if (data.success) {
-                    toast.success(data.message)
-                    navigate("/my-bookings")
-                    scrollTo(0,0)
-                }else{
-                    toast.error(data.message)
+            }
+            const { data } = await axios.post("/api/bookings/book", {
+                room: id,
+                checkInDate,
+                checkOutDate,
+                guests,
+                paymentMethod: "Pay At Hotel"
+            }, {
+                headers: {
+                    Authorization: `Bearer ${token}`
                 }
+            });
+
+            if (data.success) {
+                toast.success(data.message);
+                navigate("/my-bookings");
+                scrollTo(0, 0);
+            } else {
+                toast.error(data.message || "预订失败");
             }
         } catch (error) {
-            toast.error("预订失败")
+            const msg = error.response?.status === 401
+                ? "登录已过期，请重新登录"
+                : (error.response?.data?.message || "预订失败");
+            toast.error(msg);
+            if (error.response?.status === 401) {
+                navigate(`/login?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}`);
+            }
         }
     }
 
-    return room && (
+    if (roomNotFound) {
+        return (
+            <div className="pt-28 md:pt-36 px-4 flex flex-col items-center justify-center min-h-[40vh]">
+                <p className="text-gray-600 text-lg">房间不存在或已下架</p>
+                <button
+                    onClick={() => { navigate("/rooms"); scrollTo(0, 0); }}
+                    className="mt-4 bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-full"
+                >
+                    查看全部房间
+                </button>
+            </div>
+        );
+    }
+
+    return room ? (
         <div className='pt-28 md:pt-36 px-4 md:px-16 lg:px-24 xl:px-32 mb-16'>
 
             {/* Room Title */}
@@ -222,7 +253,7 @@ function RoomDetail() {
                         <label htmlFor="checkInDate" className="text-sm text-gray-600 mb-1">入住日期</label>
                         <input type="date" id="checkInDate" required className="border rounded-lg p-2 outline-none"
                         onChange={(e)=>setCheckInDate(e.target.value)}
-                        value={checkInDate}
+                        value={checkInDate ?? ''}
                         min={getTodayLocal()}
                         
                         />
@@ -235,7 +266,7 @@ function RoomDetail() {
                             required
                             className="border rounded-lg p-2 outline-none"
                             onChange={(e) => setCheckOutDate(e.target.value)}
-                            value={checkOutDate}
+                            value={checkOutDate ?? ''}
                             min={checkInDate ? formatLocalDate(addDays(parseLocalDate(checkInDate), 1)) : getTodayLocal()}
                             />
                     </div>
@@ -276,7 +307,7 @@ function RoomDetail() {
             </div>
 
         </div>
-    );
+    ) : null;
 }
 
 export default RoomDetail;

@@ -87,63 +87,66 @@ function MerchantApplications() {
   }
 
   return (
-    <div>
-      <h1 className="text-xl font-bold text-gray-900 mb-6">商户申请审核</h1>
+    <div className="min-w-0">
+      <h1 className="text-lg sm:text-xl font-bold text-gray-900 mb-4 sm:mb-6">商户申请审核</h1>
       {loading ? (
         <p className="text-gray-500">加载中...</p>
       ) : applications.length === 0 ? (
         <p className="text-gray-500">暂无待审核的商户申请</p>
       ) : (
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+        <div className="bg-white rounded-lg shadow overflow-x-auto -mx-1 px-1">
+          <table className="min-w-[520px] w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50 sticky top-0 z-10">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-8" />
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">用户名</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">手机号</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">申请时间</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">操作</th>
+                <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase w-8" />
+                <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase">用户名</th>
+                <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase">手机号</th>
+                <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase hidden md:table-cell">申请时间</th>
+                <th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-xs font-medium text-gray-500 uppercase">操作</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
               {applications.map((app) => (
                 <Fragment key={app._id}>
                   <tr className="hover:bg-gray-50">
-                    <td className="px-4 py-3">
+                    <td className="px-2 sm:px-4 py-2 sm:py-3">
                       <button
                         type="button"
                         onClick={() => setExpandedId((id) => (id === app._id ? null : app._id))}
-                        className="text-gray-500 hover:text-gray-700"
+                        className="p-1.5 text-gray-500 hover:text-gray-700 min-h-[36px] min-w-[36px] flex items-center justify-center"
+                        aria-label={expandedId === app._id ? "收起" : "展开"}
                       >
                         {expandedId === app._id ? "▼" : "▶"}
                       </button>
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-900">{app.username}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{app.phone}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">
+                    <td className="px-2 sm:px-4 py-2 sm:py-3 text-sm text-gray-900">{app.username}</td>
+                    <td className="px-2 sm:px-4 py-2 sm:py-3 text-sm text-gray-600">{app.phone}</td>
+                    <td className="px-2 sm:px-4 py-2 sm:py-3 text-sm text-gray-600 hidden md:table-cell">
                       {app.createdAt ? new Date(app.createdAt).toLocaleString("zh-CN") : "—"}
                     </td>
-                    <td className="px-4 py-3 text-right">
-                      <button
-                        type="button"
-                        onClick={() => handleApprove(app._id)}
-                        className="mr-2 px-3 py-1.5 text-sm bg-green-600 text-white rounded hover:bg-green-700"
-                      >
-                        通过
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => openRejectModal(app)}
-                        className="px-3 py-1.5 text-sm border border-red-600 text-red-600 rounded hover:bg-red-50"
-                      >
-                        驳回
-                      </button>
+                    <td className="px-2 sm:px-4 py-2 sm:py-3 text-right">
+                      <div className="flex flex-wrap gap-1.5 justify-end">
+                        <button
+                          type="button"
+                          onClick={() => handleApprove(app._id)}
+                          className="px-2.5 py-1.5 min-h-[36px] text-xs sm:text-sm bg-green-600 text-white rounded hover:bg-green-700"
+                        >
+                          通过
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openRejectModal(app)}
+                          className="px-2.5 py-1.5 min-h-[36px] text-xs sm:text-sm border border-red-600 text-red-600 rounded hover:bg-red-50"
+                        >
+                          驳回
+                        </button>
+                      </div>
                     </td>
                   </tr>
                   {expandedId === app._id && (
                     <tr key={`${app._id}-detail`}>
-                      <td colSpan={5} className="px-4 py-4 bg-gray-50">
-                        <div className="grid grid-cols-2 gap-4 text-sm">
+                      <td colSpan={5} className="px-3 sm:px-4 py-3 sm:py-4 bg-gray-50">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-sm">
                           <div>
                             <span className="text-gray-500">申请人：</span>
                             <span className="text-gray-900">{app.applicantName || "—"}</span>
@@ -227,8 +230,8 @@ function MerchantApplications() {
 
       {/* 驳回原因弹窗 */}
       {rejectModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-xl shadow-xl p-6 max-w-md w-full mx-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3 sm:p-4">
+          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 max-w-md w-full max-h-[90vh] overflow-auto">
             <h2 className="text-lg font-bold text-gray-900 mb-4">驳回申请</h2>
             <p className="text-sm text-gray-600 mb-2">申请人：{rejectModal.username}（{rejectModal.phone}）</p>
             <label className="block text-sm font-medium text-gray-700 mb-2">

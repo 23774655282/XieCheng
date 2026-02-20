@@ -23,6 +23,10 @@ function MyBooking() {
 
     const [bookings, setBookings] = useState([]);
     const [cancelModal, setCancelModal] = useState({ open: false, bookingId: null, reason: '', otherText: '' });
+    const [refundModal, setRefundModal] = useState({ open: false, bookingId: null, reason: '' });
+    const [platformRefundModal, setPlatformRefundModal] = useState({ open: false, bookingId: null, reason: '' });
+    const [refundSubmitting, setRefundSubmitting] = useState(false);
+    const [platformRefundSubmitting, setPlatformRefundSubmitting] = useState(false);
     const [payQRModal, setPayQRModal] = useState({ open: false, bookingId: null, payUrl: '' });
     const [reviewModal, setReviewModal] = useState({
         open: false,
@@ -84,6 +88,62 @@ function MyBooking() {
             }
         } catch (e) {
             toast.error(e.response?.data?.message || '取消失败');
+        }
+    }
+
+    async function handleRequestRefund() {
+        const { bookingId, reason } = refundModal;
+        if (!bookingId || !(reason && reason.trim())) {
+            toast.error('请填写退款原因');
+            return;
+        }
+        setRefundSubmitting(true);
+        try {
+            const token = await getToken();
+            const { data } = await axios.post(
+                `/api/bookings/${bookingId}/request-refund`,
+                { refundReason: reason.trim() },
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+            if (data.success) {
+                toast.success(data.message || '退款申请已提交');
+                setRefundModal({ open: false, bookingId: null, reason: '' });
+                fetchBookings(true);
+            } else {
+                toast.error(data.message || '提交失败');
+            }
+        } catch (e) {
+            toast.error(e.response?.data?.message || '提交退款申请失败');
+        } finally {
+            setRefundSubmitting(false);
+        }
+    }
+
+    async function handleRequestPlatformRefundReview() {
+        const { bookingId, reason } = platformRefundModal;
+        if (!bookingId || !(reason && reason.trim())) {
+            toast.error('请填写申请原因');
+            return;
+        }
+        setPlatformRefundSubmitting(true);
+        try {
+            const token = await getToken();
+            const { data } = await axios.post(
+                `/api/bookings/${bookingId}/request-platform-refund-review`,
+                { reason: reason.trim() },
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+            if (data.success) {
+                toast.success(data.message || '已提交平台介入');
+                setPlatformRefundModal({ open: false, bookingId: null, reason: '' });
+                fetchBookings(true);
+            } else {
+                toast.error(data.message || '提交失败');
+            }
+        } catch (e) {
+            toast.error(e.response?.data?.message || '提交失败');
+        } finally {
+            setPlatformRefundSubmitting(false);
         }
     }
 
@@ -343,7 +403,7 @@ function MyBooking() {
                             立即支付
                         </button>
                     )}
-                    {booking.status !== 'cancelled' && (
+                    {booking.status !== 'cancelled' && !booking.isCompleted && (
                         <button
                             type="button"
                             onClick={() => setCancelModal({ open: true, bookingId: booking._id, reason: '', otherText: '' })}
@@ -361,10 +421,62 @@ function MyBooking() {
                             完成订单
                         </button>
                     )}
+                    {booking.isCompleted && !booking.hasReview && (
+                        <button
+                            type="button"
+                            onClick={() => setReviewModal({
+                                open: true,
+                                bookingId: booking._id,
+                                hotelId: booking.hotel?._id || booking.hotel,
+                                hotelName: booking.hotel?.name || '',
+                            })}
+                            className="mt-2 bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg text-sm shadow transition"
+                        >
+                            去评价
+                        </button>
+                    )}
                     {booking.isCompleted && (
                         <span className="mt-2 inline-flex items-center px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-medium">
                             已完成{booking.hasReview ? ' · 已评价' : ''}
                         </span>
+                    )}
+                    {booking.isCompleted && booking.refundStatus === 'pending' && (
+                        <span className="mt-2 inline-flex items-center px-3 py-1 rounded-full bg-amber-50 text-amber-700 text-xs font-medium">
+                            退款审核中
+                        </span>
+                    )}
+                    {booking.isCompleted && booking.refundStatus === 'approved' && (
+                        <span className="mt-2 inline-flex items-center px-3 py-1 rounded-full bg-green-100 text-green-700 text-xs font-medium">
+                            退款成功
+                        </span>
+                    )}
+                    {booking.isCompleted && booking.refundStatus === 'rejected' && (
+                        <span className="mt-2 inline-flex items-center px-3 py-1 rounded-full bg-red-50 text-red-700 text-xs font-medium">
+                            商家拒绝退款
+                        </span>
+                    )}
+                    {booking.isCompleted && booking.refundStatus === 'rejected' && booking.refundPlatformReviewRequested && (
+                        <span className="mt-2 inline-flex items-center px-3 py-1 rounded-full bg-amber-50 text-amber-700 text-xs font-medium">
+                            待平台审核中
+                        </span>
+                    )}
+                    {booking.isCompleted && !booking.refundRequested && booking.refundStatus !== 'approved' && (
+                        <button
+                            type="button"
+                            onClick={() => setRefundModal({ open: true, bookingId: booking._id, reason: '' })}
+                            className="mt-2 bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg text-sm shadow transition"
+                        >
+                            申请退款
+                        </button>
+                    )}
+                    {booking.isCompleted && booking.refundStatus === 'rejected' && !booking.refundPlatformReviewRequested && (
+                        <button
+                            type="button"
+                            onClick={() => setPlatformRefundModal({ open: true, bookingId: booking._id, reason: '' })}
+                            className="mt-2 bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg text-sm shadow transition"
+                        >
+                            选择平台介入
+                        </button>
                     )}
                 </div>
             </div>
@@ -435,6 +547,76 @@ function MyBooking() {
                         className="flex-1 px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-700"
                     >
                         确定取消
+                    </button>
+                </div>
+            </div>
+        </div>
+    )}
+
+    {/* 申请退款弹窗 */}
+    {refundModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => !refundSubmitting && setRefundModal({ open: false, bookingId: null, reason: '' })}>
+            <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4" onClick={(e) => e.stopPropagation()}>
+                <h3 className="text-lg font-semibold text-gray-900 mb-3">申请退款</h3>
+                <p className="text-sm text-gray-600 mb-4">请写明退款原因，提交后由商家审核：</p>
+                <textarea
+                    value={refundModal.reason}
+                    onChange={(e) => setRefundModal((prev) => ({ ...prev, reason: e.target.value }))}
+                    placeholder="请输入退款原因（必填）"
+                    rows={4}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
+                    disabled={refundSubmitting}
+                />
+                <div className="flex gap-3">
+                    <button
+                        type="button"
+                        onClick={() => !refundSubmitting && setRefundModal({ open: false, bookingId: null, reason: '' })}
+                        className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                    >
+                        关闭
+                    </button>
+                    <button
+                        type="button"
+                        onClick={handleRequestRefund}
+                        disabled={refundSubmitting || !(refundModal.reason && refundModal.reason.trim())}
+                        className="flex-1 px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        {refundSubmitting ? '提交中...' : '提交申请'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    )}
+
+    {/* 平台介入弹窗（商家拒绝退款后） */}
+    {platformRefundModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => !platformRefundSubmitting && setPlatformRefundModal({ open: false, bookingId: null, reason: '' })}>
+            <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4" onClick={(e) => e.stopPropagation()}>
+                <h3 className="text-lg font-semibold text-gray-900 mb-3">选择平台介入</h3>
+                <p className="text-sm text-gray-600 mb-4">商家已拒绝您的退款申请，可提交平台审核。请写明原因：</p>
+                <textarea
+                    value={platformRefundModal.reason}
+                    onChange={(e) => setPlatformRefundModal((prev) => ({ ...prev, reason: e.target.value }))}
+                    placeholder="请输入申请原因（必填）"
+                    rows={4}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
+                    disabled={platformRefundSubmitting}
+                />
+                <div className="flex gap-3">
+                    <button
+                        type="button"
+                        onClick={() => !platformRefundSubmitting && setPlatformRefundModal({ open: false, bookingId: null, reason: '' })}
+                        className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                    >
+                        关闭
+                    </button>
+                    <button
+                        type="button"
+                        onClick={handleRequestPlatformRefundReview}
+                        disabled={platformRefundSubmitting || !(platformRefundModal.reason && platformRefundModal.reason.trim())}
+                        className="flex-1 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        {platformRefundSubmitting ? '提交中...' : '提交'}
                     </button>
                 </div>
             </div>

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useAppContext } from "../context/AppContext";
 import loginBg from "../assets/login_bg.jpg";
 import toast from "react-hot-toast";
@@ -7,6 +8,8 @@ const MODE_PASSWORD = "password";
 const MODE_CODE = "code";
 
 function Login() {
+  const [searchParams] = useSearchParams();
+  const redirectTo = searchParams.get("redirect");
   const { navigate, axios, fetchUser } = useAppContext();
   const [mode, setMode] = useState(MODE_PASSWORD);
   const [phone, setPhone] = useState("");
@@ -37,7 +40,9 @@ function Login() {
         localStorage.setItem("token", data.token);
         await fetchUser();
         const role = data.user?.role || "user";
-        if (role === "admin") navigate("/admin", { replace: true });
+        if (redirectTo && redirectTo.startsWith("/") && !redirectTo.startsWith("//")) {
+          navigate(redirectTo, { replace: true });
+        } else if (role === "admin") navigate("/admin", { replace: true });
         else if (role === "merchant") navigate("/owner", { replace: true });
         else navigate("/", { replace: true });
       } else {
@@ -82,7 +87,9 @@ function Login() {
         localStorage.setItem("token", data.token);
         await fetchUser();
         const role = data.user?.role || "user";
-        if (role === "admin") navigate("/admin", { replace: true });
+        if (redirectTo && redirectTo.startsWith("/") && !redirectTo.startsWith("//")) {
+          navigate(redirectTo, { replace: true });
+        } else if (role === "admin") navigate("/admin", { replace: true });
         else if (role === "merchant") navigate("/owner", { replace: true });
         else navigate("/", { replace: true });
       } else {

@@ -13,7 +13,7 @@ function NotFound() {
           onClick={() => navigate(-1)}
           className="flex items-center gap-1 text-sm font-medium px-3 py-2 rounded-md bg-black text-white hover:bg-gray-800"
         >
-          <span>←</span> 返回
+          返回
         </button>
       </div>
       <div className="flex flex-col items-center justify-center text-sm max-md:px-4 py-20 flex-1">

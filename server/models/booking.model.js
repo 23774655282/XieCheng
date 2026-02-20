@@ -68,6 +68,15 @@ const bookingSchema = new Schema({
     /** 扫码付款：一次性确认 token，手机打开 pay-success 页后带此 token 调用 confirm-payment 即视为已付款 */
     paymentConfirmToken: { type: String, default: null },
     paymentConfirmTokenExpiresAt: { type: Date, default: null },
+    /** 退款申请：用户对已完成订单申请退款，由商家审核 */
+    refundRequested: { type: Boolean, default: false },
+    refundReason: { type: String, default: null },
+    refundStatus: { type: String, enum: ['pending', 'approved', 'rejected'], default: null },
+    refundReviewedAt: { type: Date, default: null },
+    refundReviewedBy: { type: Schema.Types.ObjectId, ref: 'User', default: null },
+    /** 商家拒绝退款后，用户申请平台介入 */
+    refundPlatformReviewRequested: { type: Boolean, default: false },
+    refundPlatformReviewReason: { type: String, default: null },
 },{timestamps: true});
 
 

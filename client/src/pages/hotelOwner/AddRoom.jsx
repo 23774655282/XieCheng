@@ -173,7 +173,7 @@ function AddRoom() {
   return (
     <form
     onSubmit={handleSumbit}
-    className="max-w-3xl mx-auto p-6 bg-white shadow-md rounded-lg">
+    className="w-full max-w-3xl mx-auto min-w-0 p-3 sm:p-6 bg-white shadow-md rounded-lg">
       {/* Title Section */}
       <Title
         align="left"

@@ -87,10 +87,13 @@ function HotelDetail() {
             <div className="mb-4 flex items-center gap-3">
                 <button
                     type="button"
-                    onClick={() => navigate("/rooms")}
+                    onClick={() => {
+                    const q = new URLSearchParams(searchParams).toString();
+                    navigate(q ? `/rooms?${q}` : "/rooms");
+                }}
                     className="flex items-center gap-1 text-sm font-medium px-3 py-2 rounded-md bg-black text-white hover:bg-gray-800"
                 >
-                    <span>←</span> 返回
+                    返回
                 </button>
                 <h1 className="text-xl font-bold">{hotel.name}</h1>
             </div>
@@ -194,7 +197,16 @@ function HotelDetail() {
                                     <span className="text-gray-500 text-sm">/晚</span>
                                     <button
                                         type="button"
-                                        onClick={() => navigate(`/rooms/${room._id}`)}
+                                        onClick={() => {
+                                        const params = new URLSearchParams();
+                                        if (checkIn) params.set("checkIn", checkIn);
+                                        if (checkOut) params.set("checkOut", checkOut);
+                                        if (adults) params.set("adults", String(adults));
+                                        if (children) params.set("children", String(children));
+                                        if (roomsCount) params.set("rooms", String(roomsCount));
+                                        const q = params.toString();
+                                        navigate(q ? `/rooms/${room._id}?${q}` : `/rooms/${room._id}`);
+                                    }}
                                         className="ml-2 bg-blue-500 text-white px-4 py-2 rounded text-sm"
                                     >
                                         预订

@@ -111,16 +111,16 @@ function HotelInfo() {
     if (loading) return <p>加载中...</p>;
 
     return (
-        <div className="max-w-2xl">
-            <h1 className="text-xl font-bold mb-4">酒店信息录入 / 编辑</h1>
-            <form onSubmit={handleSubmit} className="space-y-4 bg-white p-6 rounded-lg shadow">
+        <div className="w-full max-w-2xl min-w-0">
+            <h1 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4">酒店信息录入 / 编辑</h1>
+            <form onSubmit={handleSubmit} className="space-y-4 bg-white p-4 sm:p-6 rounded-lg shadow">
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">酒店名（中文） *</label>
                     <input
                         type="text"
                         value={form.name}
                         onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                        className="w-full border rounded p-2"
+                        className="w-full border rounded-lg p-2.5 sm:p-2 text-base"
                         required
                     />
                 </div>
@@ -165,7 +165,7 @@ function HotelInfo() {
                         required
                     />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">经度（地图定位）</label>
                         <input
@@ -253,7 +253,7 @@ function HotelInfo() {
                         )}
                     </div>
                 </div>
-                <button type="submit" disabled={saving} className="w-full bg-blue-500 text-white py-2 rounded disabled:opacity-50">
+                <button type="submit" disabled={saving} className="w-full bg-blue-500 text-white py-3 sm:py-2 rounded-lg disabled:opacity-50 font-medium min-h-[44px]">
                     {saving ? "保存中..." : "保存"}
                 </button>
             </form>

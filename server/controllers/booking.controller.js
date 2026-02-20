@@ -6,21 +6,17 @@ import transporter from "../utils/mailer.js";
 import Stripe from "stripe";
 import crypto from "crypto";
 
-async function checkAvailability({checkInDate,checkOutDate,room}) {
+async function checkAvailability({ checkInDate, checkOutDate, room }) {
+    // 只把「未取消且未完成」的订单视为占用；已完成的订单视为已退房，该房间对应日期可再次预订
     const bookings = await Booking.find({
-            room,
-            status: { $ne: 'cancelled' },
-            checkInDate : {
-                $lte: checkOutDate,
-            },
-            checkOutDate: {
-                $gte: checkInDate,
-            }
-        })
-
-        const isAvail = bookings.length === 0;
-
-        return isAvail;
+        room,
+        status: { $ne: 'cancelled' },
+        isCompleted: { $ne: true },
+        checkInDate: { $lte: checkOutDate },
+        checkOutDate: { $gte: checkInDate },
+    });
+    const isAvail = bookings.length === 0;
+    return isAvail;
 }
 
 
@@ -353,6 +349,9 @@ async function cancelBooking(req, res) {
         if (booking.status === 'cancelled') {
             return res.status(400).json({ success: false, message: '订单已取消' });
         }
+        if (booking.isCompleted) {
+            return res.status(400).json({ success: false, message: '已完成订单不可取消，请使用申请退款' });
+        }
 
         const isUser = booking.user.toString() === userId.toString();
         const hotelId = booking.hotel._id || booking.hotel;
@@ -386,6 +385,148 @@ async function cancelBooking(req, res) {
     } catch (error) {
         console.error('Error cancelling booking:', error);
         return res.status(500).json({ success: false, message: '取消订单失败' });
+    }
+}
+
+// 用户：对已完成订单申请退款（需填写原因）
+async function requestRefund(req, res) {
+    try {
+        const { id } = req.params;
+        const { refundReason } = req.body || {};
+        const userId = req.user._id;
+
+        const booking = await Booking.findById(id);
+        if (!booking) {
+            return res.status(404).json({ success: false, message: '订单不存在' });
+        }
+        if (String(booking.user) !== String(userId)) {
+            return res.status(403).json({ success: false, message: '无权操作该订单' });
+        }
+        if (booking.status === 'cancelled') {
+            return res.status(400).json({ success: false, message: '订单已取消' });
+        }
+        if (!booking.isCompleted) {
+            return res.status(400).json({ success: false, message: '仅支持对已完成订单申请退款' });
+        }
+        if (booking.refundStatus === 'pending') {
+            return res.status(400).json({ success: false, message: '已提交退款申请，请等待商家审核' });
+        }
+        if (booking.refundStatus === 'approved') {
+            return res.status(400).json({ success: false, message: '该订单已退款' });
+        }
+
+        const reason = (typeof refundReason === 'string' && refundReason.trim()) ? refundReason.trim() : '';
+        if (!reason) {
+            return res.status(400).json({ success: false, message: '请填写退款原因' });
+        }
+
+        booking.refundRequested = true;
+        booking.refundReason = reason;
+        booking.refundStatus = 'pending';
+        await booking.save();
+
+        return res.status(200).json({
+            success: true,
+            message: '退款申请已提交，请等待商家审核',
+            booking,
+        });
+    } catch (error) {
+        console.error('Error requesting refund:', error);
+        return res.status(500).json({ success: false, message: '提交退款申请失败' });
+    }
+}
+
+// 商家：审核退款（通过/拒绝）
+async function reviewRefund(req, res) {
+    try {
+        const { id } = req.params;
+        const { action } = req.body || {}; // 'approve' | 'reject'
+        const userId = req.user._id;
+
+        const booking = await Booking.findById(id).populate('hotel');
+        if (!booking) {
+            return res.status(404).json({ success: false, message: '订单不存在' });
+        }
+
+        const hotelId = booking.hotel._id || booking.hotel;
+        const hotelDoc = booking.hotel && booking.hotel.owner ? booking.hotel : await Hotel.findById(hotelId);
+        if (!hotelDoc || String(hotelDoc.owner) !== String(userId)) {
+            return res.status(403).json({ success: false, message: '无权审核该订单的退款' });
+        }
+        if (booking.refundStatus !== 'pending') {
+            return res.status(400).json({ success: false, message: '当前无待审核的退款申请' });
+        }
+
+        if (action === 'approve') {
+            booking.status = 'cancelled';
+            booking.cancelledBy = null;
+            booking.cancelReason = booking.refundReason || '用户申请退款，商家已同意';
+            booking.refundStatus = 'approved';
+            booking.refundReviewedAt = new Date();
+            booking.refundReviewedBy = userId;
+            await booking.save();
+            return res.status(200).json({
+                success: true,
+                message: '已同意退款',
+                booking,
+            });
+        }
+        if (action === 'reject') {
+            booking.refundStatus = 'rejected';
+            booking.refundReviewedAt = new Date();
+            booking.refundReviewedBy = userId;
+            await booking.save();
+            return res.status(200).json({
+                success: true,
+                message: '已拒绝退款',
+                booking,
+            });
+        }
+        return res.status(400).json({ success: false, message: '请传 action: approve 或 reject' });
+    } catch (error) {
+        console.error('Error reviewing refund:', error);
+        return res.status(500).json({ success: false, message: '审核退款失败' });
+    }
+}
+
+// 用户：商家拒绝退款后，申请平台介入（填写原因后显示待平台审核中，流程结束）
+async function requestPlatformRefundReview(req, res) {
+    try {
+        const { id } = req.params;
+        const { reason } = req.body || {};
+        const userId = req.user._id;
+
+        const booking = await Booking.findById(id);
+        if (!booking) {
+            return res.status(404).json({ success: false, message: '订单不存在' });
+        }
+        if (String(booking.user) !== String(userId)) {
+            return res.status(403).json({ success: false, message: '无权操作该订单' });
+        }
+        if (booking.refundStatus !== 'rejected') {
+            return res.status(400).json({ success: false, message: '仅支持在商家拒绝退款后申请平台介入' });
+        }
+        if (booking.refundPlatformReviewRequested) {
+            return res.status(400).json({ success: false, message: '已提交平台介入，请等待审核' });
+        }
+
+        const reasonStr = (typeof reason === 'string' && reason.trim()) ? reason.trim() : '';
+        if (!reasonStr) {
+            return res.status(400).json({ success: false, message: '请填写申请原因' });
+        }
+
+        booking.refundPlatformReviewRequested = true;
+        booking.refundPlatformReviewReason = reasonStr;
+        await booking.save();
+
+        return res.status(200).json({
+            success: true,
+            message: '已提交平台介入，请等待平台审核',
+            booking,
+        });
+    } catch (error) {
+        console.error('Error requesting platform refund review:', error);
+        return res.status(500).json({ success: false, message: '提交失败' });
     }
 }
 
@@ -426,4 +567,4 @@ async function completeBooking(req, res) {
     }
 }
 
-export { checkAvailabilityApi, createBooking, getUserBooking, getHotelBooking, stripePayment, getPayQr, confirmPayment, cancelBooking, completeBooking };
+export { checkAvailabilityApi, createBooking, getUserBooking, getHotelBooking, stripePayment, getPayQr, confirmPayment, cancelBooking, completeBooking, requestRefund, reviewRefund, requestPlatformRefundReview };

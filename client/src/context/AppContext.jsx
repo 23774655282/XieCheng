@@ -189,6 +189,7 @@ export function AppProvider({ children }) {
     setSearchCity([]);
     setRecentSearchRecords([]);
     try { localStorage.removeItem("recentSearchRecords"); } catch (_) {}
+    navigate("/", { replace: true });
   }
 
   const value = {

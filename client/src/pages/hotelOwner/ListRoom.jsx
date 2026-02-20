@@ -134,68 +134,50 @@ async function toggleRoomAvailability(roomId) {
       {hotelStatus && hotelStatus !== "offline" && (
         <p className="text-amber-600 text-sm mb-2">仅当酒店被管理员下线后，才可编辑房间信息。</p>
       )}
-      <div className='w-full max-w-4xl text-left border border-gray-300 rounded-lg max-h-[42rem] overflow-y-scroll'>
-        <table className='w-full '>
-              <thead className='bg-gray-100'>
+      <div className='w-full overflow-x-auto -mx-1 px-1 border border-gray-300 rounded-lg max-h-[36rem] sm:max-h-[42rem] overflow-y-auto'>
+        <table className='w-full min-w-[520px] text-left'>
+              <thead className='bg-gray-100 sticky top-0 z-10'>
                 <tr>
-                  <th className='p-4 text-left text-gray-600 font-medium'>
-                    图片
-                  </th>
-                  <th className='p-4 text-left text-gray-600 font-medium'>
-                    房型
-                  </th>
-                  <th className='p-4 text-left text-gray-600 font-medium'>
-                    设施
-                  </th>
-                  <th className='p-4 text-left text-gray-600 font-medium'>
-                    价格/每晚
-                  </th>
-                  <th className='p-4 text-left text-gray-600 font-medium'>
-                    优惠
-                  </th>
-                  <th className='p-4 text-left text-gray-600 font-medium'>
-                    操作
-                  </th>
+                  <th className='p-2 sm:p-4 text-left text-gray-600 font-medium text-xs sm:text-sm'>图片</th>
+                  <th className='p-2 sm:p-4 text-left text-gray-600 font-medium text-xs sm:text-sm'>房型</th>
+                  <th className='p-2 sm:p-4 text-left text-gray-600 font-medium text-xs sm:text-sm hidden md:table-cell'>设施</th>
+                  <th className='p-2 sm:p-4 text-left text-gray-600 font-medium text-xs sm:text-sm'>价格/晚</th>
+                  <th className='p-2 sm:p-4 text-left text-gray-600 font-medium text-xs sm:text-sm'>优惠</th>
+                  <th className='p-2 sm:p-4 text-left text-gray-600 font-medium text-xs sm:text-sm'>操作</th>
                 </tr>
             </thead>
             <tbody className="text-sm">
-              {
-                rooms.map((room,idx)=>(
+              {rooms.map((room, idx) => (
                   <tr key={idx} className='border-b border-gray-200 hover:bg-gray-50'>
-                    <td className="p-4">
+                    <td className="p-2 sm:p-4">
                       {room.images && room.images[0] && (
                         <img
                           src={room.images[0]}
                           alt={room.roomType}
-                          className="w-16 h-12 object-cover rounded"
+                          className="w-12 h-10 sm:w-16 sm:h-12 object-cover rounded"
                         />
                       )}
                     </td>
-                    <td className="p-4 font-medium text-gray-800">
+                    <td className="p-2 sm:p-4 font-medium text-gray-800 text-xs sm:text-sm">
                       {getRoomTypeLabel(room.roomType)}
                     </td>
-                    <td className="p-4 text-gray-600">
-                      {room.amenties.map((a, i) =>
+                    <td className="p-2 sm:p-4 text-gray-600 hidden md:table-cell">
+                      {room.amenties?.map((a, i) =>
                         (amenityLabelMap[a] || a) + (i < room.amenties.length - 1 ? '，' : '')
                       )}
                     </td>
-                    <td className="p-4 text-gray-600">
+                    <td className="p-2 sm:p-4 text-gray-600 text-xs sm:text-sm">
                       {room.pricePerNight} 元/晚
                     </td>
-                    <td className="p-4 text-gray-600">
+                    <td className="p-2 sm:p-4 text-gray-600 text-xs sm:text-sm">
                       {room.promoDiscount != null && room.promoDiscount > 0 ? (
-                        <span>
-                          <span className="font-medium text-green-600">{room.promoDiscount}%</span>
-                          <span className="text-gray-500 text-xs block mt-0.5">
-                            优惠后 {Math.round((room.pricePerNight || 0) * (1 - (room.promoDiscount || 0) / 100))} 元/晚
-                          </span>
-                        </span>
+                        <span className="font-medium text-green-600">{room.promoDiscount}%</span>
                       ) : (
                         <span className="text-gray-400">—</span>
                       )}
                     </td>
-                    <td className="p-4 text-gray-600">
-                      <div className="flex items-center gap-3 flex-wrap">
+                    <td className="p-2 sm:p-4">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <label className="inline-flex items-center cursor-pointer">
                           <input type="checkbox" 
                             onChange={() => toggleRoomAvailability(room._id)}
@@ -211,14 +193,14 @@ async function toggleRoomAvailability(roomId) {
                           onClick={() => canEditRooms && navigate(`/owner/edit-room/${room._id}`)}
                           disabled={!canEditRooms}
                           title={!canEditRooms ? "仅当酒店被管理员下线后可编辑房间" : "编辑"}
-                          className="px-3 py-1.5 text-sm text-blue-600 border border-blue-300 rounded hover:bg-blue-50 transition disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                          className="px-2.5 py-1.5 min-h-[36px] text-xs sm:text-sm text-blue-600 border border-blue-300 rounded hover:bg-blue-50 active:bg-blue-100 transition disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
                         >
                           编辑
                         </button>
                         <button
                           type="button"
                           onClick={() => openDeleteConfirm(room)}
-                          className="px-3 py-1.5 text-sm text-red-600 border border-red-300 rounded hover:bg-red-50 transition"
+                          className="px-2.5 py-1.5 min-h-[36px] text-xs sm:text-sm text-red-600 border border-red-300 rounded hover:bg-red-50 active:bg-red-100 transition"
                         >
                           删除
                         </button>

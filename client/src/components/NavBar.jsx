@@ -41,6 +41,8 @@ const NavBar = () => {
     // 不在首页和酒店详情页显示返回按钮（酒店详情页有自己的返回按钮）
     const showBackButton = location.pathname !== '/' && !location.pathname.startsWith('/hotels/');
     const isLoginPath = location.pathname === '/login';
+    // 全部房间页的返回固定回首页，其他页返回上一级
+    const handleBack = () => (location.pathname === '/rooms' ? navigate('/') : navigate(-1));
 
     return (
         <nav className={`fixed top-0 left-0 w-full flex items-center justify-between px-4 md:px-16 lg:px-24 xl:px-32 z-50 transition-all duration-500 ${isScrolled ? 'bg-white/80 shadow-md backdrop-blur-lg py-3 md:py-4 text-gray-700' : 'bg-black/20 backdrop-blur-sm py-4 md:py-6 text-white'}`}>
@@ -49,7 +51,7 @@ const NavBar = () => {
             {showBackButton && (
                 <button
                     type="button"
-                    onClick={() => navigate(-1)}
+                    onClick={handleBack}
                     className="flex items-center gap-1 text-sm font-medium px-3 py-2 rounded-md bg-black text-white hover:bg-gray-800"
                 >
                     返回
@@ -158,10 +160,10 @@ const NavBar = () => {
                 {showBackButton && (
                     <button
                         type="button"
-                        onClick={() => { setIsMenuOpen(false); navigate(-1); }}
+                        onClick={() => { setIsMenuOpen(false); handleBack(); }}
                         className="flex items-center gap-2 px-3 py-2 rounded-md bg-black text-white hover:bg-gray-800"
                     >
-                        <span>←</span> 返回
+                        返回
                     </button>
                 )}
 

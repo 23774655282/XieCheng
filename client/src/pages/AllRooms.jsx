@@ -356,6 +356,11 @@ function AllRooms() {
   };
 
   const isPromoMode = Boolean(promo);
+  // 跳转房间/酒店时带上当前搜索条件（入住离开日期等），预订页可预填
+  const appendSearch = (path) => {
+    const q = searchParams.toString();
+    return q ? `${path}?${q}` : path;
+  };
 
   return (
     <div className="pt-28 md:pt-32 px-4 md:px-8 lg:px-12 mb-16 max-w-6xl mx-auto">
@@ -451,7 +456,7 @@ function AllRooms() {
                     >
                       <div className="relative">
                         <img
-                          onClick={() => { navigate(`/rooms/${room._id}`); scrollTo(0, 0); }}
+                          onClick={() => { navigate(appendSearch(`/rooms/${room._id}`)); scrollTo(0, 0); }}
                           src={room.images?.[0]}
                           alt="房间"
                           title="查看房间详情"
@@ -483,7 +488,7 @@ function AllRooms() {
                           </p>
                           <button
                             type="button"
-                            onClick={() => { navigate(`/rooms/${room._id}`); scrollTo(0, 0); }}
+                            onClick={() => { navigate(appendSearch(`/rooms/${room._id}`)); scrollTo(0, 0); }}
                             disabled={isUnavailable}
                             className={`px-3 py-1.5 text-white text-sm rounded-lg transition-colors ${isUnavailable ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
                           >
@@ -525,7 +530,7 @@ function AllRooms() {
                       </div>
                       <button
                         type="button"
-                        onClick={() => navigate(`/hotels/${hotel?._id ?? hotel}`)}
+                        onClick={() => navigate(appendSearch(`/hotels/${hotel?._id ?? hotel}`))}
                         className="text-sm text-white font-medium py-1.5 px-3 rounded-md bg-white/20 hover:bg-white/30 transition-colors"
                       >
                         查看酒店详情
@@ -544,7 +549,7 @@ function AllRooms() {
                           <div className="relative">
                             <img
                               onClick={() => {
-                                navigate(`/rooms/${room._id}`);
+                                navigate(appendSearch(`/rooms/${room._id}`));
                                 scrollTo(0, 0);
                               }}
                               src={room.images?.[0]}
@@ -578,7 +583,7 @@ function AllRooms() {
                               </p>
                               <button
                                 type="button"
-                                onClick={() => { navigate(`/rooms/${room._id}`); scrollTo(0, 0); }}
+                                onClick={() => { navigate(appendSearch(`/rooms/${room._id}`)); scrollTo(0, 0); }}
                                 disabled={isUnavailable}
                                 className={`px-3 py-1.5 text-white text-sm rounded-lg transition-colors ${isUnavailable ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
                               >
@@ -594,7 +599,7 @@ function AllRooms() {
                     <div className="px-5 pb-5">
                       <button
                         type="button"
-                        onClick={() => { navigate(`/hotels/${hotel?._id ?? hotel}`); scrollTo(0, 0); }}
+                        onClick={() => { navigate(appendSearch(`/hotels/${hotel?._id ?? hotel}`)); scrollTo(0, 0); }}
                         className="w-full py-2.5 border border-blue-600 text-blue-600 rounded-lg text-sm font-medium hover:bg-blue-50 transition-colors"
                       >
                         查看更多
