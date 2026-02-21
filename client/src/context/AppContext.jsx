@@ -11,8 +11,7 @@ export function AppProvider({ children }) {
   const currency = import.meta.env.VITE_CURRENCY || '元';
   const navigate = useNavigate();
 
-  // 本地登录用户（UI 展示用），实际身份由后端 /api/users 返回的 role 控制
-  const [user] = useState({ username: 'Local User', email: 'local@example.com' });
+  const [userInfo, setUserInfo] = useState({ username: '', avatar: '', birthday: null, favoriteHotels: [] });
   const getToken = async () => localStorage.getItem("token");
 
   /** 仅解码 JWT payload 判断是否过期，不校验签名 */
@@ -99,6 +98,7 @@ export function AppProvider({ children }) {
         setMerchantApplicationStatus(null);
         setIsOwner(false);
         setIsPlatformAdmin(false);
+        setUserInfo({ username: '', avatar: '', birthday: null, favoriteHotels: [] });
         return;
       }
       if (isTokenExpired(token)) {
@@ -108,6 +108,7 @@ export function AppProvider({ children }) {
         setMerchantApplicationStatus(null);
         setIsOwner(false);
         setIsPlatformAdmin(false);
+        setUserInfo({ username: '', avatar: '', birthday: null, favoriteHotels: [] });
         return;
       }
 
@@ -124,6 +125,12 @@ export function AppProvider({ children }) {
         setMerchantApplicationStatus(data.merchantApplicationStatus || "none");
         setIsOwner(r === "merchant" || r === "admin");
         setIsPlatformAdmin(r === "admin");
+        setUserInfo({
+          username: data.username || '',
+          avatar: data.avatar || '',
+          birthday: data.birthday || null,
+          favoriteHotels: data.favoriteHotels || [],
+        });
         const apiCities = data.recentSerachCities || [];
         setSearchCity(apiCities);
         setRecentSearchRecords((prev) => {
@@ -134,7 +141,6 @@ export function AppProvider({ children }) {
           return merged;
         });
         setIsAuthenticated(true);
-        toast.success("用户信息加载成功");
       } else {
         localStorage.removeItem("token");
         setIsAuthenticated(false);
@@ -142,6 +148,7 @@ export function AppProvider({ children }) {
         setMerchantApplicationStatus(null);
         setIsOwner(false);
         setIsPlatformAdmin(false);
+        setUserInfo({ username: '', avatar: '', birthday: null, favoriteHotels: [] });
       }
     } catch (error) {
       if (error.response?.status === 401) localStorage.removeItem("token");
@@ -150,6 +157,7 @@ export function AppProvider({ children }) {
       setMerchantApplicationStatus(null);
       setIsOwner(false);
       setIsPlatformAdmin(false);
+      setUserInfo({ username: '', avatar: '', birthday: null, favoriteHotels: [] });
       if (error.response?.status !== 401) {
         toast.error("获取用户信息失败，请稍后重试。");
       }
@@ -186,6 +194,7 @@ export function AppProvider({ children }) {
     setMerchantApplicationStatus(null);
     setIsOwner(false);
     setIsPlatformAdmin(false);
+    setUserInfo({ username: '', avatar: '', birthday: null, favoriteHotels: [] });
     setSearchCity([]);
     setRecentSearchRecords([]);
     try { localStorage.removeItem("recentSearchRecords"); } catch (_) {}
@@ -195,7 +204,9 @@ export function AppProvider({ children }) {
   const value = {
     currency,
     navigate,
-    user,
+    user: userInfo,
+    userInfo,
+    setUserInfo,
     getToken,
     role,
     merchantApplicationStatus,

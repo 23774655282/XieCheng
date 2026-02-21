@@ -19,7 +19,7 @@ const NavBar = () => {
 
     const location = useLocation();
 
-    const { isAuthenticated, navigate, isOwner, isPlatformAdmin, role, setShowHotelReg, logout } = useAppContext();
+    const { isAuthenticated, navigate, isOwner, isPlatformAdmin, role, setShowHotelReg, logout, userInfo } = useAppContext();
 
     // Scroll and Route-based Navbar style
     useEffect(() => {
@@ -102,10 +102,17 @@ const NavBar = () => {
                 {isAuthenticated && (
                     <>
                         <button
-                            onClick={() => navigate("/my-bookings")}
-                            className={`border px-4 py-1 text-sm font-light rounded-full cursor-pointer transition-all ${isScrolled ? 'text-gray-700 border-gray-700 hover:bg-gray-100' : 'text-white border-white hover:bg-white/10'}`}
+                            onClick={() => navigate("/profile")}
+                            className={`flex items-center gap-2 border px-3 py-1.5 rounded-full cursor-pointer transition-all ${isScrolled ? 'text-gray-700 border-gray-700 hover:bg-gray-100' : 'text-white border-white hover:bg-white/10'}`}
                         >
-                            我的订单
+                            {userInfo?.avatar ? (
+                                <img src={userInfo.avatar} alt="" className="w-7 h-7 rounded-full object-cover" />
+                            ) : (
+                                <span className="w-7 h-7 rounded-full bg-gray-400 flex items-center justify-center text-white text-xs font-medium">
+                                    {(userInfo?.username || '用')[0]}
+                                </span>
+                            )}
+                            <span className="text-sm font-medium max-w-[80px] truncate">{userInfo?.username || ''}</span>
                         </button>
                         <button
                             onClick={logout}
@@ -169,10 +176,17 @@ const NavBar = () => {
 
                 {isAuthenticated && (
                     <button
-                        onClick={() => { setIsMenuOpen(false); navigate("/my-bookings"); }}
-                        className="border px-4 py-1 text-sm font-light rounded-full"
+                        onClick={() => { setIsMenuOpen(false); navigate("/profile"); }}
+                        className="flex items-center gap-2 border px-4 py-2 rounded-full"
                     >
-                        我的订单
+                        {userInfo?.avatar ? (
+                            <img src={userInfo.avatar} alt="" className="w-8 h-8 rounded-full object-cover" />
+                        ) : (
+                            <span className="w-8 h-8 rounded-full bg-gray-400 flex items-center justify-center text-white text-sm font-medium">
+                                {(userInfo?.username || '用')[0]}
+                            </span>
+                        )}
+                        <span>{userInfo?.username || ''}</span>
                     </button>
                 )}
 

@@ -10,6 +10,7 @@ import TravelMap from './pages/TravelMap';
 import RoomDetail from './pages/RoomDetail';
 import HotelDetail from './pages/HotelDetail';
 import MyBooking from './pages/MyBooking';
+import PersonalCenter from './pages/PersonalCenter';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import ForgotPassword from './pages/ForgotPassword';
@@ -57,6 +58,7 @@ function App() {
             <Route path='/rooms/:id' element={<RoomDetail />}/>
             <Route path='/hotels/:id' element={<HotelDetail />}/>
             <Route path='/my-bookings' element= {<MyBooking/>}/>
+            <Route path='/profile' element={<PersonalCenter/>}/>
             <Route path='/about' element={<About/>}/>
             <Route path='/loader/:nextUrl' element={<Loader />} />
             <Route path='/pay-success' element={<PaySuccess />} />

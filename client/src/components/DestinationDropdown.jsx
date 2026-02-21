@@ -203,7 +203,7 @@ export default function DestinationDropdown({
         <div className="mb-4 px-4">
           <p className="text-sm font-medium text-gray-700 mb-2">国内热门城市</p>
           <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
-            {domestic.slice(0, 6).map((c) => (
+            {domestic.map((c) => (
               <button
                 key={c}
                 type="button"
@@ -221,7 +221,7 @@ export default function DestinationDropdown({
         <div className="mb-4 px-4">
           <p className="text-sm font-medium text-gray-700 mb-2">海外热门城市</p>
           <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
-            {overseas.slice(0, 6).map((c) => (
+            {overseas.map((c) => (
               <button
                 key={c}
                 type="button"

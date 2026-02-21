@@ -17,7 +17,7 @@ const CANCEL_REASONS = [
   { value: '其他', label: '其他' },
 ];
 
-function MyBooking() {
+function MyBooking({ embedded = false }) {
 
     const { axios, getToken, user, role, merchantApplicationStatus, navigate } = useAppContext();
 
@@ -266,7 +266,9 @@ function MyBooking() {
     }, [payQRModal.open, payQRModal.bookingId]);
 
     return (
-        <div className="px-4 py-20 md:px-16 lg:px-24 xl:px-32 bg-gray-50 min-h-screen">
+        <div className={embedded ? "py-0" : "px-4 py-20 md:px-16 lg:px-24 xl:px-32 bg-gray-50 min-h-screen"}>
+    {!embedded && (
+        <>
     <Title
         title="我的订单"
         subtitle="管理您的预订并查看订单详情。"
@@ -305,6 +307,8 @@ function MyBooking() {
                 )}
             </div>
         </div>
+    )}
+        </>
     )}
 
     {/* Table Headers */}
