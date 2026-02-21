@@ -2,6 +2,8 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useAppContext } from "../context/AppContext";
 import HotelReviews from "../components/HotelReviews";
+import { FaHeart, FaRegHeart } from "react-icons/fa";
+import toast from "react-hot-toast";
 
 const roomTypeToCn = { 'Single Bed': '单人间', 'Double Bed': '双人间', 'Luxury Room': '豪华房', 'Family Suite': '家庭套房' };
 const getRoomTypeLabel = (roomType) => roomTypeToCn[roomType] || roomType;
@@ -20,7 +22,8 @@ const ROOMS_PER_PAGE = 5;
 function HotelDetail() {
     const { id } = useParams();
     const navigate = useNavigate();
-    const { axios } = useAppContext();
+    const { axios, getToken, isAuthenticated, userInfo, setUserInfo } = useAppContext();
+    const isFavorited = isAuthenticated && userInfo?.favoriteHotels?.some((hid) => String(hid) === id);
     const [searchParams] = useSearchParams();
     const [hotel, setHotel] = useState(null);
     const [rooms, setRooms] = useState([]);
@@ -79,6 +82,31 @@ function HotelDetail() {
     rooms.forEach((r) => r.images?.forEach((url) => images.push(url)));
     if (images.length === 0 && hotel) images.push("https://via.placeholder.com/800x400?text=Hotel");
 
+    async function toggleFavorite(e) {
+        e.stopPropagation();
+        if (!isAuthenticated) {
+            toast.error("请先登录");
+            navigate("/login");
+            return;
+        }
+        try {
+            const token = await getToken();
+            const method = isFavorited ? "delete" : "post";
+            const { data } = await axios[method](`/api/users/favorites/${id}`, {}, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (data.success) {
+                setUserInfo((prev) => ({
+                    ...prev,
+                    favoriteHotels: data.favoriteHotels || [],
+                }));
+                toast.success(isFavorited ? "已取消收藏" : "已添加收藏");
+            }
+        } catch (err) {
+            toast.error(err.response?.data?.message || "操作失败");
+        }
+    }
+
     if (loading) return <div className="pt-28 p-4">加载中...</div>;
     if (!hotel) return <div className="pt-28 p-4">酒店不存在</div>;
 
@@ -95,7 +123,20 @@ function HotelDetail() {
                 >
                     返回
                 </button>
-                <h1 className="text-xl font-bold">{hotel.name}</h1>
+                <h1 className="text-xl font-bold flex-1">{hotel.name}</h1>
+                <button
+                    type="button"
+                    onClick={toggleFavorite}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50"
+                    title={isFavorited ? "取消收藏" : "收藏"}
+                >
+                    {isFavorited ? (
+                        <FaHeart className="w-5 h-5 text-red-500" />
+                    ) : (
+                        <FaRegHeart className="w-5 h-5" />
+                    )}
+                    <span className="text-sm">{isFavorited ? "已收藏" : "收藏"}</span>
+                </button>
             </div>
 
             {/* 大图 Banner 左右滚动 */}

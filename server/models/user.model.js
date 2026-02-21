@@ -13,6 +13,12 @@ const userSchema = new Schema({
   avatar: {
     type: String,
   },
+  birthday: {
+    type: Date,
+    default: null,
+  },
+  /** 收藏的酒店 ID 列表 */
+  favoriteHotels: [{ type: Schema.Types.ObjectId, ref: 'Hotel' }],
   // 可选邮箱字段（以后需要找回密码可以用）
   email: {
     type: String,

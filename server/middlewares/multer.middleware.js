@@ -85,4 +85,17 @@ const reviewStorage = multer.diskStorage({
 export const uploadReview = multer({
   storage: reviewStorage,
 });
+
+// 用户头像上传目录 server/uploads/avatars
+const avatarUploadDir = path.join(__dirname, "..", "uploads", "avatars");
+fs.mkdirSync(avatarUploadDir, { recursive: true });
+const avatarStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, avatarUploadDir),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname) || ".jpg";
+    cb(null, `avatar-${Date.now()}${ext}`);
+  },
+});
+export const uploadAvatar = multer({ storage: avatarStorage }).single("avatar");
+
 export default upload;

@@ -1,13 +1,15 @@
 export const getUserData = (req, res) => {
     try {
-        const role = req.user.role;
-        const recentSerachCities = req.user.recentSerachCities;
-        const merchantApplicationStatus = req.user.merchantApplicationStatus || 'none';
+        const u = req.user;
         res.status(200).json({
             success: true,
-            role,
-            merchantApplicationStatus,
-            recentSerachCities,
+            role: u.role,
+            merchantApplicationStatus: u.merchantApplicationStatus || 'none',
+            recentSerachCities: u.recentSerachCities,
+            username: u.username,
+            avatar: u.avatar,
+            birthday: u.birthday ? u.birthday.toISOString().slice(0, 10) : null,
+            favoriteHotels: u.favoriteHotels || [],
         });
     } catch (error) {
         console.error("Error fetching user data:", error);
@@ -15,6 +17,84 @@ export const getUserData = (req, res) => {
             success: false,
             message: "error in fetching user data",
         });
+    }
+};
+
+/** 更新个人资料：用户名、生日、头像 */
+export const updateProfile = async (req, res) => {
+    try {
+        const user = req.user;
+        const { username, birthday } = req.body;
+        if (username != null && typeof username === 'string' && username.trim()) {
+            user.username = username.trim();
+        }
+        if (birthday != null) {
+            if (birthday === '' || birthday === null) {
+                user.birthday = null;
+            } else {
+                const d = new Date(birthday);
+                if (!isNaN(d.getTime())) user.birthday = d;
+            }
+        }
+        if (req.file && req.file.filename) {
+            const baseUrl = `${req.protocol}://${req.get('host')}`;
+            user.avatar = `${baseUrl}/uploads/avatars/${req.file.filename}`;
+        }
+        await user.save({ validateBeforeSave: false });
+        res.status(200).json({
+            success: true,
+            username: user.username,
+            avatar: user.avatar,
+            birthday: user.birthday ? user.birthday.toISOString().slice(0, 10) : null,
+        });
+    } catch (error) {
+        console.error("Error updating profile:", error);
+        res.status(500).json({ success: false, message: "更新失败" });
+    }
+};
+
+/** 获取收藏的酒店列表 */
+export const getFavorites = async (req, res) => {
+    try {
+        const user = await req.user.populate('favoriteHotels');
+        const hotels = (user.favoriteHotels || []).filter((h) => h && h.status === 'approved');
+        res.status(200).json({ success: true, hotels });
+    } catch (error) {
+        console.error("Error fetching favorites:", error);
+        res.status(500).json({ success: false, message: "获取收藏失败" });
+    }
+};
+
+/** 添加收藏 */
+export const addFavorite = async (req, res) => {
+    try {
+        const { hotelId } = req.params;
+        const user = req.user;
+        if (!user.favoriteHotels) user.favoriteHotels = [];
+        if (!user.favoriteHotels.some((id) => String(id) === hotelId)) {
+            user.favoriteHotels.push(hotelId);
+            await user.save({ validateBeforeSave: false });
+        }
+        res.status(200).json({ success: true, favoriteHotels: user.favoriteHotels });
+    } catch (error) {
+        console.error("Error adding favorite:", error);
+        res.status(500).json({ success: false, message: "收藏失败" });
+    }
+};
+
+/** 取消收藏 */
+export const removeFavorite = async (req, res) => {
+    try {
+        const { hotelId } = req.params;
+        const user = req.user;
+        if (user.favoriteHotels) {
+            user.favoriteHotels = user.favoriteHotels.filter((id) => String(id) !== hotelId);
+            await user.save({ validateBeforeSave: false });
+        }
+        res.status(200).json({ success: true, favoriteHotels: user.favoriteHotels });
+    } catch (error) {
+        console.error("Error removing favorite:", error);
+        res.status(500).json({ success: false, message: "取消收藏失败" });
     }
 };
 

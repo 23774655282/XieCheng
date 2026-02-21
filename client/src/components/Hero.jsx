@@ -212,9 +212,9 @@ function Hero() {
                     customInput={
                       <button
                         type="button"
-                        className={`rounded-lg border px-0 py-2 text-sm outline-none w-full cursor-pointer caret-transparent select-none text-left min-h-[56px] flex items-stretch overflow-hidden ${datePickerOpen ? 'border-gray-700 bg-gray-100/50' : 'border-gray-200'}`}
+                        className={`rounded-lg border px-0 py-2 text-sm outline-none w-[101%] cursor-pointer caret-transparent select-none text-left min-h-[56px] flex items-stretch overflow-hidden ${datePickerOpen ? 'border-gray-700 bg-gray-100/50' : 'border-gray-200'}`}
                       >
-                        <div className="flex-1 flex flex-col justify-center px-3 text-left min-w-0">
+                        <div className="flex-1 flex flex-col justify-center px-3 text-left min-w-[6.5rem]">
                           <div className="font-semibold text-gray-900 truncate">
                             {checkIn ? formatDateShort(parseLocalDate(checkIn)) : '—'}
                             {checkIn && <span className="text-xs font-normal text-gray-500 ml-1">{formatDateSuffix(parseLocalDate(checkIn))}</span>}
@@ -225,7 +225,7 @@ function Hero() {
                           <span className="whitespace-nowrap">{checkIn && checkOut ? differenceInCalendarDays(parseLocalDate(checkOut), parseLocalDate(checkIn)) : 0}晚</span>
                           <span className="text-gray-400">—</span>
                         </div>
-                        <div className="flex-1 flex flex-col justify-center px-3 text-right min-w-0">
+                        <div className="flex-1 flex flex-col justify-center px-3 text-right min-w-[6.5rem]">
                           <div className="font-semibold text-gray-900 truncate">
                             {checkOut ? formatDateShort(parseLocalDate(checkOut)) : '—'}
                             {checkOut && <span className="text-xs font-normal text-gray-500 ml-1">{formatDateSuffix(parseLocalDate(checkOut))}</span>}
