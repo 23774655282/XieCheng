@@ -663,7 +663,16 @@ function AllRooms() {
   };
 
   return (
-    <div className="pt-14 md:pt-32 px-4 md:px-8 lg:px-12 mb-16 max-w-6xl mx-auto">
+    <div>
+      {/* PC 端吸顶搜索栏：独立于内容区，使用更宽容器使表单比下方内容宽 */}
+      {!isPromoMode && (
+        <div className="hidden lg:block sticky top-14 z-20 pt-14 md:pt-[28px] bg-white mb-6">
+          <div className="w-full max-w-[calc(72rem+200px)] mx-auto px-4 md:px-8 lg:px-12">
+            <SearchBar compact={false} heroStyle />
+          </div>
+        </div>
+      )}
+      <div className="pt-14 md:pt-32 px-4 md:px-8 lg:px-12 mb-16 max-w-6xl mx-auto lg:pt-[60px]">
       {/* 移动端：搜索栏 + 筛选合并为一体，置于页面最顶部，吸顶贴紧导航栏；顺序：目的地 | 日期 | 人数 */}
       {!isPromoMode && (
         <div ref={mobileFilterRef} className="lg:hidden sticky top-14 z-20 -mx-4 -mt-4 md:-mt-0 mb-4 bg-white border-b border-gray-200 shadow-sm overflow-visible">
@@ -808,13 +817,6 @@ function AllRooms() {
             </div>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* PC 端：首页搜索栏吸顶，置于导航栏下方 */}
-      {!isPromoMode && (
-        <div className="hidden lg:block sticky top-14 z-20 -mx-4 lg:-mx-12 px-4 lg:px-12 py-4 -mt-4 lg:-mt-4 bg-white border-b border-gray-200 shadow-sm mb-6">
-          <SearchBar compact={false} heroStyle />
         </div>
       )}
 
@@ -1124,6 +1126,7 @@ function AllRooms() {
         </div>
 
       </div>
+    </div>
     </div>
   );
 }

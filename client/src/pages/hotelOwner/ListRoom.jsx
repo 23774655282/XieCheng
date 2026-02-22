@@ -101,12 +101,14 @@ function PromoDiscountStepper({ value, roomId, onUpdate, axios, getToken }) {
 
 function ListRoom() {
   const [rooms, setRooms] = useState([]);
+  const [hotel, setHotel] = useState(null);
   const [roomToDelete, setRoomToDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
 
   const { axios, getToken, user } = useAppContext();
   const navigate = useNavigate();
   const { hotelId } = useParams();
+  const hasPreReview = hotel && (hotel.applicantName || hotel.licenseUrl);
   const roomTypeToCn = {
     'Single Bed': '单人间',
     'Double Bed': '双人间',
@@ -136,6 +138,20 @@ function ListRoom() {
     } catch (error) {
       console.error("Error fetching rooms:", error)
       toast.error("获取房间列表失败，请稍后重试")
+    }
+  }
+
+  async function fetchHotel() {
+    if (!hotelId) return;
+    try {
+      const token = await getToken();
+      const { data } = await axios.get(`/api/hotels/owner/${hotelId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (data.success) setHotel(data.hotel);
+      else setHotel(null);
+    } catch {
+      setHotel(null);
     }
   }
 
@@ -190,7 +206,10 @@ function ListRoom() {
 
 
   useEffect(() => {
-    if (user) fetchRooms()
+    if (user) {
+      fetchRooms();
+      if (hotelId) fetchHotel();
+    }
   }, [user, hotelId])
 
   const goToAddRoom = () => {
@@ -204,6 +223,84 @@ function ListRoom() {
 
   return (
     <div>
+      {/* 预审单信息（不可修改） - 仅预审通过的酒店展示 */}
+      {hotelId && hasPreReview && (
+        <div className="mb-6 p-4 bg-gray-50 rounded-xl border border-gray-200">
+          <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+            <span>预审单信息</span>
+            <span className="text-xs font-normal text-amber-600">（不可修改）</span>
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
+            {hotel.applicantName && (
+              <div>
+                <span className="text-gray-500">申请人姓名</span>
+                <p className="font-medium text-gray-800">{hotel.applicantName}</p>
+              </div>
+            )}
+            {hotel.applicantPhone && (
+              <div>
+                <span className="text-gray-500">申请人手机号</span>
+                <p className="font-medium text-gray-800">{hotel.applicantPhone}</p>
+              </div>
+            )}
+            {hotel.name && (
+              <div>
+                <span className="text-gray-500">酒店名称</span>
+                <p className="font-medium text-gray-800">{hotel.name}</p>
+              </div>
+            )}
+            {hotel.city && (
+              <div>
+                <span className="text-gray-500">酒店所在城市</span>
+                <p className="font-medium text-gray-800">{hotel.city}</p>
+              </div>
+            )}
+            {hotel.address && (
+              <div className="sm:col-span-2">
+                <span className="text-gray-500">酒店地址</span>
+                <p className="font-medium text-gray-800">{hotel.address}</p>
+              </div>
+            )}
+            {hotel.contact && (
+              <div>
+                <span className="text-gray-500">酒店联系电话</span>
+                <p className="font-medium text-gray-800">{hotel.contact}</p>
+              </div>
+            )}
+          </div>
+          <div className="mt-4 flex flex-wrap gap-4">
+            {hotel.licenseUrl && (
+              <div>
+                <span className="block text-gray-500 text-xs mb-1">营业执照</span>
+                <a href={hotel.licenseUrl} target="_blank" rel="noopener noreferrer" className="inline-block">
+                  <img src={hotel.licenseUrl} alt="营业执照" className="h-20 w-auto rounded border border-gray-200 object-cover" />
+                </a>
+              </div>
+            )}
+            {hotel.starRatingCertificateUrl && (
+              <div>
+                <span className="block text-gray-500 text-xs mb-1">星级评定证明</span>
+                <a href={hotel.starRatingCertificateUrl} target="_blank" rel="noopener noreferrer" className="inline-block">
+                  <img src={hotel.starRatingCertificateUrl} alt="星级评定证明" className="h-20 w-auto rounded border border-gray-200 object-cover" />
+                </a>
+              </div>
+            )}
+            {hotel.images && hotel.images.length > 0 && (
+              <div className="w-full">
+                <span className="block text-gray-500 text-xs mb-2">酒店照片</span>
+                <div className="flex flex-wrap gap-2">
+                  {hotel.images.map((img, i) => (
+                    <a key={i} href={img} target="_blank" rel="noopener noreferrer" className="inline-block">
+                      <img src={img} alt="" className="h-20 w-24 object-cover rounded border border-gray-200" />
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
         <div>
           <Title

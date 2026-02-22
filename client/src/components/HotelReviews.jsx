@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useAppContext } from "../context/AppContext";
 import { FaStar } from "react-icons/fa";
 
@@ -29,10 +29,26 @@ function HotelReviews({ hotelId }) {
     const [loading, setLoading] = useState(true);
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [activeTag, setActiveTag] = useState(null); // key of selected tag for filtering
+    const [scrollToReviewId, setScrollToReviewId] = useState(null); // 打开抽屉并滚动到此评价
+    const [lightboxImage, setLightboxImage] = useState(null); // 大图查看
 
     useEffect(() => {
         if (hotelId) fetchReviews();
     }, [hotelId]);
+
+    // 打开抽屉并滚动到指定评价
+    useEffect(() => {
+        if (!drawerOpen || !scrollToReviewId) return;
+        const el = document.getElementById(`review-${scrollToReviewId}`);
+        if (el) {
+            const timer = setTimeout(() => {
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                setScrollToReviewId(null);
+            }, 100);
+            return () => clearTimeout(timer);
+        }
+        setScrollToReviewId(null);
+    }, [drawerOpen, scrollToReviewId]);
 
     const fetchReviews = async (limit = 100, silent = false) => {
         try {
@@ -94,10 +110,17 @@ function HotelReviews({ hotelId }) {
         </div>
     );
 
-    const renderReviewItem = (review) => (
+    const renderReviewItem = (review, options = {}) => (
         <div
             key={review._id}
-            className="border-b border-gray-100 pb-3 last:border-b-0 last:pb-0"
+            id={options.scrollId ? `review-${review._id}` : undefined}
+            className={`border-b border-gray-100 pb-3 last:border-b-0 last:pb-0 ${options.clickable ? 'cursor-pointer hover:bg-gray-50 -mx-2 px-2 py-2 rounded-lg transition-colors' : ''}`}
+            onClick={options.clickable ? () => {
+                setDrawerOpen(true);
+                setActiveTag(null);
+                setScrollToReviewId(review._id);
+                if (reviews.length < total) fetchReviews(100, true);
+            } : undefined}
         >
             <div className="flex items-start justify-between mb-1">
                 <div className="flex items-center gap-2">
@@ -118,7 +141,11 @@ function HotelReviews({ hotelId }) {
                             key={idx}
                             src={img}
                             alt=""
-                            className="w-16 h-16 rounded object-cover border border-gray-200"
+                            role="button"
+                            tabIndex={0}
+                            onClick={(e) => { e.stopPropagation(); setLightboxImage(img); }}
+                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); setLightboxImage(img); } }}
+                            className="w-16 h-16 rounded object-cover border border-gray-200 cursor-pointer hover:opacity-90 transition-opacity"
                         />
                     ))}
                 </div>
@@ -126,7 +153,7 @@ function HotelReviews({ hotelId }) {
         </div>
     );
 
-    const previewCount = 3;
+    const previewCount = 1; // 主区域只展示 1 条
     const previewReviews = filteredReviews.slice(0, previewCount);
 
     if (loading) {
@@ -198,12 +225,12 @@ function HotelReviews({ hotelId }) {
                 </div>
             )}
 
-            {/* 主区域：仅展示前几条，高度降低 */}
+            {/* 主区域：仅展示 1 条，点击打开抽屉并定位到该条 */}
             {reviews.length === 0 ? (
                 <p className="text-gray-500 text-sm py-4">暂无评价</p>
             ) : (
-                <div className="space-y-2 max-h-[180px] overflow-y-auto">
-                    {(activeTag ? filteredReviews : previewReviews).slice(0, previewCount).map(renderReviewItem)}
+                <div className="space-y-2">
+                    {(activeTag ? filteredReviews : previewReviews).slice(0, previewCount).map((r) => renderReviewItem(r, { clickable: true }))}
                 </div>
             )}
 
@@ -254,11 +281,37 @@ function HotelReviews({ hotelId }) {
                             {filteredReviews.length === 0 ? (
                                 <p className="text-gray-500 text-sm">暂无符合条件的评价</p>
                             ) : (
-                                filteredReviews.map(renderReviewItem)
+                                filteredReviews.map((r) => renderReviewItem(r, { scrollId: true }))
                             )}
                         </div>
                     </div>
                 </>
+            )}
+
+            {/* 评论图片大图查看 */}
+            {lightboxImage && (
+                <div
+                    className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4"
+                    onClick={() => setLightboxImage(null)}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="放大查看图片"
+                >
+                    <button
+                        type="button"
+                        onClick={() => setLightboxImage(null)}
+                        className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/20 text-white flex items-center justify-center hover:bg-white/30 text-xl leading-none z-10 cursor-pointer"
+                        aria-label="关闭"
+                    >
+                        ×
+                    </button>
+                    <img
+                        src={lightboxImage}
+                        alt="放大查看"
+                        className="max-w-full max-h-[90vh] object-contain rounded-lg"
+                        onClick={(e) => e.stopPropagation()}
+                    />
+                </div>
             )}
         </div>
     );

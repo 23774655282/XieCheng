@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import Title from '../../components/Title';
 import { MdOutlineCloudUpload } from 'react-icons/md';
 import { useAppContext } from '../../context/AppContext';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { AiOutlineLoading3Quarters } from 'react-icons/ai';
 import { checkImageResolution, MIN_RECOMMENDED_LONG_EDGE } from '../../utils/imageUtils';
@@ -12,6 +12,8 @@ function AddRoom() {
   const { axios, getToken } = useAppContext();
   const { hotelId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const returnToSupplement = location.state?.returnTo === "supplement";
 
   const [images, setImages] = useState({
     1: null,
@@ -101,8 +103,17 @@ function AddRoom() {
   async function handleSumbit(e) {
     e.preventDefault();
 
-    if (!inputData.roomType || !inputData.pricePerNight || !Object.values(images).some((img)=> img)) {
-      toast.error('请填写完整信息并至少上传一张房间图片');
+    if (!inputData.roomType) {
+      toast.error('请选择房型');
+      return;
+    }
+    const price = Number(inputData.pricePerNight);
+    if (!inputData.pricePerNight || isNaN(price) || price <= 0) {
+      toast.error('请输入有效的价格（需大于 0）');
+      return;
+    }
+    if (!Object.values(images).some((img) => img)) {
+      toast.error('请至少上传一张房间图片');
       return;
     }
 
@@ -131,8 +142,8 @@ function AddRoom() {
       })
       
       if (data.success) {
-        toast.success('房间新增成功');
-        const backTo = hotelId ? `/owner/hotels/${hotelId}/rooms` : '/owner/hotel-info';
+        toast.success(data.message || '房间已提交，等待管理员审核');
+        const backTo = returnToSupplement && hotelId ? `/owner/hotels/${hotelId}/supplement` : (hotelId ? `/owner/hotels/${hotelId}/rooms` : '/owner/hotel-info');
         navigate(backTo);
         setInputData({
           roomType: '',
@@ -177,7 +188,8 @@ function AddRoom() {
   }
 
   const goBack = () => {
-    if (hotelId) navigate(`/owner/hotels/${hotelId}/rooms`);
+    if (returnToSupplement && hotelId) navigate(`/owner/hotels/${hotelId}/supplement`);
+    else if (hotelId) navigate(`/owner/hotels/${hotelId}/rooms`);
     else navigate('/owner/hotel-info');
   };
 
@@ -193,12 +205,12 @@ function AddRoom() {
           subtitle="为您的酒店添加新的房型"
         />
         <button type="button" onClick={goBack} className="text-gray-600 hover:text-gray-800 text-sm">
-          返回房间列表
+          {returnToSupplement ? "返回酒店信息表" : "返回房间列表"}
         </button>
       </div>
 
       {/* Images Section */}
-      <p className="text-lg font-semibold text-neutral-800 mb-4">房间图片</p>
+      <p className="text-lg font-semibold text-neutral-800 mb-4">房间图片 <span className="text-red-500">*</span></p>
       <p className="text-sm text-gray-500 mb-2">建议上传 1200×800 或更高分辨率（更长边 ≥ {MIN_RECOMMENDED_LONG_EDGE} 像素），保证放大后不模糊。</p>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
         {Object.keys(images).map(key => (
@@ -233,7 +245,7 @@ function AddRoom() {
         <div className='w-full flex max-sm:flex-col gap-4 mt-4'>
           <div className='flex-1 max-w-48'>
             <p className='text-gray-800 mt-4'>
-              房型
+              房型 <span className="text-red-500">*</span>
             </p>
             <select
               value={inputData.roomType}
@@ -250,7 +262,7 @@ function AddRoom() {
           </div>
           <div>
             <p className='mt-4 text-gray-800'>
-              价格（元/晚）
+              价格（元/晚） <span className="text-red-500">*</span>
             </p>
             <input type="number"
               placeholder='0' className='w-full p-2 border border-gray-300 rounded-lg'

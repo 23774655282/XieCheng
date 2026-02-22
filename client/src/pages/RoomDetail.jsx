@@ -170,7 +170,7 @@ function RoomDetail() {
     }
 
     return room ? (
-        <div className='pt-28 md:pt-36 px-4 md:px-16 lg:px-24 xl:px-32 mb-16'>
+        <div className='pt-28 md:pt-36 px-4 md:px-8 lg:px-12 max-w-5xl mx-auto mb-16'>
 
             {/* Room Title */}
             <div className="mb-6">

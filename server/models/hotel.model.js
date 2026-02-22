@@ -20,11 +20,26 @@ const hotelSchema = new Schema({
     // 审核与上下线：审核中/通过/不通过，下线可恢复
     status: {
         type: String,
-        enum: ["pending_audit", "approved", "rejected", "offline"],
+        enum: ["pending_audit", "pending_list", "approved", "rejected"],
         default: "pending_audit",
     },
     rejectReason: { type: String, default: "" },
     images: [{ type: String }], // 酒店展示图，供用户端展示
+    /** 门牌号（再审核补充） */
+    doorNumber: { type: String, default: "" },
+    /** 客房总数（再审核补充） */
+    totalRoomCount: { type: Number, default: null },
+    /** 酒店外部更多照片 URL */
+    hotelExteriorImages: [{ type: String }],
+    /** 酒店内部更多照片 URL */
+    hotelInteriorImages: [{ type: String }],
+    /** 商户是否已提交再审核（提交后才会出现在管理员再审核列表） */
+    supplementSubmitted: { type: Boolean, default: false },
+    // 预审单相关（商户新增酒店时提交）
+    applicantName: { type: String, default: "" },
+    applicantPhone: { type: String, default: "" },
+    licenseUrl: { type: String, default: "" },
+    starRatingCertificateUrl: { type: String, default: "" },
 }, { timestamps: true });
 
 const Hotel = mongoose.model("Hotel", hotelSchema);

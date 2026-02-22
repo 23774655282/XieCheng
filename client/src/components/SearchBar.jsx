@@ -173,7 +173,7 @@ function SearchBar({ compact = false, datePickerOpen: datePickerOpenProp, setDat
   }
 
   return (
-    <div className={`w-full ${heroStyle ? 'max-w-5xl mx-auto' : ''}`} onClick={(e) => { if (!e.target.closest('input, button, a, label, [role="option"], [role="listbox"], ul, li, .react-datepicker-wrapper')) document.activeElement?.blur?.(); }} onFocus={(e) => { const t = e.target; if (t.tagName === 'INPUT' && t.id !== 'searchBar-destination') setTimeout(() => t.blur(), 0); }}>
+    <div className={`w-full ${heroStyle ? 'max-w-[1124px] mx-auto' : ''}`} onClick={(e) => { if (!e.target.closest('input, button, a, label, [role="option"], [role="listbox"], ul, li, .react-datepicker-wrapper')) document.activeElement?.blur?.(); }} onFocus={(e) => { const t = e.target; if (t.tagName === 'INPUT' && t.id !== 'searchBar-destination') setTimeout(() => t.blur(), 0); }}>
     <form onSubmit={handleSubmit} className={formClass}>
       <div className={`relative w-full md:flex-shrink-0 ${heroStyle ? 'md:w-[160px]' : 'md:min-w-0 md:max-w-[220px]'}`} ref={destinationRef}>
         <div className="flex items-center gap-2"><SlCalender /><label htmlFor="searchBar-destination">目的地</label></div>

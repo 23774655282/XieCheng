@@ -31,6 +31,8 @@ const roomSchema = new Schema({
     promoDiscount: { type: Number, default: null },
     /** 该房型的房间数量（库存） */
     roomCount: { type: Number, default: 1, min: 1 },
+    /** 上架审核：pending_audit=待审核，approved=已通过 */
+    status: { type: String, enum: ["pending_audit", "approved"], default: "approved" },
 },{timestamps: true});
 
 

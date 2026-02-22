@@ -31,7 +31,7 @@ function ExclusiveOffer() {
                             <p className="text-white mb-2">{items.description}</p>
                             <p className="text-sm text-gray-200">截止日期：<span className="font-medium">{items.expiryDate}</span></p>
                         </div>
-                        <span className="relative z-10 shrink-0 whitespace-nowrap mt-4 md:mt-0 bg-white text-blue-600 group-hover:bg-blue-600 group-hover:text-white px-6 py-2 rounded-full font-medium shadow transition-all duration-300">
+                        <span className="relative z-10 shrink-0 whitespace-nowrap mt-4 md:mt-0 bg-white text-black group-hover:bg-black group-hover:text-white px-6 py-2 rounded-full font-medium shadow transition-all duration-300">
                             查看优惠
                         </span>
                     </button>

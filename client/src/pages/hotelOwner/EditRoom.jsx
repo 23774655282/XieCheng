@@ -43,9 +43,11 @@ function EditRoom() {
   const { state } = useLocation();
   const { axios, getToken } = useAppContext();
   const hotelIdFromState = state?.hotelId;
+  const returnToSupplement = state?.returnTo === "supplement";
   const getBackUrl = () => {
     const id = hotelIdFromState || room?.hotel?._id || room?.hotel;
-    return id ? `/owner/hotels/${id}/rooms` : '/owner/hotel-info';
+    if (!id) return '/owner/hotel-info';
+    return returnToSupplement ? `/owner/hotels/${id}/supplement` : `/owner/hotels/${id}/rooms`;
   };
 
   const [room, setRoom] = useState(null);
@@ -203,9 +205,9 @@ function EditRoom() {
         onClick={() => navigate(getBackUrl())}
         className="flex items-center gap-1 text-sm font-medium px-3 py-2 rounded-md bg-black text-white hover:bg-gray-800 mb-4"
       >
-        返回房间列表
+        {returnToSupplement ? "返回酒店信息表" : "返回房间列表"}
       </button>
-      <Title align="left" font="outfit" title="编辑房间" subtitle={room.roomType || '修改房型信息'} />
+      <Title align="left" font="outfit" title="编辑房间" subtitle={room.roomType ? `${room.roomType} · 修改后需管理员再审核` : '修改房型信息'} />
 
       <p className="text-lg font-semibold text-neutral-800 mb-4">房间图片（可保留原图或重新上传）</p>
       <p className="text-sm text-gray-500 mb-2">建议上传更长边 ≥ {MIN_RECOMMENDED_LONG_EDGE} 像素的图片，保证放大后不模糊。</p>

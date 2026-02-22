@@ -130,11 +130,11 @@ function Hero() {
           ))}
         </div>
       )}
-      <div className='relative z-10 flex flex-col items-center justify-center'>
+      <div className='relative z-10 w-full flex flex-col items-center justify-center'>
         <h1 className='md:text-5xl font-bold text-center  text-white'>找到您的理想住宿</h1>
         <p className='font-playfair md:text-lg text-center text-white mt-4'>发现最适合您的酒店与体验。</p>
         <div
-         className="w-full max-w-5xl mx-auto"
+         className="w-full max-w-[1124px] mx-auto flex flex-col self-stretch"
          onClick={(e) => {
            if (!e.target.closest('input, button, a, label, [role="option"], [role="listbox"], ul, li, .react-datepicker-wrapper')) {
              document.activeElement?.blur?.();
@@ -149,7 +149,7 @@ function Hero() {
         >
         <form
          onSubmit={handleSumbit}
-         className='bg-white/80 backdrop-blur-sm text-gray-500 rounded-lg px-6 py-5 flex flex-col md:flex-row md:items-end max-md:items-start gap-3 max-md:mx-auto my-2 shadow-lg w-full'>
+         className='bg-white/80 backdrop-blur-sm text-gray-500 rounded-lg px-6 py-5 flex flex-col md:flex-row md:items-end max-md:items-start gap-3 my-2 shadow-lg w-full min-w-0'>
             <div className="relative w-full md:flex-shrink-0 md:w-[240px]" ref={destinationRef}>
                 <div className='flex items-center gap-2'>
                     <SlCalender/>

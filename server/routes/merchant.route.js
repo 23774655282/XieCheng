@@ -8,6 +8,8 @@ import {
   listMerchantApplications,
   approveMerchantApplication,
   rejectMerchantApplication,
+  approveHotelPreReview,
+  rejectHotelPreReview,
 } from "../controllers/merchant.controller.js";
 
 const merchantRouter = express.Router();
@@ -19,6 +21,8 @@ merchantRouter.get("/my-application", authMiddleware, getMyApplication);
 
 // 管理员：商户申请审核
 merchantRouter.get("/applications", authMiddleware, adminOnly, listMerchantApplications);
+merchantRouter.post("/applications/hotel-add/:id/approve", authMiddleware, adminOnly, approveHotelPreReview);
+merchantRouter.post("/applications/hotel-add/:id/reject", authMiddleware, adminOnly, rejectHotelPreReview);
 merchantRouter.post("/applications/:id/approve", authMiddleware, adminOnly, approveMerchantApplication);
 merchantRouter.post("/applications/:id/reject", authMiddleware, adminOnly, rejectMerchantApplication);
 

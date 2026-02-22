@@ -1,5 +1,7 @@
 import User from "../models/user.model.js";
 import MerchantApplication from "../models/merchantApplication.model.js";
+import Hotel from "../models/hotel.model.js";
+import HotelPreReviewApplication from "../models/hotelPreReviewApplication.model.js";
 
 /** 普通用户申请成为商户：提交执照、酒店信息、申请人等必填信息 */
 export const applyMerchant = async (req, res) => {
@@ -86,22 +88,34 @@ export const getMyApplication = async (req, res) => {
   }
 };
 
-/** 管理员：获取待审核商户申请列表（含申请详情） */
+/** 管理员：获取预审核记录列表（含商户申请 + 商户新增酒店预审单，支持 status 筛选） */
 export const listMerchantApplications = async (req, res) => {
   try {
-    const users = await User.find({ merchantApplicationStatus: "pending", role: "user" })
-      .select("_id username phone createdAt")
+    const { status } = req.query; // '' | pending | approved | rejected
+    const applications = [];
+
+    // 1. 商户申请（用户申请成为商户）
+    const statusFilter = status
+      ? { merchantApplicationStatus: status }
+      : { merchantApplicationStatus: { $in: ["pending", "approved", "rejected"] } };
+    const users = await User.find({
+      ...statusFilter,
+      $or: [{ role: "user" }, { role: "merchant" }],
+    })
+      .select("_id username phone createdAt updatedAt merchantApplicationStatus")
       .sort({ updatedAt: -1 })
       .lean();
-
-    const applications = [];
+    const statusOrder = { pending: 0, approved: 1, rejected: 2 };
+    if (!status) users.sort((a, b) => (statusOrder[a.merchantApplicationStatus] ?? 99) - (statusOrder[b.merchantApplicationStatus] ?? 99) || new Date(b.updatedAt) - new Date(a.updatedAt));
     for (const u of users) {
       const app = await MerchantApplication.findOne({ userId: u._id }).lean();
       applications.push({
-        _id: u._id,
+        _id: String(u._id),
+        type: "merchant_apply",
         username: u.username,
         phone: u.phone,
-        createdAt: u.createdAt,
+        createdAt: app?.createdAt || u.createdAt,
+        status: u.merchantApplicationStatus || "pending",
         applicantName: app?.applicantName,
         applicantPhone: app?.applicantPhone,
         hotelName: app?.hotelName,
@@ -109,11 +123,44 @@ export const listMerchantApplications = async (req, res) => {
         hotelCity: app?.hotelCity,
         hotelContact: app?.hotelContact,
         licenseUrl: app?.licenseUrl,
+        starRatingCertificateUrl: app?.starRatingCertificateUrl,
         hotelExteriorImages: app?.hotelExteriorImages || [],
         hotelInteriorImages: app?.hotelInteriorImages || [],
         rejectReason: app?.rejectReason,
       });
     }
+
+    // 2. 商户新增酒店预审单
+    const hotelStatusFilter = status ? { status } : { status: { $in: ["pending", "approved", "rejected"] } };
+    const hotelApps = await HotelPreReviewApplication.find(hotelStatusFilter)
+      .populate("owner", "username phone")
+      .sort({ updatedAt: -1 })
+      .lean();
+    if (!status) hotelApps.sort((a, b) => (statusOrder[a.status] ?? 99) - (statusOrder[b.status] ?? 99) || new Date(b.updatedAt) - new Date(a.updatedAt));
+    for (const app of hotelApps) {
+      const owner = app.owner || {};
+      applications.push({
+        _id: String(app._id),
+        type: "hotel_add",
+        username: owner.username || "—",
+        phone: owner.phone || "—",
+        createdAt: app.createdAt,
+        status: app.status,
+        applicantName: app.applicantName,
+        applicantPhone: app.applicantPhone,
+        hotelName: app.hotelName,
+        hotelAddress: app.hotelAddress,
+        hotelCity: app.hotelCity,
+        hotelContact: app.hotelContact,
+        licenseUrl: app.licenseUrl,
+        starRatingCertificateUrl: app.starRatingCertificateUrl,
+        hotelExteriorImages: app.hotelExteriorImages || [],
+        hotelInteriorImages: app.hotelInteriorImages || [],
+        rejectReason: app.rejectReason,
+      });
+    }
+
+    if (!status) applications.sort((a, b) => (statusOrder[a.status] ?? 99) - (statusOrder[b.status] ?? 99) || new Date(b.createdAt) - new Date(a.createdAt));
 
     return res.status(200).json({ success: true, applications });
   } catch (error) {
@@ -122,7 +169,7 @@ export const listMerchantApplications = async (req, res) => {
   }
 };
 
-/** 管理员：通过商户申请 */
+/** 管理员：通过商户申请（同时从预审单创建酒店记录，进入再审核） */
 export const approveMerchantApplication = async (req, res) => {
   try {
     const { id } = req.params;
@@ -133,12 +180,92 @@ export const approveMerchantApplication = async (req, res) => {
     if (user.role !== "user" || (user.merchantApplicationStatus || "none") !== "pending") {
       return res.status(400).json({ success: false, message: "该用户无待审核的商户申请" });
     }
+    const app = await MerchantApplication.findOne({ userId: id });
+    if (!app) {
+      return res.status(400).json({ success: false, message: "未找到预审单数据" });
+    }
+
     user.role = "merchant";
     user.merchantApplicationStatus = "approved";
     await user.save({ validateBeforeSave: false });
-    return res.status(200).json({ success: true, message: "已批准成为商户", user: { id: user._id, role: user.role } });
+
+    // 从预审单创建酒店记录，状态为待再审核（去重避免同一张图出现在 exterior+interior 时重复）
+    const combined = [...(app.hotelExteriorImages || []), ...(app.hotelInteriorImages || [])];
+    const images = [...new Set(combined)];
+    await Hotel.create({
+      owner: id,
+      name: app.hotelName,
+      address: app.hotelAddress,
+      city: app.hotelCity,
+      contact: app.hotelContact,
+      starRating: 3,
+      applicantName: app.applicantName,
+      applicantPhone: app.applicantPhone,
+      licenseUrl: app.licenseUrl,
+      starRatingCertificateUrl: app.starRatingCertificateUrl || "",
+      images,
+      status: "pending_audit",
+    });
+
+    return res.status(200).json({ success: true, message: "已批准成为商户，酒店已进入再审核", user: { id: user._id, role: user.role } });
   } catch (error) {
     console.error("approveMerchantApplication error:", error);
+    return res.status(500).json({ success: false, message: "操作失败" });
+  }
+};
+
+/** 管理员：通过商户新增酒店预审单（创建酒店，进入再审核） */
+export const approveHotelPreReview = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const app = await HotelPreReviewApplication.findById(id);
+    if (!app) return res.status(404).json({ success: false, message: "预审单不存在" });
+    if (app.status !== "pending") return res.status(400).json({ success: false, message: "该预审单已处理" });
+
+    const combined = [...(app.hotelExteriorImages || []), ...(app.hotelInteriorImages || [])];
+    const images = [...new Set(combined)];
+    await Hotel.create({
+      owner: app.owner,
+      name: app.hotelName,
+      address: app.hotelAddress,
+      city: app.hotelCity,
+      contact: app.hotelContact,
+      starRating: 3,
+      applicantName: app.applicantName,
+      applicantPhone: app.applicantPhone,
+      licenseUrl: app.licenseUrl,
+      starRatingCertificateUrl: app.starRatingCertificateUrl || "",
+      images,
+      status: "pending_audit",
+    });
+    app.status = "approved";
+    await app.save();
+
+    return res.status(200).json({ success: true, message: "预审已通过，酒店已进入再审核" });
+  } catch (error) {
+    console.error("approveHotelPreReview error:", error);
+    return res.status(500).json({ success: false, message: "操作失败" });
+  }
+};
+
+/** 管理员：驳回商户新增酒店预审单 */
+export const rejectHotelPreReview = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { rejectReason } = req.body || {};
+    const reason = String(rejectReason || "").trim();
+    if (!reason) return res.status(400).json({ success: false, message: "请填写驳回原因" });
+
+    const app = await HotelPreReviewApplication.findById(id);
+    if (!app) return res.status(404).json({ success: false, message: "预审单不存在" });
+    if (app.status !== "pending") return res.status(400).json({ success: false, message: "该预审单已处理" });
+
+    app.status = "rejected";
+    app.rejectReason = reason;
+    await app.save();
+    return res.status(200).json({ success: true, message: "已驳回" });
+  } catch (error) {
+    console.error("rejectHotelPreReview error:", error);
     return res.status(500).json({ success: false, message: "操作失败" });
   }
 };

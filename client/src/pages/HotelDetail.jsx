@@ -215,7 +215,7 @@ function HotelDetail() {
     if (!hotel) return <div className="pt-28 p-4">酒店不存在</div>;
 
     return (
-        <div className="pt-24 pb-16 px-4 md:px-16">
+        <div className="pt-24 pb-16 px-4 md:px-8 lg:px-12 max-w-5xl mx-auto">
             {showOwnHotelModal && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4" onClick={() => setShowOwnHotelModal(false)} role="dialog" aria-modal="true">
                     <div className="bg-white rounded-xl shadow-xl p-6 max-w-sm w-full text-center" onClick={(e) => e.stopPropagation()}>

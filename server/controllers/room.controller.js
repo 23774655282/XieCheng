@@ -46,6 +46,7 @@ export const createRoom = async (req, res) => {
             images,
             promoDiscount: promoVal === 0 ? null : promoVal,
             roomCount: countVal,
+            status: "approved",
         });
 
         console.log(newRoom)
@@ -53,7 +54,7 @@ export const createRoom = async (req, res) => {
 
         return res.status(201).json({
             success: true,
-            message: "Room created successfully",
+            message: "房间已添加",
             room: {
                 hotel: hotel._id,
                 roomType,
@@ -92,7 +93,10 @@ export const getRooms = async (req, res) => {
             hotelFilter.$or = [{ city: re }, { name: re }];
         }
         const approvedHotelIds = await Hotel.find(hotelFilter).distinct("_id").then(ids => ids.map(id => id.toString()));
-        const filter = { isAvailable: true, hotel: { $in: approvedHotelIds } };
+        const filter = {
+            isAvailable: true,
+            hotel: { $in: approvedHotelIds },
+        };
 
         let rooms, total, hasMore;
 
@@ -154,6 +158,7 @@ export const getRoomById = async (req, res) => {
         if (!room) return res.status(404).json({ success: false, message: "Room not found" });
         const hotel = await Hotel.findById(room.hotel._id || room.hotel);
         if (!hotel || hotel.status !== "approved") return res.status(404).json({ success: false, message: "Room not found" });
+        if (room.status === "pending_audit") return res.status(404).json({ success: false, message: "Room not found" });
         return res.status(200).json({ success: true, room });
     } catch (error) {
         console.error("Error fetching room:", error);
@@ -178,9 +183,30 @@ export const getOwnerRooms = async (req, res) => {
             });
         }
 
-        const rooms = await Room.find({
+        let rooms = await Room.find({
             hotel: hotel._id.toString()
-        }).populate("hotel");
+        }).populate("hotel").lean();
+
+        const roomEdits = await RoomEditApplication.find({ hotel: hotel._id, status: "pending" })
+            .sort({ updatedAt: -1 })
+            .lean();
+        const editMap = {};
+        for (const re of roomEdits) {
+            const rid = String(re.room);
+            if (!editMap[rid]) editMap[rid] = re;
+        }
+        rooms = rooms.map((r) => {
+            const edit = editMap[String(r._id)];
+            if (!edit) return r;
+            const merged = { ...r };
+            if (edit.roomType !== undefined) merged.roomType = edit.roomType;
+            if (edit.pricePerNight !== undefined) merged.pricePerNight = edit.pricePerNight;
+            if (edit.amenties !== undefined) merged.amenties = edit.amenties;
+            if (edit.promoDiscount !== undefined) merged.promoDiscount = edit.promoDiscount;
+            if (edit.roomCount !== undefined) merged.roomCount = edit.roomCount;
+            if (edit.images && edit.images.length > 0) merged.images = edit.images;
+            return merged;
+        });
 
         return res.status(200).json({
             success: true,
@@ -200,12 +226,11 @@ export const getOwnerRooms = async (req, res) => {
 export const getOwnerRoomById = async (req, res) => {
     try {
         const { id } = req.params;
-        const hotel = await Hotel.findOne({ owner: req.user._id });
-        if (!hotel) {
-            return res.status(404).json({ success: false, message: "Hotel not found" });
+        const room = await Room.findById(id).populate("hotel");
+        if (!room || !room.hotel) {
+            return res.status(404).json({ success: false, message: "Room not found" });
         }
-        const room = await Room.findOne({ _id: id, hotel: hotel._id.toString() }).populate("hotel");
-        if (!room) {
+        if (room.hotel.owner.toString() !== req.user._id.toString()) {
             return res.status(404).json({ success: false, message: "Room not found or not your room" });
         }
         return res.status(200).json({ success: true, room });
@@ -220,19 +245,19 @@ export const getOwnerRoomById = async (req, res) => {
 export const updateRoom = async (req, res) => {
     try {
         const { id } = req.params;
-        const hotel = await Hotel.findOne({ owner: req.user._id });
-        if (!hotel) {
-            return res.status(404).json({ success: false, message: "Hotel not found" });
+        const room = await Room.findById(id).populate("hotel");
+        if (!room || !room.hotel) {
+            return res.status(404).json({ success: false, message: "Room not found" });
         }
-        const room = await Room.findOne({ _id: id, hotel: hotel._id.toString() });
-        if (!room) {
+        const hotel = room.hotel;
+        if (hotel.owner.toString() !== req.user._id.toString()) {
             return res.status(404).json({ success: false, message: "Room not found or not your room" });
         }
         const { roomType, pricePerNight, amenities, promoDiscount } = req.body;
         const baseUrl = process.env.PUBLIC_URL || `${req.protocol}://${req.get("host")}`;
 
-        if (hotel.status === "offline") {
-            // 酒店下线时直接更新
+        if (hotel.status !== "approved" && hotel.status !== "pending_list") {
+            // 酒店未上架时直接更新
             if (roomType !== undefined) room.roomType = roomType;
             if (pricePerNight !== undefined) room.pricePerNight = Number(pricePerNight);
             if (amenities !== undefined) {
@@ -268,13 +293,14 @@ export const updateRoom = async (req, res) => {
         if (req.body.roomCount !== undefined) updates.roomCount = Math.max(1, Math.floor(Number(req.body.roomCount) || 1));
         if (req.files && req.files.length > 0) updates.images = req.files.map((f) => `${baseUrl}/uploads/rooms/${f.filename}`);
 
-        await RoomEditApplication.create({
-            room: id,
-            hotel: hotel._id,
-            ...updates,
-            status: "pending",
-        });
-        return res.status(200).json({ success: true, message: "修改已提交，等待管理员审核", needsApproval: true });
+        const existing = await RoomEditApplication.findOne({ room: id, hotel: hotel._id, status: "pending" });
+        if (existing) {
+            Object.assign(existing, updates);
+            await existing.save();
+        } else {
+            await RoomEditApplication.create({ room: id, hotel: hotel._id, ...updates, status: "pending" });
+        }
+        return res.status(200).json({ success: true, message: "修改已提交，等待再审核（管理员以最后一次提交为准）", needsApproval: true });
     } catch (error) {
         console.error("Error updating room:", error);
         return res.status(500).json({ success: false, message: "error in updating room" });
@@ -285,12 +311,11 @@ export const updateRoom = async (req, res) => {
 export const deleteRoom = async (req, res) => {
     try {
         const { id } = req.params;
-        const hotel = await Hotel.findOne({ owner: req.user._id });
-        if (!hotel) {
-            return res.status(404).json({ success: false, message: "Hotel not found" });
+        const room = await Room.findById(id).populate("hotel");
+        if (!room || !room.hotel) {
+            return res.status(404).json({ success: false, message: "Room not found" });
         }
-        const room = await Room.findOne({ _id: id, hotel: hotel._id.toString() });
-        if (!room) {
+        if (room.hotel.owner.toString() !== req.user._id.toString()) {
             return res.status(404).json({ success: false, message: "Room not found or not your room" });
         }
         await Room.findByIdAndDelete(id);
@@ -340,16 +365,26 @@ export const toggleRoomAvailability = async (req, res) => {
     }
 };
 
-/** 商户更新房间优惠幅度（0-100，null 表示无优惠） */
+/** 商户更新房间优惠幅度（0-100，null 表示无优惠）。酒店已上架时需管理员审核 */
 export const updatePromoDiscount = async (req, res) => {
     try {
         const { id } = req.params;
         const { promoDiscount } = req.body;
-        const hotel = await Hotel.findOne({ owner: req.user._id });
-        if (!hotel) return res.status(404).json({ success: false, message: "Hotel not found" });
-        const room = await Room.findOne({ _id: id, hotel: hotel._id.toString() });
-        if (!room) return res.status(404).json({ success: false, message: "Room not found or not your room" });
+        const room = await Room.findById(id);
+        if (!room) return res.status(404).json({ success: false, message: "Room not found" });
+        const hotel = await Hotel.findById(room.hotel);
+        if (!hotel || hotel.owner.toString() !== req.user._id.toString()) return res.status(404).json({ success: false, message: "Room not found or not your room" });
         const val = promoDiscount == null || promoDiscount === "" ? null : Math.min(100, Math.max(0, Math.floor(Number(promoDiscount) || 0)));
+        if (hotel.status === "approved" || hotel.status === "pending_list") {
+            const existing = await RoomEditApplication.findOne({ room: id, hotel: hotel._id, status: "pending" });
+            if (existing) {
+                existing.promoDiscount = val === 0 ? null : val;
+                await existing.save();
+            } else {
+                await RoomEditApplication.create({ room: id, hotel: hotel._id, promoDiscount: val, status: "pending" });
+            }
+            return res.status(200).json({ success: true, message: "修改已提交，等待再审核（管理员以最后一次提交为准）", needsApproval: true });
+        }
         room.promoDiscount = val === 0 ? null : val;
         await room.save({ validateBeforeSave: false });
         return res.status(200).json({ success: true, message: "优惠幅度已更新", room });
@@ -359,20 +394,26 @@ export const updatePromoDiscount = async (req, res) => {
     }
 };
 
-/** 商户更新房间数量（无需酒店下线，可直接修改） */
+/** 商户更新房间数量。酒店已上架时需管理员审核 */
 export const updateRoomCount = async (req, res) => {
     try {
         const { id } = req.params;
         const { roomCount } = req.body;
-        const hotel = await Hotel.findOne({ owner: req.user._id });
-        if (!hotel) {
-            return res.status(404).json({ success: false, message: "Hotel not found" });
-        }
-        const room = await Room.findOne({ _id: id, hotel: hotel._id.toString() });
-        if (!room) {
-            return res.status(404).json({ success: false, message: "Room not found or not your room" });
-        }
+        const room = await Room.findById(id);
+        if (!room) return res.status(404).json({ success: false, message: "Room not found" });
+        const hotel = await Hotel.findById(room.hotel);
+        if (!hotel || hotel.owner.toString() !== req.user._id.toString()) return res.status(404).json({ success: false, message: "Room not found or not your room" });
         const c = Math.max(1, Math.floor(Number(roomCount) || 1));
+        if (hotel.status === "approved" || hotel.status === "pending_list") {
+            const existing = await RoomEditApplication.findOne({ room: id, hotel: hotel._id, status: "pending" });
+            if (existing) {
+                existing.roomCount = c;
+                await existing.save();
+            } else {
+                await RoomEditApplication.create({ room: id, hotel: hotel._id, roomCount: c, status: "pending" });
+            }
+            return res.status(200).json({ success: true, message: "修改已提交，等待再审核（管理员以最后一次提交为准）", needsApproval: true });
+        }
         room.roomCount = c;
         await room.save({ validateBeforeSave: false });
         return res.status(200).json({ success: true, message: "房间数量已更新", room });
@@ -385,14 +426,20 @@ export const updateRoomCount = async (req, res) => {
     }
 };
 
-/** 管理员：列出待审核的房间修改申请 */
+/** 管理员：列出房间修改申请（支持 status 筛选：''|pending|approved|rejected） */
 export const listRoomEditApplications = async (req, res) => {
     try {
-        const apps = await RoomEditApplication.find({ status: "pending" })
+        const { status } = req.query;
+        const statusFilter = status ? { status } : { status: { $in: ["pending", "approved", "rejected"] } };
+        let apps = await RoomEditApplication.find(statusFilter)
             .populate("room")
-            .populate({ path: "hotel", model: "Hotel", select: "name" })
+            .populate({ path: "hotel", model: "Hotel", select: "name owner", populate: { path: "owner", select: "username phone" } })
             .sort({ createdAt: -1 })
             .lean();
+        if (!status) {
+            const statusOrder = { pending: 0, approved: 1, rejected: 2 };
+            apps.sort((a, b) => (statusOrder[a.status] ?? 99) - (statusOrder[b.status] ?? 99) || new Date(b.createdAt) - new Date(a.createdAt));
+        }
         return res.status(200).json({ success: true, applications: apps });
     } catch (error) {
         console.error("Error listing room edit applications:", error);
@@ -426,6 +473,58 @@ export const approveRoomEdit = async (req, res) => {
         return res.status(200).json({ success: true, message: "已通过", room });
     } catch (error) {
         console.error("Error approving room edit:", error);
+        return res.status(500).json({ success: false, message: "操作失败" });
+    }
+};
+
+/** 管理员：列出房间上架申请（支持 status 筛选：''|pending_audit|approved） */
+export const listPendingRoomAdds = async (req, res) => {
+    try {
+        const { status } = req.query;
+        const statusFilter = status ? { status } : { status: { $in: ["pending_audit", "approved"] } };
+        let rooms = await Room.find(statusFilter)
+            .populate({ path: "hotel", select: "name city owner", populate: { path: "owner", select: "username phone" } })
+            .sort({ createdAt: -1 })
+            .lean();
+        if (!status) {
+            const statusOrder = { pending_audit: 0, approved: 1 };
+            rooms.sort((a, b) => (statusOrder[a.status] ?? 99) - (statusOrder[b.status] ?? 99) || new Date(b.createdAt) - new Date(a.createdAt));
+        }
+        return res.status(200).json({ success: true, rooms });
+    } catch (error) {
+        console.error("Error listing pending room adds:", error);
+        return res.status(500).json({ success: false, message: "获取列表失败" });
+    }
+};
+
+/** 管理员：通过房间上架申请 */
+export const approveRoomAdd = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const room = await Room.findById(id);
+        if (!room) return res.status(404).json({ success: false, message: "房间不存在" });
+        if (room.status !== "pending_audit") return res.status(400).json({ success: false, message: "该房间已处理" });
+        room.status = "approved";
+        await room.save({ validateBeforeSave: false });
+        return res.status(200).json({ success: true, message: "已通过上架" });
+    } catch (error) {
+        console.error("Error approving room add:", error);
+        return res.status(500).json({ success: false, message: "操作失败" });
+    }
+};
+
+/** 管理员：驳回房间上架申请（删除待审核房间，商户可重新提交） */
+export const rejectRoomAdd = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { reason } = req.body || {};
+        const room = await Room.findById(id);
+        if (!room) return res.status(404).json({ success: false, message: "房间不存在" });
+        if (room.status !== "pending_audit") return res.status(400).json({ success: false, message: "该房间已处理" });
+        await Room.findByIdAndDelete(id);
+        return res.status(200).json({ success: true, message: "已驳回" });
+    } catch (error) {
+        console.error("Error rejecting room add:", error);
         return res.status(500).json({ success: false, message: "操作失败" });
     }
 };
