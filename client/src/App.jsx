@@ -1,4 +1,4 @@
-import { Route, Routes, useLocation } from 'react-router-dom'
+import { Route, Routes, useLocation, Navigate } from 'react-router-dom'
 import './App.css'
 import NavBar from './components/NavBar'
 import Home from './pages/Home';
@@ -19,6 +19,7 @@ import Layout from './pages/hotelOwner/Layout';
 import AdminLayout from './pages/admin/AdminLayout';
 import AuditHotels from './pages/admin/AuditHotels';
 import MerchantApplications from './pages/admin/MerchantApplications';
+import RoomEditApplications from './pages/admin/RoomEditApplications';
 import ApplyMerchant from './pages/ApplyMerchant';
 import HotelInfo from './pages/hotelOwner/HotelInfo';
 import NotFound from './components/NotFound';
@@ -65,14 +66,17 @@ function App() {
             <Route path='/apply-merchant' element={<ApplyMerchant/>} />
             <Route path='/owner' element={<Layout/>}>
               <Route index element={<Dashboard/>} />
+              <Route path='list-rooms' element={<Navigate to="/owner/hotel-info" replace />} />
               <Route path='hotel-info' element={<HotelInfo/>} />
+              <Route path='hotels/:hotelId/rooms' element={<ListRoom/>} />
+              <Route path='hotels/:hotelId/add-room' element={<AddRoom/>} />
               <Route path='add-room' element={<AddRoom/>} />
               <Route path='edit-room/:roomId' element={<EditRoom/>} />
-              <Route path='list-rooms' element={<ListRoom/>} />
             </Route>
             <Route path='/admin' element={<AdminLayout/>}>
               <Route index element={<AuditHotels/>} />
               <Route path='merchant-applications' element={<MerchantApplications/>} />
+              <Route path='room-edits' element={<RoomEditApplications/>} />
             </Route>
             <Route path='*' element={<NotFound/>}/>
 

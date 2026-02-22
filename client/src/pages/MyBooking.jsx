@@ -23,7 +23,7 @@ function MyBooking({ embedded = false }) {
 
     const [bookings, setBookings] = useState([]);
     const [cancelModal, setCancelModal] = useState({ open: false, bookingId: null, reason: '', otherText: '' });
-    const [refundModal, setRefundModal] = useState({ open: false, bookingId: null, reason: '' });
+    const [refundModal, setRefundModal] = useState({ open: false, bookingId: null, reason: '', supplement: '', isSupplement: false });
     const [platformRefundModal, setPlatformRefundModal] = useState({ open: false, bookingId: null, reason: '' });
     const [refundSubmitting, setRefundSubmitting] = useState(false);
     const [platformRefundSubmitting, setPlatformRefundSubmitting] = useState(false);
@@ -36,11 +36,43 @@ function MyBooking({ embedded = false }) {
     });
     const [reviewSubmitting, setReviewSubmitting] = useState(false);
     const [reviewForm, setReviewForm] = useState({
-        rating: 5,
+        rating: 0,
         comment: '',
         images: [],
     });
+    const [reviewPreviewUrls, setReviewPreviewUrls] = useState([]);
+    const [ratingHover, setRatingHover] = useState(null);
+    const [ratingActive, setRatingActive] = useState(false);
+    const starContainerRef = useRef(null);
     const pollRef = useRef(null);
+
+    function getStarRatingFromEvent(e) {
+        const el = starContainerRef.current;
+        if (!el) return 0.5;
+        const rect = el.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const totalW = rect.width;
+        const gap = 2;
+        const starW = (totalW - 4 * gap) / 5;
+        for (let seg = 0; seg < 10; seg++) {
+            const starIdx = Math.floor(seg / 2);
+            const half = seg % 2;
+            const start = starIdx * (starW + gap) + half * (starW / 2);
+            const end = start + (starW / 2);
+            if (x >= start && x < end) return (seg + 1) * 0.5;
+        }
+        return x >= totalW - 1 ? 5 : 0.5;
+    }
+
+    useEffect(() => {
+        if (reviewForm.images.length === 0) {
+            setReviewPreviewUrls([]);
+            return;
+        }
+        const urls = reviewForm.images.map((f) => URL.createObjectURL(f));
+        setReviewPreviewUrls(urls);
+        return () => urls.forEach((u) => URL.revokeObjectURL(u));
+    }, [reviewForm.images]);
 
     async function fetchBookings(silent = false) {
         try {
@@ -92,28 +124,44 @@ function MyBooking({ embedded = false }) {
     }
 
     async function handleRequestRefund() {
-        const { bookingId, reason } = refundModal;
-        if (!bookingId || !(reason && reason.trim())) {
-            toast.error('请填写退款原因');
+        const { bookingId, reason, supplement, isSupplement } = refundModal;
+        const content = isSupplement ? supplement : reason;
+        if (!bookingId || !(content && content.trim())) {
+            toast.error(isSupplement ? '请填写补充内容' : '请填写退款原因');
             return;
         }
         setRefundSubmitting(true);
         try {
             const token = await getToken();
-            const { data } = await axios.post(
-                `/api/bookings/${bookingId}/request-refund`,
-                { refundReason: reason.trim() },
-                { headers: { Authorization: `Bearer ${token}` } }
-            );
-            if (data.success) {
-                toast.success(data.message || '退款申请已提交');
-                setRefundModal({ open: false, bookingId: null, reason: '' });
-                fetchBookings(true);
+            if (isSupplement) {
+                const { data } = await axios.patch(
+                    `/api/bookings/${bookingId}/supplement-refund-reason`,
+                    { supplementalReason: content.trim() },
+                    { headers: { Authorization: `Bearer ${token}` } }
+                );
+                if (data.success) {
+                    toast.success(data.message || '退款理由已补充');
+                    setRefundModal({ open: false, bookingId: null, reason: '', supplement: '', isSupplement: false });
+                    fetchBookings(true);
+                } else {
+                    toast.error(data.message || '补充失败');
+                }
             } else {
-                toast.error(data.message || '提交失败');
+                const { data } = await axios.post(
+                    `/api/bookings/${bookingId}/request-refund`,
+                    { refundReason: reason.trim() },
+                    { headers: { Authorization: `Bearer ${token}` } }
+                );
+                if (data.success) {
+                    toast.success(data.message || '退款申请已提交');
+                    setRefundModal({ open: false, bookingId: null, reason: '', supplement: '', isSupplement: false });
+                    fetchBookings(true);
+                } else {
+                    toast.error(data.message || '提交失败');
+                }
             }
         } catch (e) {
-            toast.error(e.response?.data?.message || '提交退款申请失败');
+            toast.error(e.response?.data?.message || (isSupplement ? '补充失败' : '提交退款申请失败'));
         } finally {
             setRefundSubmitting(false);
         }
@@ -165,31 +213,6 @@ function MyBooking({ embedded = false }) {
         }
     }
 
-    async function handleCompleteBooking(booking) {
-        try {
-            const token = await getToken();
-            const { data } = await axios.patch(
-                `/api/bookings/${booking._id}/complete`,
-                {},
-                { headers: { Authorization: `Bearer ${token}` } }
-            );
-            if (data.success) {
-                toast.success('订单已标记为完成');
-                await fetchBookings(true);
-                setReviewModal({
-                    open: true,
-                    bookingId: booking._id,
-                    hotelId: booking.hotel?._id || booking.hotel,
-                    hotelName: booking.hotel?.name || '',
-                });
-            } else {
-                toast.error(data.message || '标记完成失败');
-            }
-        } catch (e) {
-            toast.error(e.response?.data?.message || '标记完成失败');
-        }
-    }
-
     function handleReviewImagesChange(e) {
         const files = Array.from(e.target.files || []);
         const limited = files.slice(0, 3);
@@ -199,6 +222,10 @@ function MyBooking({ embedded = false }) {
     async function handleSubmitReview(e) {
         e.preventDefault();
         if (!reviewModal.bookingId || !reviewModal.hotelId) return;
+        if (reviewForm.rating < 1) {
+            toast.error('请选择评分');
+            return;
+        }
         if (!reviewForm.comment.trim()) {
             toast.error('请输入评价内容');
             return;
@@ -223,7 +250,9 @@ function MyBooking({ embedded = false }) {
             if (data.success) {
                 toast.success('评价提交成功');
                 setReviewModal({ open: false, bookingId: null, hotelId: null, hotelName: '' });
-                setReviewForm({ rating: 5, comment: '', images: [] });
+                setReviewForm({ rating: 0, comment: '', images: [] });
+                setRatingHover(null);
+                setRatingActive(false);
                 fetchBookings(true);
             } else {
                 toast.error(data.message || '评价提交失败');
@@ -381,24 +410,26 @@ function MyBooking({ embedded = false }) {
                     </div>
                 </div>
 
-                {/* Payment & Status */}
+                {/* Payment & Status - 与商家仪表盘支付列统一：待支付/已支付/已取消/退款中/已退款/已完成 */}
                 <div className="flex flex-col justify-between items-start lg:items-end gap-4 min-w-[130px]">
-                    <span
-                        className={`${
-                            booking.isPaid
-                                ? 'bg-green-100 text-green-700'
-                                : 'bg-red-100 text-red-700'
-                        } px-3 py-1 rounded-full text-sm font-medium`}
-                    >
-                        {booking.isPaid ? '已支付' : '未支付'}
-                    </span>
-                    {booking.status === 'cancelled' && (
-                        <p className="text-sm text-gray-600">
-                            {booking.cancelledBy === 'merchant'
-                                ? '已取消（商家取消）'
-                                : `已取消（用户取消${booking.cancelReason ? `，原因：${booking.cancelReason}` : ''})`}
-                        </p>
-                    )}
+                    {(() => {
+                        const payLabel = booking.refundStatus === 'approved' ? '已退款'
+                            : booking.refundStatus === 'pending' ? '退款中'
+                            : booking.status === 'cancelled' ? '已取消'
+                            : booking.isCompleted ? '已完成'
+                            : booking.isPaid ? '已支付' : '待支付';
+                        const payClass = payLabel === '已退款' ? 'bg-slate-100 text-slate-600'
+                            : payLabel === '退款中' ? 'bg-amber-100 text-amber-700'
+                            : payLabel === '已取消' ? 'bg-gray-100 text-gray-600'
+                            : payLabel === '已完成' ? 'bg-emerald-100 text-emerald-700'
+                            : payLabel === '已支付' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600';
+                        const suffix = payLabel === '已完成' && booking.hasReview ? ' · 已评价' : '';
+                        return (
+                            <span className={`px-3 py-1 rounded-full text-sm font-medium ${payClass}`}>
+                                {payLabel}{suffix}
+                            </span>
+                        );
+                    })()}
                     {booking.status !== 'cancelled' && !booking.isPaid && (
                         <button
                             onClick={() => handlePayment(booking._id)}
@@ -416,71 +447,59 @@ function MyBooking({ embedded = false }) {
                             取消订单
                         </button>
                     )}
-                    {booking.status !== 'cancelled' && booking.isPaid && !booking.isCompleted && (
-                        <button
-                            type="button"
-                            onClick={() => handleCompleteBooking(booking)}
-                            className="mt-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm shadow transition"
-                        >
-                            完成订单
-                        </button>
-                    )}
-                    {booking.isCompleted && !booking.hasReview && (
-                        <button
-                            type="button"
-                            onClick={() => setReviewModal({
-                                open: true,
-                                bookingId: booking._id,
-                                hotelId: booking.hotel?._id || booking.hotel,
-                                hotelName: booking.hotel?.name || '',
-                            })}
-                            className="mt-2 bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg text-sm shadow transition"
-                        >
-                            去评价
-                        </button>
-                    )}
                     {booking.isCompleted && (
-                        <span className="mt-2 inline-flex items-center px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-medium">
-                            已完成{booking.hasReview ? ' · 已评价' : ''}
-                        </span>
-                    )}
-                    {booking.isCompleted && booking.refundStatus === 'pending' && (
-                        <span className="mt-2 inline-flex items-center px-3 py-1 rounded-full bg-amber-50 text-amber-700 text-xs font-medium">
-                            退款审核中
-                        </span>
-                    )}
-                    {booking.isCompleted && booking.refundStatus === 'approved' && (
-                        <span className="mt-2 inline-flex items-center px-3 py-1 rounded-full bg-green-100 text-green-700 text-xs font-medium">
-                            退款成功
-                        </span>
-                    )}
-                    {booking.isCompleted && booking.refundStatus === 'rejected' && (
-                        <span className="mt-2 inline-flex items-center px-3 py-1 rounded-full bg-red-50 text-red-700 text-xs font-medium">
-                            商家拒绝退款
-                        </span>
-                    )}
-                    {booking.isCompleted && booking.refundStatus === 'rejected' && booking.refundPlatformReviewRequested && (
-                        <span className="mt-2 inline-flex items-center px-3 py-1 rounded-full bg-amber-50 text-amber-700 text-xs font-medium">
-                            待平台审核中
-                        </span>
+                        booking.hasReview ? (
+                            <span className="mt-2 inline-block bg-amber-100 text-amber-600 px-4 py-2 rounded-lg text-sm cursor-not-allowed">
+                                已评价
+                            </span>
+                        ) : (
+                            <button
+                                type="button"
+                                onClick={() => setReviewModal({
+                                    open: true,
+                                    bookingId: booking._id,
+                                    hotelId: booking.hotel?._id || booking.hotel,
+                                    hotelName: booking.hotel?.name || '',
+                                })}
+                                className="mt-2 bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg text-sm shadow transition"
+                            >
+                                去评价
+                            </button>
+                        )
                     )}
                     {booking.isCompleted && !booking.refundRequested && booking.refundStatus !== 'approved' && (
                         <button
                             type="button"
-                            onClick={() => setRefundModal({ open: true, bookingId: booking._id, reason: '' })}
+                            onClick={() => setRefundModal({ open: true, bookingId: booking._id, reason: '', isSupplement: false })}
                             className="mt-2 bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg text-sm shadow transition"
                         >
                             申请退款
                         </button>
                     )}
-                    {booking.isCompleted && booking.refundStatus === 'rejected' && !booking.refundPlatformReviewRequested && (
+                    {booking.isCompleted && booking.refundStatus === 'pending' && (
                         <button
                             type="button"
-                            onClick={() => setPlatformRefundModal({ open: true, bookingId: booking._id, reason: '' })}
-                            className="mt-2 bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg text-sm shadow transition"
+                            onClick={() => setRefundModal({ open: true, bookingId: booking._id, reason: booking.refundReason || '', isSupplement: true })}
+                            className="mt-2 bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg text-sm shadow transition"
                         >
-                            选择平台介入
+                            退款中
                         </button>
+                    )}
+                    {booking.isCompleted && booking.refundStatus === 'rejected' && (
+                        <>
+                            <span className="mt-2 inline-flex items-center px-3 py-1 rounded-full bg-red-50 text-red-700 text-sm font-medium">
+                                已被拒
+                            </span>
+                            {!booking.refundPlatformReviewRequested && (
+                                <button
+                                    type="button"
+                                    onClick={() => setPlatformRefundModal({ open: true, bookingId: booking._id, reason: '' })}
+                                    className="mt-2 bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg text-sm shadow transition"
+                                >
+                                    选择客服介入
+                                </button>
+                            )}
+                        </>
                     )}
                 </div>
             </div>
@@ -557,24 +576,46 @@ function MyBooking({ embedded = false }) {
         </div>
     )}
 
-    {/* 申请退款弹窗 */}
+    {/* 申请退款 / 补充退款理由 弹窗 */}
     {refundModal.open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => !refundSubmitting && setRefundModal({ open: false, bookingId: null, reason: '' })}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => !refundSubmitting && setRefundModal({ open: false, bookingId: null, reason: '', isSupplement: false })}>
             <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4" onClick={(e) => e.stopPropagation()}>
-                <h3 className="text-lg font-semibold text-gray-900 mb-3">申请退款</h3>
-                <p className="text-sm text-gray-600 mb-4">请写明退款原因，提交后由商家审核：</p>
-                <textarea
-                    value={refundModal.reason}
-                    onChange={(e) => setRefundModal((prev) => ({ ...prev, reason: e.target.value }))}
-                    placeholder="请输入退款原因（必填）"
-                    rows={4}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
-                    disabled={refundSubmitting}
-                />
+                <h3 className="text-lg font-semibold text-gray-900 mb-3">
+                    {refundModal.isSupplement ? '补充退款理由' : '申请退款'}
+                </h3>
+                {refundModal.isSupplement ? (
+                    <>
+                        <p className="text-sm text-gray-600 mb-2">当前已提交的理由：</p>
+                        <div className="text-sm text-gray-700 bg-gray-50 rounded-lg px-3 py-2 mb-3 whitespace-pre-wrap">
+                            {refundModal.reason || '（无）'}
+                        </div>
+                        <p className="text-sm text-gray-600 mb-2">补充内容（将追加给商家）：</p>
+                        <textarea
+                            value={refundModal.supplement || ''}
+                            onChange={(e) => setRefundModal((prev) => ({ ...prev, supplement: e.target.value }))}
+                            placeholder="请输入补充内容（必填）"
+                            rows={3}
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
+                            disabled={refundSubmitting}
+                        />
+                    </>
+                ) : (
+                    <>
+                        <p className="text-sm text-gray-600 mb-4">请写明退款原因，提交后由商家审核：</p>
+                        <textarea
+                            value={refundModal.reason}
+                            onChange={(e) => setRefundModal((prev) => ({ ...prev, reason: e.target.value }))}
+                            placeholder="请输入退款原因（必填）"
+                            rows={4}
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
+                            disabled={refundSubmitting}
+                        />
+                    </>
+                )}
                 <div className="flex gap-3">
                     <button
                         type="button"
-                        onClick={() => !refundSubmitting && setRefundModal({ open: false, bookingId: null, reason: '' })}
+                        onClick={() => !refundSubmitting && setRefundModal({ open: false, bookingId: null, reason: '', supplement: '', isSupplement: false })}
                         className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                     >
                         关闭
@@ -582,22 +623,22 @@ function MyBooking({ embedded = false }) {
                     <button
                         type="button"
                         onClick={handleRequestRefund}
-                        disabled={refundSubmitting || !(refundModal.reason && refundModal.reason.trim())}
+                        disabled={refundSubmitting || (refundModal.isSupplement ? !(refundModal.supplement && refundModal.supplement.trim()) : !(refundModal.reason && refundModal.reason.trim()))}
                         className="flex-1 px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                        {refundSubmitting ? '提交中...' : '提交申请'}
+                        {refundSubmitting ? '提交中...' : (refundModal.isSupplement ? '提交补充' : '提交申请')}
                     </button>
                 </div>
             </div>
         </div>
     )}
 
-    {/* 平台介入弹窗（商家拒绝退款后） */}
+    {/* 客服介入弹窗（商家拒绝退款后） */}
     {platformRefundModal.open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => !platformRefundSubmitting && setPlatformRefundModal({ open: false, bookingId: null, reason: '' })}>
             <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4" onClick={(e) => e.stopPropagation()}>
-                <h3 className="text-lg font-semibold text-gray-900 mb-3">选择平台介入</h3>
-                <p className="text-sm text-gray-600 mb-4">商家已拒绝您的退款申请，可提交平台审核。请写明原因：</p>
+                <h3 className="text-lg font-semibold text-gray-900 mb-3">选择客服介入</h3>
+                <p className="text-sm text-gray-600 mb-4">商家已拒绝您的退款申请，可提交客服审核。请写明原因：</p>
                 <textarea
                     value={platformRefundModal.reason}
                     onChange={(e) => setPlatformRefundModal((prev) => ({ ...prev, reason: e.target.value }))}
@@ -634,7 +675,8 @@ function MyBooking({ embedded = false }) {
             onClick={() => {
                 if (!reviewSubmitting) {
                     setReviewModal({ open: false, bookingId: null, hotelId: null, hotelName: '' });
-                    setReviewForm({ rating: 5, comment: '', images: [] });
+                    setReviewForm({ rating: 0, comment: '', images: [] });
+                    setRatingHover(null);
                 }
             }}
         >
@@ -653,24 +695,52 @@ function MyBooking({ embedded = false }) {
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                             评分
                         </label>
-                        <div className="flex items-center gap-2">
-                            {[1, 2, 3, 4, 5].map((star) => (
-                                <button
-                                    key={star}
-                                    type="button"
-                                    disabled={reviewSubmitting}
-                                    onClick={() =>
-                                        setReviewForm((prev) => ({ ...prev, rating: star }))
+                        <div className="flex items-center gap-2 w-fit">
+                        <div
+                            ref={starContainerRef}
+                            onMouseMove={(e) => {
+                                if (!ratingActive) return;
+                                const r = getStarRatingFromEvent(e);
+                                setRatingHover(r);
+                            }}
+                            onMouseLeave={() => { if (ratingActive) setRatingHover(null); }}
+                            onClick={(e) => {
+                                if (reviewSubmitting) return;
+                                const r = getStarRatingFromEvent(e);
+                                if (!ratingActive) {
+                                    if (r <= 1) {
+                                        setRatingActive(true);
+                                        setRatingHover(r);
+                                        setReviewForm((prev) => ({ ...prev, rating: r }));
                                     }
-                                    className="text-yellow-400"
-                                >
-                                    <span className={`text-xl ${star <= reviewForm.rating ? '' : 'opacity-30'}`}>
-                                        ★
+                                    return;
+                                }
+                                setReviewForm((prev) => ({ ...prev, rating: ratingHover !== null ? ratingHover : r }));
+                                setRatingActive(false);
+                                setRatingHover(null);
+                            }}
+                            className="flex items-center gap-0.5 cursor-pointer select-none shrink-0"
+                        >
+                            {[1, 2, 3, 4, 5].map((star) => {
+                                const displayRating = ratingActive && ratingHover !== null ? ratingHover : reviewForm.rating;
+                                const fill = Math.min(1, Math.max(0, displayRating - star + 1));
+                                return (
+                                    <span key={star} className="relative inline-block w-6 h-6 text-2xl leading-6 shrink-0">
+                                        <span className="text-gray-300">★</span>
+                                        <span
+                                            className="absolute inset-0 text-yellow-400 overflow-hidden"
+                                            style={{ width: `${fill * 100}%` }}
+                                        >
+                                            ★
+                                        </span>
                                     </span>
-                                </button>
-                            ))}
-                            <span className="text-sm text-gray-600 ml-1">
-                                {reviewForm.rating} 分
+                                );
+                            })}
+                        </div>
+                            <span className="text-sm text-gray-600 shrink-0">
+                                {(ratingActive && ratingHover !== null ? ratingHover : reviewForm.rating) > 0
+                                    ? (ratingActive && ratingHover !== null ? ratingHover : reviewForm.rating).toFixed(1) + ' 分'
+                                    : '—'}
                             </span>
                         </div>
                     </div>
@@ -693,18 +763,44 @@ function MyBooking({ embedded = false }) {
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                             上传图片（最多 3 张，选填）
                         </label>
-                        <input
-                            type="file"
-                            accept="image/*"
-                            multiple
-                            onChange={handleReviewImagesChange}
-                            disabled={reviewSubmitting}
-                            className="text-sm text-gray-700"
-                        />
+                        <label className={`flex flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed px-4 py-6 cursor-pointer transition ${reviewSubmitting ? 'opacity-50 cursor-not-allowed' : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'}`}>
+                            <input
+                                type="file"
+                                accept="image/*"
+                                multiple
+                                onChange={handleReviewImagesChange}
+                                disabled={reviewSubmitting}
+                                className="hidden"
+                            />
+                            <span className="text-gray-500 text-sm">点击上传图片</span>
+                            <span className="text-gray-400 text-xs">最多 3 张</span>
+                        </label>
                         {reviewForm.images.length > 0 && (
-                            <p className="mt-1 text-xs text-gray-500">
-                                已选择 {reviewForm.images.length} 张图片
-                            </p>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                                {reviewForm.images.map((file, idx) => reviewPreviewUrls[idx] && (
+                                    <div key={idx} className="relative group">
+                                        <img
+                                            src={reviewPreviewUrls[idx]}
+                                            alt={`预览 ${idx + 1}`}
+                                            className="w-20 h-20 object-cover rounded-lg border border-gray-200"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setReviewForm((prev) => ({
+                                                    ...prev,
+                                                    images: prev.images.filter((_, i) => i !== idx),
+                                                }));
+                                            }}
+                                            disabled={reviewSubmitting}
+                                            className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 text-white text-xs leading-none flex items-center justify-center hover:bg-red-600 opacity-0 group-hover:opacity-100 transition disabled:opacity-50"
+                                            aria-label="移除"
+                                        >
+                                            ×
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
                         )}
                     </div>
                     <div className="flex gap-3 pt-2">
@@ -713,7 +809,9 @@ function MyBooking({ embedded = false }) {
                             disabled={reviewSubmitting}
                             onClick={() => {
                                 setReviewModal({ open: false, bookingId: null, hotelId: null, hotelName: '' });
-                                setReviewForm({ rating: 5, comment: '', images: [] });
+                                setReviewForm({ rating: 0, comment: '', images: [] });
+                                setRatingHover(null);
+                                setRatingActive(false);
                             }}
                             className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                         >

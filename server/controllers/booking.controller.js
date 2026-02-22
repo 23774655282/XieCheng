@@ -45,9 +45,16 @@ async function checkAvailabilityApi(req,res) {
 
 async function createBooking(req,res,next) {
     try {
-        const {room,checkInDate,checkOutDate,guests} = req.body;
+        const {room,checkInDate,checkOutDate,guests,guestName,guestEmail,guestPhone,guestRemark} = req.body;
         const user = req.user._id;
+        const userRole = req.user.role;
 
+        if (userRole === 'admin') {
+            return res.status(403).json({
+                success: false,
+                message: "管理员不能预订酒店"
+            });
+        }
 
         const isAvail = await checkAvailability({checkInDate, checkOutDate, room});
 
@@ -68,10 +75,9 @@ async function createBooking(req,res,next) {
         console.log(roomData)
 
         if (user.toString() === roomData.hotel.owner.toString()) {
-            console.warn("User is the owner of the room, cannot book own room");
-            return res.status(404).json({
+            return res.status(403).json({
                 success: false,
-                message: "You are not authorized to book this room"
+                message: "不能预订自己的酒店"
             });
             
         }
@@ -97,6 +103,10 @@ async function createBooking(req,res,next) {
             checkOutDate: checkOut,
             totalPrice,
             guests:+guests,
+            guestName: guestName || null,
+            guestEmail: guestEmail || null,
+            guestPhone: guestPhone || null,
+            guestRemark: guestRemark || null,
         })
 
         // const mailOptions = {
@@ -162,9 +172,10 @@ async function getUserBooking(req,res,next) {
 
 
 async function getHotelBooking(req,res) {
-    // 商户后台仪表盘：即使没有酒店或没有订单，也返回 200，前端显示 0 即可
-    const hotel = await Hotel.findOne({ owner: req.user._id });
-    if (!hotel) {
+    // 商户后台仪表盘：获取商户名下所有酒店的预订
+    const hotels = await Hotel.find({ owner: req.user._id }).select('_id');
+    const hotelIds = hotels.map((h) => h._id);
+    if (hotelIds.length === 0) {
         return res.status(200).json({
             success: true,
             dashboardData: {
@@ -176,7 +187,7 @@ async function getHotelBooking(req,res) {
         });
     }
 
-    const bookings = await Booking.find({ hotel: hotel._id })
+    const bookings = await Booking.find({ hotel: { $in: hotelIds } })
         .populate('room hotel user')
         .sort({ createdAt: -1 });
 
@@ -436,6 +447,44 @@ async function requestRefund(req, res) {
     }
 }
 
+// 用户：退款审核中时补充退款理由
+async function supplementRefundReason(req, res) {
+    try {
+        const { id } = req.params;
+        const { supplementalReason } = req.body || {};
+        const userId = req.user._id;
+
+        const booking = await Booking.findById(id);
+        if (!booking) {
+            return res.status(404).json({ success: false, message: '订单不存在' });
+        }
+        if (String(booking.user) !== String(userId)) {
+            return res.status(403).json({ success: false, message: '无权操作该订单' });
+        }
+        if (booking.refundStatus !== 'pending') {
+            return res.status(400).json({ success: false, message: '当前无待审核的退款申请' });
+        }
+
+        const add = (typeof supplementalReason === 'string' && supplementalReason.trim()) ? supplementalReason.trim() : '';
+        if (!add) {
+            return res.status(400).json({ success: false, message: '请填写补充内容' });
+        }
+
+        const sep = booking.refundReason ? '\n\n--- 补充 ---\n\n' : '';
+        booking.refundReason = (booking.refundReason || '') + sep + add;
+        await booking.save();
+
+        return res.status(200).json({
+            success: true,
+            message: '退款理由已补充',
+            booking,
+        });
+    } catch (error) {
+        console.error('Error supplementing refund reason:', error);
+        return res.status(500).json({ success: false, message: '补充失败' });
+    }
+}
+
 // 商家：审核退款（通过/拒绝）
 async function reviewRefund(req, res) {
     try {
@@ -530,41 +579,97 @@ async function requestPlatformRefundReview(req, res) {
     }
 }
 
-// 用户：标记订单已完成（入住结束后）
-async function completeBooking(req, res) {
+/** 商家：更新入住状态（待入住、已入住、已退房） */
+async function updateStayStatus(req, res) {
     try {
         const { id } = req.params;
+        const { stayStatus } = req.body || {};
         const userId = req.user._id;
 
-        const booking = await Booking.findById(id);
+        const booking = await Booking.findById(id).populate('hotel');
         if (!booking) {
-            return res.status(404).json({ success: false, message: "订单不存在" });
-        }
-        if (String(booking.user) !== String(userId)) {
-            return res.status(403).json({ success: false, message: "无权操作该订单" });
-        }
-        if (booking.status === "cancelled") {
-            return res.status(400).json({ success: false, message: "已取消的订单无法标记完成" });
-        }
-        if (!booking.isPaid) {
-            return res.status(400).json({ success: false, message: "未支付的订单无法标记完成" });
-        }
-        if (booking.isCompleted) {
-            return res.status(200).json({ success: true, message: "订单已是完成状态", booking });
+            return res.status(404).json({ success: false, message: '订单不存在' });
         }
 
-        booking.isCompleted = true;
+        const hotelId = booking.hotel._id || booking.hotel;
+        const hotelDoc = booking.hotel && booking.hotel.owner ? booking.hotel : await Hotel.findById(hotelId);
+        if (!hotelDoc || String(hotelDoc.owner) !== String(userId)) {
+            return res.status(403).json({ success: false, message: '无权修改该订单' });
+        }
+        if (booking.status === 'cancelled') {
+            return res.status(400).json({ success: false, message: '已取消的订单不可修改入住状态' });
+        }
+
+        const allowed = ['pending_checkin', 'checked_in', 'checked_out'];
+        if (!allowed.includes(stayStatus)) {
+            return res.status(400).json({ success: false, message: '无效的入住状态' });
+        }
+
+        const current = booking.stayStatus || 'pending_checkin';
+        if (current === 'checked_in' && stayStatus === 'pending_checkin') {
+            return res.status(400).json({ success: false, message: '已入住后不能改回待入住' });
+        }
+        if (current === 'checked_out') {
+            return res.status(400).json({ success: false, message: '已退房后不能修改状态' });
+        }
+
+        booking.stayStatus = stayStatus;
+        if (stayStatus === 'checked_out') {
+            booking.isCompleted = true;
+        }
         await booking.save();
 
         return res.status(200).json({
             success: true,
-            message: "订单已标记为完成",
+            message: '入住状态已更新',
             booking,
         });
     } catch (error) {
-        console.error("Error completing booking:", error);
-        return res.status(500).json({ success: false, message: "标记订单完成失败" });
+        console.error('Error updating stay status:', error);
+        return res.status(500).json({ success: false, message: '更新入住状态失败' });
     }
 }
 
-export { checkAvailabilityApi, createBooking, getUserBooking, getHotelBooking, stripePayment, getPayQr, confirmPayment, cancelBooking, completeBooking, requestRefund, reviewRefund, requestPlatformRefundReview };
+/** 商家：请求平台介入退款审核（在退款中时，商家可选择交由平台处理） */
+async function merchantRequestPlatformIntervention(req, res) {
+    try {
+        const { id } = req.params;
+        const userId = req.user._id;
+
+        const booking = await Booking.findById(id).populate('hotel');
+        if (!booking) {
+            return res.status(404).json({ success: false, message: '订单不存在' });
+        }
+
+        const hotelId = booking.hotel._id || booking.hotel;
+        const hotelDoc = booking.hotel && booking.hotel.owner ? booking.hotel : await Hotel.findById(hotelId);
+        if (!hotelDoc || String(hotelDoc.owner) !== String(userId)) {
+            return res.status(403).json({ success: false, message: '无权操作该订单' });
+        }
+        if (booking.refundStatus !== 'pending') {
+            return res.status(400).json({ success: false, message: '当前无待审核的退款申请' });
+        }
+
+        booking.merchantRequestedPlatformIntervention = true;
+        await booking.save();
+
+        return res.status(200).json({
+            success: true,
+            message: '已提交平台介入，请等待平台审核',
+            booking,
+        });
+    } catch (error) {
+        console.error('Error requesting platform intervention:', error);
+        return res.status(500).json({ success: false, message: '提交失败' });
+    }
+}
+
+// 用户不可自主标记完成，仅商家在仪表盘选择「已退房」时订单会变为已完成
+async function completeBooking(req, res) {
+    return res.status(403).json({
+        success: false,
+        message: "订单完成由商家操作，请等待商家在后台标记已退房",
+    });
+}
+
+export { checkAvailabilityApi, createBooking, getUserBooking, getHotelBooking, stripePayment, getPayQr, confirmPayment, cancelBooking, completeBooking, requestRefund, supplementRefundReason, reviewRefund, requestPlatformRefundReview, updateStayStatus, merchantRequestPlatformIntervention };

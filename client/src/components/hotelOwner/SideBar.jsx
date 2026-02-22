@@ -1,5 +1,4 @@
 import { CiCircleList } from 'react-icons/ci'
-import { IoIosAdd } from 'react-icons/io'
 import { MdDashboardCustomize } from 'react-icons/md'
 import { IoClose } from 'react-icons/io5'
 import { NavLink } from 'react-router-dom'
@@ -8,8 +7,6 @@ function SideBar({ open, onClose, className = '' }) {
   const SideBarLinks = [
     { name: '仪表盘', path: '/owner', icon: <MdDashboardCustomize size={20} /> },
     { name: '酒店信息', path: '/owner/hotel-info', icon: <CiCircleList size={20} /> },
-    { name: '新增房间', path: '/owner/add-room', icon: <IoIosAdd size={20} /> },
-    { name: '房间列表', path: '/owner/list-rooms', icon: <CiCircleList size={20} /> },
   ]
 
   return (
@@ -22,7 +19,7 @@ function SideBar({ open, onClose, className = '' }) {
       />
       {/* 侧栏：移动端为抽屉，桌面端常驻 */}
       <aside
-        className={`fixed left-0 top-16 bottom-0 w-64 max-w-[85vw] bg-gray-200 p-4 shadow-xl z-50 flex flex-col transition-transform duration-200 ease-out md:static md:top-0 md:left-auto md:!translate-x-0 md:!max-w-none md:w-64 md:shrink-0 md:h-[calc(100vh-4rem)] ${className || ''} ${open ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}
+        className={`fixed left-0 top-16 bottom-0 w-64 max-w-[85vw] bg-gray-200 p-4 shadow-xl z-50 flex flex-col transition-transform duration-200 ease-out md:static md:top-0 md:left-auto md:bottom-auto md:!translate-x-0 md:!max-w-none md:w-64 md:shrink-0 md:self-stretch md:min-h-0 ${className || ''} ${open ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}
       >
         <div className="flex items-center justify-between mb-4 md:mb-2">
           <span className="text-gray-600 font-medium text-sm md:block md:mb-2">菜单</span>

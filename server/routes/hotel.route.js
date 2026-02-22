@@ -9,6 +9,7 @@ import {
     listHotelsForMap,
     searchHotelsPublic,
     registerHotel,
+    getOwnerHotels,
     getMyHotel,
     updateHotel,
     listHotelsForAudit,
@@ -29,6 +30,7 @@ hotelRouter.get("/public/:id", getHotelPublicById);
 
 // 商户端
 hotelRouter.post("/", authMiddleware, registerHotel);
+hotelRouter.get("/owner/list", authMiddleware, getOwnerHotels);
 hotelRouter.get("/my", authMiddleware, getMyHotel);
 hotelRouter.put("/my", authMiddleware, uploadHotel.array("images", 6), updateHotel);
 

@@ -1,61 +1,45 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useAppContext } from "../context/AppContext";
-import toast from "react-hot-toast";
 import { FaStar } from "react-icons/fa";
 
+/** 优点标签定义：标签名 -> 匹配规则（关键词或函数） */
+const TAG_DEFINITIONS = [
+    { key: "recommended", label: "值得推荐", match: (r) => /推荐|不错|满意|好评/i.test(r.comment || "") },
+    { key: "hasImages", label: "有图", match: (r) => Array.isArray(r.images) && r.images.length > 0 },
+    { key: "location", label: "位置佳", match: (r) => /位置|地段|地理位置|方便|便利/i.test(r.comment || "") },
+    { key: "quiet", label: "噪音小", match: (r) => /安静|静谧|噪音小|隔音/i.test(r.comment || "") },
+    { key: "service", label: "服务好", match: (r) => /服务|热情|贴心|周到/i.test(r.comment || "") },
+    { key: "frontDesk", label: "前台热情", match: (r) => /前台/i.test(r.comment || "") },
+    { key: "transport", label: "交通便利", match: (r) => /交通|地铁|公交|出行/i.test(r.comment || "") },
+    { key: "subway", label: "近地铁站", match: (r) => /地铁|地铁站/i.test(r.comment || "") },
+    { key: "breakfast", label: "早餐很棒", match: (r) => /早餐/i.test(r.comment || "") },
+    { key: "kids", label: "适合带娃", match: (r) => /带娃|孩子|亲子|儿童/i.test(r.comment || "") },
+    { key: "pool", label: "泳池干净", match: (r) => /泳池/i.test(r.comment || "") },
+    { key: "badReview", label: "差评", match: (r) => (r.rating || 0) <= 2 },
+];
+
+const MIN_TAG_COUNT = 20;
+const MAX_DISPLAY_COUNT = 999;
+
 function HotelReviews({ hotelId }) {
-    const { axios, isAuthenticated, getToken } = useAppContext();
+    const { axios } = useAppContext();
     const [reviews, setReviews] = useState([]);
     const [avgRating, setAvgRating] = useState(0);
     const [total, setTotal] = useState(0);
     const [loading, setLoading] = useState(true);
-    const [showForm, setShowForm] = useState(false);
-    const [submitting, setSubmitting] = useState(false);
-    const [hasCompletedBooking, setHasCompletedBooking] = useState(false);
-    const [checkingBooking, setCheckingBooking] = useState(false);
-    const [formData, setFormData] = useState({
-        rating: 5,
-        comment: "",
-    });
+    const [drawerOpen, setDrawerOpen] = useState(false);
+    const [activeTag, setActiveTag] = useState(null); // key of selected tag for filtering
 
     useEffect(() => {
-        if (hotelId) {
-            fetchReviews();
-            if (isAuthenticated) {
-                checkCompletedBooking();
-            }
-        }
-    }, [hotelId, isAuthenticated]);
+        if (hotelId) fetchReviews();
+    }, [hotelId]);
 
-    const checkCompletedBooking = async () => {
-        if (!isAuthenticated || !hotelId) return;
+    const fetchReviews = async (limit = 100, silent = false) => {
         try {
-            setCheckingBooking(true);
-            const token = await getToken();
-            const { data } = await axios.get("/api/bookings/user", {
-                headers: { Authorization: `Bearer ${token}` },
+            if (!silent) setLoading(true);
+            const { data } = await axios.get(`/api/reviews/hotel/${hotelId}`, {
+                params: { page: 1, limit },
             });
-            if (data.success && Array.isArray(data.bookings)) {
-                const hasCompleted = data.bookings.some(
-                    (b) =>
-                        b.hotel?._id === hotelId || b.hotel === hotelId &&
-                        b.isCompleted === true &&
-                        b.status !== 'cancelled'
-                );
-                setHasCompletedBooking(hasCompleted);
-            }
-        } catch (error) {
-            console.error("Error checking completed booking:", error);
-            setHasCompletedBooking(false);
-        } finally {
-            setCheckingBooking(false);
-        }
-    };
-
-    const fetchReviews = async () => {
-        try {
-            setLoading(true);
-            const { data } = await axios.get(`/api/reviews/hotel/${hotelId}`);
             if (data.success) {
                 setReviews(data.reviews || []);
                 setAvgRating(data.avgRating || 0);
@@ -64,58 +48,29 @@ function HotelReviews({ hotelId }) {
         } catch (error) {
             console.error("Error fetching reviews:", error);
         } finally {
-            setLoading(false);
+            if (!silent) setLoading(false);
         }
     };
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        if (!isAuthenticated) {
-            toast.error("请先登录");
-            return;
-        }
+    /** 计算各标签数量，仅保留 >= 20 的，展示时 999+ 为上限 */
+    const tagCounts = useMemo(() => {
+        const counts = {};
+        TAG_DEFINITIONS.forEach(({ key, match }) => {
+            const count = reviews.filter(match).length;
+            if (count >= MIN_TAG_COUNT) counts[key] = count;
+        });
+        return counts;
+    }, [reviews]);
 
-        if (!hasCompletedBooking) {
-            toast.error("只有完成过该酒店订单的用户才能评价");
-            return;
-        }
+    const formatTagCount = (n) => (n > MAX_DISPLAY_COUNT ? "999+" : String(n));
 
-        if (!formData.comment.trim()) {
-            toast.error("请输入评论内容");
-            return;
-        }
-
-        setSubmitting(true);
-        try {
-            const token = await getToken();
-            const { data } = await axios.post(
-                "/api/reviews",
-                {
-                    hotelId,
-                    rating: formData.rating,
-                    comment: formData.comment.trim(),
-                },
-                {
-                    headers: { Authorization: `Bearer ${token}` },
-                }
-            );
-
-            if (data.success) {
-                toast.success("评论发表成功");
-                setFormData({ rating: 5, comment: "" });
-                setShowForm(false);
-                fetchReviews();
-                checkCompletedBooking(); // 重新检查，因为可能已经评价过了
-            } else {
-                toast.error(data.message || "发表评论失败");
-            }
-        } catch (error) {
-            const message = error.response?.data?.message || "发表评论失败";
-            toast.error(message);
-        } finally {
-            setSubmitting(false);
-        }
-    };
+    /** 根据当前选中的标签筛选评价 */
+    const filteredReviews = useMemo(() => {
+        if (!activeTag) return reviews;
+        const def = TAG_DEFINITIONS.find((t) => t.key === activeTag);
+        if (!def) return reviews;
+        return reviews.filter(def.match);
+    }, [reviews, activeTag]);
 
     const formatDate = (dateString) => {
         const date = new Date(dateString);
@@ -126,165 +81,184 @@ function HotelReviews({ hotelId }) {
         });
     };
 
-    const renderStars = (rating, interactive = false, onChange = null) => {
-        return (
-            <div className="flex items-center gap-1">
-                {[1, 2, 3, 4, 5].map((star) => (
-                    <button
-                        key={star}
-                        type={interactive ? "button" : undefined}
-                        onClick={interactive && onChange ? () => onChange(star) : undefined}
-                        className={interactive ? "cursor-pointer" : "cursor-default"}
-                        disabled={!interactive || submitting}
-                    >
-                        <FaStar
-                            className={`w-4 h-4 ${
-                                star <= rating
-                                    ? "text-yellow-400 fill-yellow-400"
-                                    : "text-gray-300"
-                            }`}
-                        />
-                    </button>
-                ))}
+    const renderStars = (rating) => (
+        <div className="flex items-center gap-0.5">
+            {[1, 2, 3, 4, 5].map((star) => (
+                <FaStar
+                    key={star}
+                    className={`w-3.5 h-3.5 ${
+                        star <= rating ? "text-yellow-400 fill-yellow-400" : "text-gray-300"
+                    }`}
+                />
+            ))}
+        </div>
+    );
+
+    const renderReviewItem = (review) => (
+        <div
+            key={review._id}
+            className="border-b border-gray-100 pb-3 last:border-b-0 last:pb-0"
+        >
+            <div className="flex items-start justify-between mb-1">
+                <div className="flex items-center gap-2">
+                    <span className="font-medium text-gray-800 text-sm">
+                        {review.user?.username || "匿名用户"}
+                    </span>
+                    {renderStars(review.rating)}
+                </div>
+                <p className="text-xs text-gray-500">{formatDate(review.createdAt)}</p>
             </div>
-        );
-    };
+            <p className="text-gray-600 text-sm leading-relaxed mt-1 whitespace-pre-line">
+                {review.comment}
+            </p>
+            {Array.isArray(review.images) && review.images.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                    {review.images.slice(0, 3).map((img, idx) => (
+                        <img
+                            key={idx}
+                            src={img}
+                            alt=""
+                            className="w-16 h-16 rounded object-cover border border-gray-200"
+                        />
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+
+    const previewCount = 3;
+    const previewReviews = filteredReviews.slice(0, previewCount);
 
     if (loading) {
         return (
-            <div className="bg-white rounded-xl shadow p-6 mb-6">
-                <p className="text-gray-500">加载评论中...</p>
+            <div className="bg-white rounded-xl p-4 mb-4" style={{ boxShadow: '0 0 20px rgba(0,0,0,0.12)' }}>
+                <p className="text-gray-500 text-sm">加载评论中...</p>
             </div>
         );
     }
 
     return (
-        <div className="bg-white rounded-xl shadow p-6 mb-6">
-            <div className="flex items-center justify-between mb-4">
+        <div className="bg-white rounded-xl p-4 mb-4" style={{ boxShadow: '0 0 20px rgba(0,0,0,0.12)' }}>
+            <div className="flex items-center justify-between mb-3 bg-black text-white -mx-4 -mt-4 px-4 py-3 rounded-t-xl">
                 <div>
-                    <h2 className="text-lg font-semibold text-gray-800 mb-1">用户评价</h2>
+                    <h2 className="text-base font-semibold">用户评价</h2>
                     {total > 0 && (
-                        <div className="flex items-center gap-2 mt-1">
+                        <div className="flex items-center gap-2 mt-1 text-white/90">
                             {renderStars(Math.round(avgRating))}
-                            <span className="text-sm text-gray-600">
+                            <span className="text-sm">
                                 {avgRating.toFixed(1)} / 5.0
                             </span>
-                            <span className="text-sm text-gray-500">（{total} 条评价）</span>
+                            <span className="text-sm text-white/70">（{total} 条）</span>
                         </div>
                     )}
                 </div>
-                {isAuthenticated && !showForm && (
-                    <>
-                        {checkingBooking ? (
-                            <span className="text-sm text-gray-500">检查中...</span>
-                        ) : hasCompletedBooking ? (
-                            <button
-                                type="button"
-                                onClick={() => setShowForm(true)}
-                                className="px-4 py-2 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 transition-colors"
-                            >
-                                写评价
-                            </button>
-                        ) : (
-                            <span className="text-sm text-gray-500">完成订单后可评价</span>
-                        )}
-                    </>
+                {total > 0 && (
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setDrawerOpen(true);
+                            setActiveTag(null);
+                            if (reviews.length < total) fetchReviews(100, true);
+                        }}
+                        className="px-3 py-1.5 text-sm text-white border border-white/60 rounded-lg hover:bg-white/10 transition-colors"
+                    >
+                        查看更多评价
+                    </button>
                 )}
             </div>
 
-            {/* 评论表单 */}
-            {showForm && isAuthenticated && (
-                <form onSubmit={handleSubmit} className="mb-6 pb-6 border-b border-gray-200">
-                    <div className="mb-4">
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                            评分
-                        </label>
-                        {renderStars(formData.rating, true, (rating) =>
-                            setFormData({ ...formData, rating })
-                        )}
-                    </div>
-                    <div className="mb-4">
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                            评论内容
-                        </label>
-                        <textarea
-                            value={formData.comment}
-                            onChange={(e) =>
-                                setFormData({ ...formData, comment: e.target.value })
-                            }
-                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            rows="4"
-                            placeholder="分享您的入住体验..."
-                            disabled={submitting}
-                            required
-                        />
-                    </div>
-                    <div className="flex items-center gap-2">
+            {/* 优点标签：数量 >= 20 才显示，999+ 为上限 */}
+            {Object.keys(tagCounts).length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-3">
+                    <button
+                        type="button"
+                        onClick={() => setActiveTag(null)}
+                        className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                            !activeTag
+                                ? "bg-blue-100 text-blue-700"
+                                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                        }`}
+                    >
+                        所有点评 ({total})
+                    </button>
+                    {TAG_DEFINITIONS.filter((t) => tagCounts[t.key] != null).map((t) => (
                         <button
-                            type="submit"
-                            disabled={submitting}
-                            className="px-4 py-2 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                            {submitting ? "提交中..." : "提交评价"}
-                        </button>
-                        <button
+                            key={t.key}
                             type="button"
-                            onClick={() => {
-                                setShowForm(false);
-                                setFormData({ rating: 5, comment: "" });
-                            }}
-                            disabled={submitting}
-                            className="px-4 py-2 border border-gray-300 text-gray-700 text-sm rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+                            onClick={() => setActiveTag(activeTag === t.key ? null : t.key)}
+                            className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                                activeTag === t.key
+                                    ? "bg-blue-100 text-blue-700"
+                                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                            }`}
                         >
-                            取消
+                            {t.label} ({formatTagCount(tagCounts[t.key])})
                         </button>
-                    </div>
-                </form>
-            )}
-
-            {/* 评论列表 */}
-            {reviews.length === 0 ? (
-                <p className="text-gray-500 text-center py-8">
-                    {isAuthenticated ? "暂无评价，成为第一个评价的用户吧！" : "暂无评价"}
-                </p>
-            ) : (
-                <div className="space-y-4">
-                    {reviews.map((review) => (
-                        <div
-                            key={review._id}
-                            className="border-b border-gray-100 pb-4 last:border-b-0 last:pb-0"
-                        >
-                            <div className="flex items-start justify-between mb-2">
-                                <div className="flex-1">
-                                    <div className="flex items-center gap-2 mb-1">
-                                        <span className="font-medium text-gray-800">
-                                            {review.user?.username || "匿名用户"}
-                                        </span>
-                                        {renderStars(review.rating)}
-                                    </div>
-                                    <p className="text-sm text-gray-500">
-                                        {formatDate(review.createdAt)}
-                                    </p>
-                                </div>
-                            </div>
-                            <p className="text-gray-700 text-sm leading-relaxed mt-2 whitespace-pre-line">
-                                {review.comment}
-                            </p>
-                            {Array.isArray(review.images) && review.images.length > 0 && (
-                                <div className="mt-3 flex flex-wrap gap-2">
-                                    {review.images.slice(0, 3).map((img, idx) => (
-                                        <img
-                                            key={idx}
-                                            src={img}
-                                            alt="评价图片"
-                                            className="w-20 h-20 rounded-lg object-cover border border-gray-200"
-                                        />
-                                    ))}
-                                </div>
-                            )}
-                        </div>
                     ))}
                 </div>
+            )}
+
+            {/* 主区域：仅展示前几条，高度降低 */}
+            {reviews.length === 0 ? (
+                <p className="text-gray-500 text-sm py-4">暂无评价</p>
+            ) : (
+                <div className="space-y-2 max-h-[180px] overflow-y-auto">
+                    {(activeTag ? filteredReviews : previewReviews).slice(0, previewCount).map(renderReviewItem)}
+                </div>
+            )}
+
+            {/* 侧边抽屉：全部评价 */}
+            {drawerOpen && (
+                <>
+                    <div
+                        className="fixed inset-0 bg-black/40 z-40"
+                        onClick={() => setDrawerOpen(false)}
+                        aria-hidden="true"
+                    />
+                    <div className="fixed top-0 right-0 bottom-0 w-full max-w-md bg-white shadow-xl z-50 flex flex-col">
+                        <div className="flex items-center justify-between p-4 border-b border-gray-200">
+                            <h3 className="text-lg font-semibold text-gray-800">全部评价</h3>
+                            <button
+                                type="button"
+                                onClick={() => setDrawerOpen(false)}
+                                className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                        {/* 抽屉内标签筛选 */}
+                        <div className="flex flex-wrap gap-2 p-4 border-b border-gray-100 bg-gray-50">
+                            <button
+                                type="button"
+                                onClick={() => setActiveTag(null)}
+                                className={`px-2.5 py-1 rounded-full text-xs font-medium ${
+                                    !activeTag ? "bg-blue-100 text-blue-700" : "bg-white text-gray-600 border border-gray-200"
+                                }`}
+                            >
+                                所有 ({total})
+                            </button>
+                            {TAG_DEFINITIONS.filter((t) => tagCounts[t.key] != null).map((t) => (
+                                <button
+                                    key={t.key}
+                                    type="button"
+                                    onClick={() => setActiveTag(activeTag === t.key ? null : t.key)}
+                                    className={`px-2.5 py-1 rounded-full text-xs font-medium ${
+                                        activeTag === t.key ? "bg-blue-100 text-blue-700" : "bg-white text-gray-600 border border-gray-200"
+                                    }`}
+                                >
+                                    {t.label} ({formatTagCount(tagCounts[t.key])})
+                                </button>
+                            ))}
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                            {filteredReviews.length === 0 ? (
+                                <p className="text-gray-500 text-sm">暂无符合条件的评价</p>
+                            ) : (
+                                filteredReviews.map(renderReviewItem)
+                            )}
+                        </div>
+                    </div>
+                </>
             )}
         </div>
     );

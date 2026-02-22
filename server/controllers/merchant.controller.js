@@ -19,6 +19,7 @@ export const applyMerchant = async (req, res) => {
     const { applicantName, applicantPhone, hotelName, hotelAddress, hotelCity, hotelContact } = req.body;
     const files = req.files || {};
     const licenseFiles = files.license || [];
+    const starRatingFiles = files.starRating || [];
     const exteriorFiles = files.exterior || [];
     const interiorFiles = files.interior || [];
     if (!applicantName?.trim() || !applicantPhone?.trim() || !hotelName?.trim() || !hotelAddress?.trim() || !hotelCity?.trim() || !hotelContact?.trim()) {
@@ -26,6 +27,9 @@ export const applyMerchant = async (req, res) => {
     }
     if (!licenseFiles.length) {
       return res.status(400).json({ success: false, message: "请上传营业执照" });
+    }
+    if (!starRatingFiles.length) {
+      return res.status(400).json({ success: false, message: "请上传星级评定证明" });
     }
     if (!exteriorFiles.length) {
       return res.status(400).json({ success: false, message: "请上传至少一张酒店外部照片" });
@@ -36,6 +40,7 @@ export const applyMerchant = async (req, res) => {
 
     const baseUrl = process.env.PUBLIC_URL || `${req.protocol}://${req.get("host")}`;
     const licenseUrl = `${baseUrl}/uploads/merchant-apply/${licenseFiles[0].filename}`;
+    const starRatingCertificateUrl = `${baseUrl}/uploads/merchant-apply/${starRatingFiles[0].filename}`;
     const hotelExteriorImages = exteriorFiles.map((f) => `${baseUrl}/uploads/merchant-apply/${f.filename}`);
     const hotelInteriorImages = interiorFiles.map((f) => `${baseUrl}/uploads/merchant-apply/${f.filename}`);
 
@@ -51,6 +56,7 @@ export const applyMerchant = async (req, res) => {
       hotelCity: String(hotelCity).trim(),
       hotelContact: String(hotelContact).trim(),
       licenseUrl,
+      starRatingCertificateUrl,
       hotelExteriorImages,
       hotelInteriorImages,
     });

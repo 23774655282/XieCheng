@@ -1,262 +1,89 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { useAppContext } from "../../context/AppContext";
+import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
-import { MdOutlineCloudUpload } from "react-icons/md";
-import { IoClose } from "react-icons/io5";
-
-const MAX_HOTEL_IMAGES = 6;
+import { CiCircleList } from "react-icons/ci";
 
 function HotelInfo() {
     const { axios, getToken } = useAppContext();
+    const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
-    const [saving, setSaving] = useState(false);
-    const [form, setForm] = useState({
-        name: "",
-        nameEn: "",
-        address: "",
-        contact: "",
-        city: "",
-        starRating: 3,
-        openTime: "",
-        hotelIntro: "",
-        longitude: "",
-        latitude: "",
-    });
-    // 酒店展示图：每项为 { url }（已有）或 { file }（新选）
-    const [imageList, setImageList] = useState([]);
+    const [hotels, setHotels] = useState([]);
 
     useEffect(() => {
         (async () => {
             try {
                 const token = await getToken();
-                const { data } = await axios.get("/api/hotels/my", { headers: { Authorization: `Bearer ${token}` } });
-                if (data.success && data.hotel) {
-                    const h = data.hotel;
-                    setForm({
-                        name: h.name || "",
-                        nameEn: h.nameEn || "",
-                        address: h.address || "",
-                        contact: h.contact || "",
-                        city: h.city || "",
-                        starRating: h.starRating ?? 3,
-                        openTime: h.openTime ? h.openTime.slice(0, 10) : "",
-                        hotelIntro: h.hotelIntro || "",
-                        longitude: h.longitude != null ? String(h.longitude) : "",
-                        latitude: h.latitude != null ? String(h.latitude) : "",
-                    });
-                    setImageList((Array.isArray(h.images) ? h.images : []).map((url) => ({ url })));
+                const { data } = await axios.get("/api/hotels/owner/list", {
+                    headers: { Authorization: `Bearer ${token}` },
+                });
+                if (data.success) {
+                    setHotels(data.hotels || []);
+                } else {
+                    toast.error(data.message || "获取酒店列表失败");
                 }
             } catch (e) {
-                toast.error("获取酒店信息失败");
+                toast.error("获取酒店列表失败");
             } finally {
                 setLoading(false);
             }
         })();
-    }, []);
+    }, [axios, getToken]);
 
-    const addImages = useCallback((files) => {
-        const list = Array.from(files || []).filter((f) => f.type.startsWith("image/"));
-        setImageList((prev) => {
-            const next = [...prev];
-            for (const file of list) {
-                if (next.length >= MAX_HOTEL_IMAGES) break;
-                next.push({ file });
-            }
-            return next;
-        });
-    }, []);
-
-    const removeImage = useCallback((index) => {
-        setImageList((prev) => prev.filter((_, i) => i !== index));
-    }, []);
-
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        setSaving(true);
-        try {
-            const token = await getToken();
-            const formData = new FormData();
-            formData.append("name", form.name);
-            formData.append("nameEn", form.nameEn || "");
-            formData.append("address", form.address);
-            formData.append("contact", form.contact);
-            formData.append("city", form.city);
-            formData.append("starRating", String(form.starRating));
-            formData.append("openTime", form.openTime || "");
-            formData.append("hotelIntro", form.hotelIntro || "");
-            formData.append("latitude", form.latitude === "" ? "" : form.latitude);
-            formData.append("longitude", form.longitude === "" ? "" : form.longitude);
-            const existingUrls = imageList.filter((item) => item.url).map((item) => item.url);
-            const newFiles = imageList.filter((item) => item.file).map((item) => item.file);
-            formData.append("existingImages", JSON.stringify(existingUrls));
-            newFiles.forEach((file) => formData.append("images", file));
-            const { data } = await axios.put("/api/hotels/my", formData, {
-                headers: { Authorization: `Bearer ${token}` },
-            });
-            if (data.success) {
-                toast.success("保存成功，已实时更新");
-                if (data.hotel && Array.isArray(data.hotel.images)) {
-                    setImageList(data.hotel.images.map((url) => ({ url })));
-                }
-            } else {
-                toast.error(data.message || "保存失败");
-            }
-        } catch (e) {
-            toast.error("保存失败");
-        } finally {
-            setSaving(false);
-        }
+    const handleCardClick = (hotelId) => {
+        navigate(`/owner/hotels/${hotelId}/rooms`);
     };
 
-    if (loading) return <p>加载中...</p>;
+    if (loading) return <p className="text-gray-600">加载中...</p>;
+
+    if (hotels.length === 0) {
+        return (
+            <div className="w-full max-w-2xl">
+                <h1 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4">酒店信息</h1>
+                <p className="text-gray-600">您名下暂无酒店，请先完成商户申请并注册酒店。</p>
+            </div>
+        );
+    }
 
     return (
-        <div className="w-full max-w-2xl min-w-0">
-            <h1 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4">酒店信息录入 / 编辑</h1>
-            <form onSubmit={handleSubmit} className="space-y-4 bg-white p-4 sm:p-6 rounded-lg shadow">
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">酒店名（中文） *</label>
-                    <input
-                        type="text"
-                        value={form.name}
-                        onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                        className="w-full border rounded-lg p-2.5 sm:p-2 text-base"
-                        required
-                    />
-                </div>
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">酒店英文名</label>
-                    <input
-                        type="text"
-                        value={form.nameEn}
-                        onChange={(e) => setForm((f) => ({ ...f, nameEn: e.target.value }))}
-                        className="w-full border rounded p-2"
-                        placeholder="如：Sunrise Hotel"
-                    />
-                </div>
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">地址 *</label>
-                    <input
-                        type="text"
-                        value={form.address}
-                        onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
-                        className="w-full border rounded p-2"
-                        required
-                    />
-                </div>
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">联系电话 *</label>
-                    <input
-                        type="text"
-                        value={form.contact}
-                        onChange={(e) => setForm((f) => ({ ...f, contact: e.target.value }))}
-                        className="w-full border rounded p-2"
-                        required
-                    />
-                </div>
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">城市 *</label>
-                    <input
-                        type="text"
-                        value={form.city}
-                        onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))}
-                        className="w-full border rounded p-2"
-                        placeholder="请输入城市名称"
-                        required
-                    />
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">经度（地图定位）</label>
-                        <input
-                            type="text"
-                            value={form.longitude}
-                            onChange={(e) => setForm((f) => ({ ...f, longitude: e.target.value }))}
-                            className="w-full border rounded p-2"
-                            placeholder="如：116.4074"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">纬度（地图定位）</label>
-                        <input
-                            type="text"
-                            value={form.latitude}
-                            onChange={(e) => setForm((f) => ({ ...f, latitude: e.target.value }))}
-                            className="w-full border rounded p-2"
-                            placeholder="如：39.9042"
-                        />
-                    </div>
-                </div>
-                <p className="text-xs text-gray-500 -mt-2">先填经度再纬度，填写后酒店将显示在首页地图上，可留空。可从高德/百度地图拾取坐标。</p>
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">星级 (1-5)</label>
-                    <select
-                        value={form.starRating}
-                        onChange={(e) => setForm((f) => ({ ...f, starRating: Number(e.target.value) }))}
-                        className="w-full border rounded p-2"
+        <div className="w-full min-w-0">
+            <div className="flex items-center gap-2 mb-3">
+                <CiCircleList size={22} className="text-gray-600" />
+                <h1 className="text-lg sm:text-xl font-bold">酒店信息</h1>
+            </div>
+            <p className="text-gray-600 text-sm mb-6">点击酒店卡片进入房间管理</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                {hotels.map((h) => (
+                    <button
+                        key={h._id}
+                        type="button"
+                        onClick={() => handleCardClick(h._id)}
+                        className="text-left rounded-xl border border-gray-200 bg-white shadow-sm hover:shadow-md hover:border-blue-200 transition-all overflow-hidden group flex flex-col"
                     >
-                        {[1, 2, 3, 4, 5].map((n) => (
-                            <option key={n} value={n}>{n} 星</option>
-                        ))}
-                    </select>
-                </div>
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">开业时间</label>
-                    <input
-                        type="date"
-                        value={form.openTime}
-                        onChange={(e) => setForm((f) => ({ ...f, openTime: e.target.value }))}
-                        className="w-full border rounded p-2"
-                    />
-                </div>
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">酒店介绍</label>
-                    <textarea
-                        value={form.hotelIntro}
-                        onChange={(e) => setForm((f) => ({ ...f, hotelIntro: e.target.value }))}
-                        className="w-full border rounded p-2 h-28"
-                        placeholder="介绍酒店亮点、位置优势、服务特色等内容，将展示在用户端详情页。"
-                    />
-                </div>
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">酒店展示图（最多 {MAX_HOTEL_IMAGES} 张，将展示给用户）</label>
-                    <div className="flex flex-wrap gap-3">
-                        {imageList.map((item, index) => (
-                            <div key={index} className="relative w-28 h-28 rounded-lg border border-gray-200 overflow-hidden bg-gray-100">
-                                {item.url ? (
-                                    <img src={item.url} alt="" className="w-full h-full object-cover" />
-                                ) : item.file ? (
-                                    <img src={URL.createObjectURL(item.file)} alt="" className="w-full h-full object-cover" />
-                                ) : null}
-                                <button
-                                    type="button"
-                                    onClick={() => removeImage(index)}
-                                    className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80"
-                                    aria-label="删除"
-                                >
-                                    <IoClose size={14} />
-                                </button>
-                            </div>
-                        ))}
-                        {imageList.length < MAX_HOTEL_IMAGES && (
-                            <label className="w-28 h-28 rounded-lg border-2 border-dashed border-gray-300 flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-gray-50 transition-colors">
-                                <MdOutlineCloudUpload className="text-2xl text-gray-400" />
-                                <span className="text-xs text-gray-500 mt-1">上传</span>
-                                <input
-                                    type="file"
-                                    accept="image/*"
-                                    className="hidden"
-                                    multiple
-                                    onChange={(e) => addImages(e.target.files)}
+                        <div className="aspect-[4/3] bg-gray-100 overflow-hidden shrink-0">
+                            {h.images && h.images[0] ? (
+                                <img
+                                    src={h.images[0]}
+                                    alt={h.name}
+                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                                 />
-                            </label>
-                        )}
-                    </div>
-                </div>
-                <button type="submit" disabled={saving} className="w-full bg-blue-500 text-white py-3 sm:py-2 rounded-lg disabled:opacity-50 font-medium min-h-[44px]">
-                    {saving ? "保存中..." : "保存"}
-                </button>
-            </form>
+                            ) : (
+                                <div className="w-full h-full flex items-center justify-center text-gray-400">
+                                    <CiCircleList size={48} />
+                                </div>
+                            )}
+                        </div>
+                        <div className="flex-1 flex flex-col justify-center p-4 gap-1">
+                            <h3 className="font-semibold text-gray-900 truncate">{h.name || "未命名酒店"}</h3>
+                            <p className="text-sm text-gray-500 truncate">{h.city || h.address || "—"}</p>
+                            <div className="flex items-center gap-1 mt-2">
+                                <span className="text-amber-500 text-sm">{"★".repeat(h.starRating || 0)}</span>
+                                <span className="text-gray-400 text-xs">{h.starRating || 0} 星</span>
+                            </div>
+                        </div>
+                    </button>
+                ))}
+            </div>
         </div>
     );
 }

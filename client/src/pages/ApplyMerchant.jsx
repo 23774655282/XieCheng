@@ -23,6 +23,7 @@ function ApplyMerchant() {
     hotelContact: "",
   });
   const [licenseFile, setLicenseFile] = useState(null);
+  const [starRatingFile, setStarRatingFile] = useState(null);
   const [exteriorFiles, setExteriorFiles] = useState([]);
   const [interiorFiles, setInteriorFiles] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -67,13 +68,14 @@ function ApplyMerchant() {
     form.hotelCity.trim() &&
     form.hotelContact.trim() &&
     licenseFile &&
+    starRatingFile &&
     exteriorFiles.length > 0 &&
     interiorFiles.length > 0;
 
   async function handleSubmit(e) {
     e.preventDefault();
     if (!allFilled) {
-      toast.error("请填写所有必填信息并上传执照、酒店外部及内部照片");
+      toast.error("请填写所有必填信息并上传执照、星级评定证明、酒店外部及内部照片");
       return;
     }
     setLoading(true);
@@ -87,6 +89,7 @@ function ApplyMerchant() {
       fd.append("hotelCity", form.hotelCity.trim());
       fd.append("hotelContact", form.hotelContact.trim());
       fd.append("license", licenseFile);
+      fd.append("starRating", starRatingFile);
       exteriorFiles.forEach((f) => fd.append("exterior", f));
       interiorFiles.forEach((f) => fd.append("interior", f));
       const { data } = await axios.post("/api/merchant/apply", fd, {
@@ -111,23 +114,54 @@ function ApplyMerchant() {
   const inputCls = "w-full border border-gray-200 rounded-lg p-2";
   const labelCls = "block text-sm text-gray-700 mb-1";
 
-  const UploadBox = ({ id, onChange, multiple }) => (
-    <label
-      htmlFor={id}
-      className="flex flex-col items-center justify-center w-32 h-32 rounded-lg bg-gray-100 hover:bg-gray-200 cursor-pointer transition-colors"
-    >
-      <input
-        id={id}
-        type="file"
-        accept="image/*"
-        multiple={multiple}
-        className="hidden"
-        onChange={onChange}
-      />
-      <span className="text-3xl text-gray-500 leading-none mb-2">+</span>
-      <span className="text-sm text-gray-500">上传图片</span>
-    </label>
-  );
+  const boxCls = "w-32 h-32 rounded-lg bg-gray-100 overflow-hidden shrink-0 border border-gray-200";
+  const UploadBox = ({ id, onChange, multiple, preview, onRemove }) => {
+    const isMulti = Array.isArray(preview);
+    const files = isMulti ? preview : (preview ? [preview] : []);
+    const firstFile = files[0];
+    const restFiles = files.slice(1);
+    return (
+      <div className="flex flex-wrap gap-2">
+        <div className="relative">
+          <label
+            htmlFor={id}
+            className={`${boxCls} flex flex-col items-center justify-center hover:bg-gray-200 cursor-pointer transition-colors block`}
+          >
+            <input id={id} type="file" accept="image/*" multiple={multiple} className="hidden" onChange={onChange} />
+            {firstFile ? (
+              <img src={URL.createObjectURL(firstFile)} alt="" className="w-full h-full object-cover" />
+            ) : (
+              <>
+                <span className="text-3xl text-gray-500 leading-none mb-2">+</span>
+                <span className="text-sm text-gray-500">上传图片</span>
+              </>
+            )}
+          </label>
+          {firstFile && (
+            <button
+              type="button"
+              onClick={(e) => { e.preventDefault(); onRemove?.(0); }}
+              className="absolute top-1 right-1 w-6 h-6 rounded-full bg-red-500 text-white text-sm flex items-center justify-center hover:bg-red-600 shadow"
+            >
+              ×
+            </button>
+          )}
+        </div>
+        {restFiles.map((f, i) => (
+          <div key={i} className={`${boxCls} relative`}>
+            <img src={URL.createObjectURL(f)} alt="" className="w-full h-full object-cover" />
+            <button
+              type="button"
+              onClick={(e) => { e.preventDefault(); onRemove?.(i + 1); }}
+              className="absolute top-1 right-1 w-6 h-6 rounded-full bg-red-500 text-white text-sm flex items-center justify-center hover:bg-red-600 shadow"
+            >
+              ×
+            </button>
+          </div>
+        ))}
+      </div>
+    );
+  };
 
   return (
     <div className="fixed inset-0 overflow-y-auto overflow-x-hidden bg-gray-100 z-0">
@@ -207,7 +241,7 @@ function ApplyMerchant() {
                   placeholder="请输入酒店联系电话"
                 />
               </div>
-              <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
+              <div className="md:col-span-2 grid grid-cols-2 sm:grid-cols-4 gap-4 pt-1">
                 <div className="flex flex-col">
                   <span className={labelCls}>营业执照 <span className="text-red-500">*</span></span>
                   <div className="mt-1">
@@ -215,8 +249,21 @@ function ApplyMerchant() {
                       id="license-upload"
                       onChange={(e) => setLicenseFile(e.target.files?.[0] || null)}
                       multiple={false}
+                      preview={licenseFile}
+                      onRemove={() => setLicenseFile(null)}
                     />
-                    {licenseFile && <p className="text-xs text-gray-600 mt-1">已选：{licenseFile.name}</p>}
+                  </div>
+                </div>
+                <div className="flex flex-col">
+                  <span className={labelCls}>星级评定证明 <span className="text-red-500">*</span></span>
+                  <div className="mt-1">
+                    <UploadBox
+                      id="starRating-upload"
+                      onChange={(e) => setStarRatingFile(e.target.files?.[0] || null)}
+                      multiple={false}
+                      preview={starRatingFile}
+                      onRemove={() => setStarRatingFile(null)}
+                    />
                   </div>
                 </div>
                 <div className="flex flex-col">
@@ -226,8 +273,9 @@ function ApplyMerchant() {
                       id="exterior-upload"
                       onChange={(e) => setExteriorFiles(Array.from(e.target.files || []))}
                       multiple={true}
+                      preview={exteriorFiles}
+                      onRemove={(i) => setExteriorFiles((prev) => prev.filter((_, j) => j !== i))}
                     />
-                    {exteriorFiles.length > 0 && <p className="text-xs text-gray-600 mt-1">已选 {exteriorFiles.length} 张</p>}
                   </div>
                 </div>
                 <div className="flex flex-col">
@@ -237,8 +285,9 @@ function ApplyMerchant() {
                       id="interior-upload"
                       onChange={(e) => setInteriorFiles(Array.from(e.target.files || []))}
                       multiple={true}
+                      preview={interiorFiles}
+                      onRemove={(i) => setInteriorFiles((prev) => prev.filter((_, j) => j !== i))}
                     />
-                    {interiorFiles.length > 0 && <p className="text-xs text-gray-600 mt-1">已选 {interiorFiles.length} 张</p>}
                   </div>
                 </div>
               </div>
@@ -249,7 +298,7 @@ function ApplyMerchant() {
                 disabled={loading || !allFilled}
                 className="flex-1 py-2 px-3 text-sm bg-gray-800 hover:bg-gray-700 text-white rounded-full font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
-                {loading ? "提交中..." : "提交申请"}
+                {loading ? "提交中..." : "提交初审"}
               </button>
               <button
                 type="button"

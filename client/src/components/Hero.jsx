@@ -248,9 +248,9 @@ function Hero() {
             </div>
 
             <div className="relative flex md:flex-col max-md:gap-2 max-md:items-center w-full md:flex-shrink-0 md:w-[240px]" ref={guestsRef}>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 shrink-0">
                     <img src={assets.guestsIcon} alt="" className="w-4 h-4 flex-shrink-0 opacity-70" />
-                    <label className="mb-1.5 md:mb-0">人数</label>
+                    <label className="mb-1.5 md:mb-0 whitespace-nowrap">人数</label>
                 </div>
                 <div className="relative w-full min-w-0">
                 <button type="button" onClick={() => setGuestsOpen((o) => !o)} className={`flex items-center gap-2 rounded-lg border px-3 py-2 mt-2 text-sm outline-none w-full min-w-0 min-h-[56px] text-left cursor-pointer ${guestsOpen ? 'border-gray-700 bg-gray-100/50' : 'border-gray-200'}`}>

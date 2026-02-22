@@ -5,21 +5,22 @@ import { useAppContext } from '../../context/AppContext'
 import { useEffect, useState } from 'react';
 
 function Layout() {
-  const { isOwner, navigate } = useAppContext();
+  const { isOwner, authChecked, navigate } = useAppContext();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
+    if (!authChecked) return; // 等待认证加载完成，避免刷新时误判
     if (!isOwner) {
       navigate('/');
       alert('You are not authorized to access this page.');
     }
-  }, [isOwner, navigate]);
+  }, [authChecked, isOwner, navigate]);
 
   return (
     <div className="w-full min-h-screen bg-gray-100 flex flex-col">
       <NavBar onMenuClick={() => setSidebarOpen((o) => !o)} />
 
-      <div className="flex flex-1 relative">
+      <div className="flex flex-1 relative min-h-0 items-stretch">
         <SideBar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
         <div

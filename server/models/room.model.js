@@ -29,6 +29,8 @@ const roomSchema = new Schema({
     },
     /** 优惠百分比 0-100，与首页限时优惠档位对应（20/25/30 等），null 表示不参与优惠 */
     promoDiscount: { type: Number, default: null },
+    /** 该房型的房间数量（库存） */
+    roomCount: { type: Number, default: 1, min: 1 },
 },{timestamps: true});
 
 

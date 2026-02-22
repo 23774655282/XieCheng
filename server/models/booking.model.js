@@ -32,6 +32,11 @@ const bookingSchema = new Schema({
         type: Number,
         required: true,
     },
+    /** 预定确认单联系人信息 */
+    guestName: { type: String, default: null },
+    guestEmail: { type: String, default: null },
+    guestPhone: { type: String, default: null },
+    guestRemark: { type: String, default: null },
     status:{
         type: String,
         enum: ['pending', 'confirmed', 'cancelled'],
@@ -77,6 +82,14 @@ const bookingSchema = new Schema({
     /** 商家拒绝退款后，用户申请平台介入 */
     refundPlatformReviewRequested: { type: Boolean, default: false },
     refundPlatformReviewReason: { type: String, default: null },
+    /** 商家也可请求平台介入退款审核 */
+    merchantRequestedPlatformIntervention: { type: Boolean, default: false },
+    /** 入住状态：待入住、已入住、已退房，由商家修改 */
+    stayStatus: {
+        type: String,
+        enum: ['pending_checkin', 'checked_in', 'checked_out'],
+        default: 'pending_checkin',
+    },
 },{timestamps: true});
 
 

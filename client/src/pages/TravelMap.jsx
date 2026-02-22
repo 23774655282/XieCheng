@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { useNavigate } from 'react-router-dom';
@@ -70,12 +71,28 @@ const hotelIcon = new L.DivIcon({
   iconAnchor: [16, 16],
 });
 
+const targetIcon = new L.DivIcon({
+  className: 'target-marker',
+  html: `<span class="inline-flex items-center justify-center w-10 h-10 rounded-full bg-red-500 text-white shadow-lg border-2 border-white" style="font-size:20px">📍</span>`,
+  iconSize: [40, 40],
+  iconAnchor: [20, 20],
+});
+
 function TravelMap() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { axios } = useAppContext();
   const [searchInput, setSearchInput] = useState('');
-  const [mapCenter, setMapCenter] = useState(DEFAULT_CENTER);
-  const [mapZoom, setMapZoom] = useState(DEFAULT_ZOOM);
+  const latParam = searchParams.get('lat');
+  const lngParam = searchParams.get('lng');
+  const qParam = searchParams.get('q') || searchParams.get('address');
+  const hasLatLng = latParam != null && lngParam != null && !Number.isNaN(parseFloat(latParam)) && !Number.isNaN(parseFloat(lngParam));
+  const rawLat = hasLatLng ? parseFloat(latParam) : null;
+  const rawLng = hasLatLng ? parseFloat(lngParam) : null;
+  const targetPosition = hasLatLng ? wgs84ToGcj02(rawLat, rawLng) : null;
+  const initialCenter = targetPosition || DEFAULT_CENTER;
+  const [mapCenter, setMapCenter] = useState(initialCenter);
+  const [mapZoom, setMapZoom] = useState(hasLatLng ? 15 : DEFAULT_ZOOM);
   const [hotels, setHotels] = useState([]);
   const [selectedHotel, setSelectedHotel] = useState(null);
   const [loadingGeo, setLoadingGeo] = useState(false);
@@ -90,6 +107,32 @@ function TravelMap() {
       .then(({ data }) => data.success && data.cities && setCities(data.cities || []))
       .catch(() => {});
   }, [axios]);
+
+  // 当 URL 的 lat/lng 变化时，同步地图中心与缩放
+  useEffect(() => {
+    if (targetPosition) {
+      setMapCenter(targetPosition);
+      setMapZoom(15);
+    }
+  }, [targetPosition?.[0], targetPosition?.[1]]);
+
+  // 支持通过 ?q=地址 或 ?address=地址 定位，与首页旅行地图使用相同 geocodeAmap API
+  useEffect(() => {
+    const q = (qParam || '').trim();
+    if (!q) return;
+    (async () => {
+      setLoadingGeo(true);
+      try {
+        const coords = await geocodeAmap(import.meta.env.VITE_AMAP_KEY, q);
+        if (coords) {
+          setMapCenter([coords.lat, coords.lng]);
+          setMapZoom(15);
+        }
+      } finally {
+        setLoadingGeo(false);
+      }
+    })();
+  }, [qParam]);
 
   const fetchHotels = useCallback(async (bounds, city, star) => {
     if (!bounds || typeof bounds.minLat !== 'number') return;
@@ -212,6 +255,9 @@ function TravelMap() {
             <AttributionNoLeafletPrefix />
             <MapFlyTo center={mapCenter} zoom={mapZoom} />
             <MapBoundsListener onBoundsChange={onBoundsChange} />
+            {targetPosition && (
+              <Marker position={targetPosition} icon={targetIcon} zIndexOffset={1000} />
+            )}
             {hotels.map((h) => {
               const [lat, lng] = wgs84ToGcj02(h._lat, h._lng);
               return (

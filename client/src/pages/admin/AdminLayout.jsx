@@ -70,6 +70,15 @@ function AdminLayout() {
                         >
                             商户申请审核
                         </NavLink>
+                        <NavLink
+                            to="/admin/room-edits"
+                            onClick={() => setSidebarOpen(false)}
+                            className={({ isActive }) =>
+                                `flex items-center gap-2 p-3 rounded-lg min-h-[44px] ${isActive ? "bg-blue-500 text-white" : "text-gray-700 hover:bg-gray-300 active:bg-gray-400"}`
+                            }
+                        >
+                            房间修改审核
+                        </NavLink>
                     </nav>
                 </aside>
                 <main className="flex-1 min-w-0 p-3 sm:p-6 overflow-auto" onClick={() => setSidebarOpen(false)}>

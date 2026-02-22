@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { addDays } from 'date-fns';
-import { formatLocalDate, getTodayLocal, parseLocalDate } from '../utils/dateUtils';
+import { addDays, differenceInCalendarDays } from 'date-fns';
+import { formatLocalDate, formatDateShort, formatDateSuffix, getTodayLocal, parseLocalDate } from '../utils/dateUtils';
 import { useParams, useSearchParams } from 'react-router-dom';
-import { facilityIcons, roomCommonData } from '../assets/assets';
+import { facilityIcons, roomCommonData, assets } from '../assets/assets';
 import { FaLocationArrow } from 'react-icons/fa';
 import { useAppContext } from '../context/AppContext';
 import toast from 'react-hot-toast';
@@ -34,26 +34,35 @@ function getRoomTypeLabel(roomType) {
 function RoomDetail() {
     const { id } = useParams();
     const [searchParams] = useSearchParams();
-    const { rooms, getToken, axios, navigate } = useAppContext();
+    const { rooms, getToken, axios, navigate, user: userInfo, role } = useAppContext();
     const [room, setRoom] = useState(null);
     const [mainImage, setMainImage] = useState(null);
     const [lightboxOpen, setLightboxOpen] = useState(false);
     const [lightboxImage, setLightboxImage] = useState(null);
 
-    const [checkInDate, setCheckInDate] = useState(null);
-    const [checkOutDate, setCheckOutDate] = useState(null);
-    const [guests, setGuests] = useState(1);
-    const [isAvailable, setIsAvailable] = useState(false);
+    const [checkIn, setCheckIn] = useState('');
+    const [checkOut, setCheckOut] = useState('');
+    const [adults, setAdults] = useState(2);
+    const [children, setChildren] = useState(0);
+    const [roomCount, setRoomCount] = useState(1);
     const [roomNotFound, setRoomNotFound] = useState(false);
+    const [guestName, setGuestName] = useState('');
+    const [guestEmail, setGuestEmail] = useState('');
+    const [guestPhone, setGuestPhone] = useState('');
+    const [guestRemark, setGuestRemark] = useState('');
 
-    // 从 URL 预填首页带来的入住/退房日期，避免用户二次选择
+    // 从 URL 预填首页带来的入住/退房/人数，与首页搜索栏一致
     useEffect(() => {
-        const cIn = searchParams.get("checkIn");
-        const cOut = searchParams.get("checkOut");
-        if (cIn) setCheckInDate(cIn);
-        if (cOut) setCheckOutDate(cOut);
+        const cIn = searchParams.get("checkIn") || getTodayLocal();
+        const cOut = searchParams.get("checkOut") || (cIn ? formatLocalDate(addDays(parseLocalDate(cIn), 1)) : '');
+        setCheckIn(cIn);
+        setCheckOut(cOut);
         const a = searchParams.get("adults");
-        if (a && Number(a) >= 1) setGuests(Number(a));
+        if (a != null && Number(a) >= 1) setAdults(Number(a));
+        const c = searchParams.get("children");
+        if (c != null && Number(c) >= 0) setChildren(Number(c));
+        const r = searchParams.get("rooms");
+        if (r != null && Number(r) >= 1) setRoomCount(Number(r));
     }, [searchParams]);
 
     useEffect(() => {
@@ -77,38 +86,33 @@ function RoomDetail() {
         });
     }, [rooms, id]);
 
+    const isOwnHotel = role === 'merchant' && room?.hotel?.owner && userInfo?._id && String(room.hotel.owner) === String(userInfo._id);
+    useEffect(() => {
+        if (isOwnHotel) toast('不能预定自己名下的酒店哦');
+    }, [isOwnHotel]);
 
-    async function checkAvailability() {
-        try {
-            if (checkInDate >= checkOutDate) {
-                toast.error("入住日期应早于退房日期");
-                return;
-            }
-
-            const {data} = await axios.post("/api/bookings/check-availability",{
-                room:id,
-                checkInDate,
-                checkOutDate
-            })
-
-            if (data.success) {
-                if (data.isAvail) {
-                    setIsAvailable(true);
-                    toast.success("该日期可选")
-                }else{
-                    setIsAvailable(false)
-                    toast.error("该日期不可选")
-                }
-            }else{
-                toast.error(data.message)
-            }
-        } catch (error) {
-            toast.error("查询可用性失败")
-        }
-    }
+    useEffect(() => {
+        if (userInfo?.username) setGuestName(userInfo.username);
+    }, [userInfo?.username]);
 
     async function handleSubmit(e) {
         e.preventDefault();
+        if (!checkIn || !checkOut || checkIn >= checkOut) {
+            toast.error("请选择入住与退房日期，且入住应早于退房");
+            return;
+        }
+        if (!guestName?.trim()) {
+            toast.error("请填写姓名");
+            return;
+        }
+        if (!guestEmail?.trim()) {
+            toast.error("请填写邮箱");
+            return;
+        }
+        if (!guestPhone?.trim()) {
+            toast.error("请填写手机号");
+            return;
+        }
         const token = await getToken();
         if (!token) {
             toast.error("请先登录后再预订");
@@ -116,15 +120,17 @@ function RoomDetail() {
             return;
         }
         try {
-            if (!isAvailable) {
-                return checkAvailability();
-            }
+            const guests = adults + children;
             const { data } = await axios.post("/api/bookings/book", {
                 room: id,
-                checkInDate,
-                checkOutDate,
+                checkInDate: checkIn,
+                checkOutDate: checkOut,
                 guests,
-                paymentMethod: "Pay At Hotel"
+                paymentMethod: "Pay At Hotel",
+                guestName: guestName?.trim() || undefined,
+                guestEmail: guestEmail?.trim() || undefined,
+                guestPhone: guestPhone?.trim() || undefined,
+                guestRemark: guestRemark?.trim() || undefined,
             }, {
                 headers: {
                     Authorization: `Bearer ${token}`
@@ -155,7 +161,7 @@ function RoomDetail() {
                 <p className="text-gray-600 text-lg">房间不存在或已下架</p>
                 <button
                     onClick={() => { navigate("/rooms"); scrollTo(0, 0); }}
-                    className="mt-4 bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-full"
+                    className="mt-4 bg-black hover:bg-gray-800 text-white px-6 py-2 rounded-full"
                 >
                     查看全部房间
                 </button>
@@ -183,8 +189,8 @@ function RoomDetail() {
 
             {/* Images：点击可放大展示 */}
             <div className="flex flex-col lg:flex-row gap-4 mb-10">
-                <div className="flex-1 cursor-zoom-in" onClick={() => { setLightboxImage(mainImage); setLightboxOpen(true); }}>
-                    <img src={mainImage} alt="房间主图" className="rounded-xl object-cover w-full h-64 md:h-96 shadow" />
+                <div className="flex-1 cursor-zoom-in rounded-xl overflow-hidden" style={{ boxShadow: '0 0 20px rgba(0,0,0,0.12)' }} onClick={() => { setLightboxImage(mainImage); setLightboxOpen(true); }}>
+                    <img src={mainImage} alt="房间主图" className="rounded-xl object-cover w-full h-64 md:h-96" />
                 </div>
                 <div className="flex flex-row lg:flex-col gap-3 overflow-x-auto">
                     {room.images.length > 1 && room.images.map((image, index) => (
@@ -243,53 +249,105 @@ function RoomDetail() {
                 <p className="text-xl font-bold text-gray-800">{room.pricePerNight} 元 <span className="text-sm text-gray-500">/晚</span></p>
             </div>
 
-            {/* Booking Form */}
+            {/* Booking Form - 与首页搜索栏一致（无目的地）；管理员不可订，商家不可订自己的酒店 */}
+            {(() => {
+                const isAdmin = role === 'admin';
+                const isOwnHotel = role === 'merchant' && room?.hotel?.owner && userInfo?._id && String(room.hotel.owner) === String(userInfo._id);
+                const canBook = !isAdmin && !isOwnHotel;
+                if (!canBook) {
+                    return (
+                        <div className="bg-white rounded-2xl p-6 mb-12" style={{ boxShadow: '0 0 20px rgba(0,0,0,0.12)' }}>
+                            <h3 className="text-lg font-semibold mb-4 text-gray-800">立即预订</h3>
+                            <p className="text-gray-600 py-4">
+                                {isAdmin ? '管理员不能预订酒店' : '不能预定自己名下的酒店哦'}
+                            </p>
+                        </div>
+                    );
+                }
+                const nights = checkIn && checkOut ? differenceInCalendarDays(parseLocalDate(checkOut), parseLocalDate(checkIn)) : 0;
+                return (
             <form
                 onSubmit={handleSubmit}
-                className="bg-white rounded-2xl shadow-md p-6 mb-12">
-                <h3 className='text-lg font-semibold mb-4 text-gray-800'>立即预订</h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                    <div className="flex flex-col">
-                        <label htmlFor="checkInDate" className="text-sm text-gray-600 mb-1">入住日期</label>
-                        <input type="date" id="checkInDate" required className="border rounded-lg p-2 outline-none"
-                        onChange={(e)=>setCheckInDate(e.target.value)}
-                        value={checkInDate ?? ''}
-                        min={getTodayLocal()}
-                        
-                        />
+                className="bg-white rounded-2xl p-6 mb-12"
+                style={{ boxShadow: '0 0 20px rgba(0,0,0,0.12)' }}
+            >
+                <h3 className="text-lg font-semibold mb-4 text-gray-800">预定信息确认单</h3>
+                {/* 第一行：日期、人数、酒店、房型（只读） */}
+                <div className="rounded-lg bg-gray-50 border border-gray-200 px-4 py-3 mb-4 space-y-2">
+                    <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-gray-700">
+                        <span>入住：{checkIn ? formatDateShort(parseLocalDate(checkIn)) + (formatDateSuffix(parseLocalDate(checkIn)) || '') : '—'}</span>
+                        <span>退房：{checkOut ? formatDateShort(parseLocalDate(checkOut)) + (formatDateSuffix(parseLocalDate(checkOut)) || '') : '—'}</span>
+                        <span>{nights}晚</span>
+                        <span>{adults}位成人 · {children}名儿童 · {roomCount}间客房</span>
                     </div>
-                    <div className="flex flex-col">
-                        <label htmlFor="checkOutDate" className="text-sm text-gray-600 mb-1">退房日期</label>
-                        <input
-                            type="date"
-                            id="checkOutDate"
-                            required
-                            className="border rounded-lg p-2 outline-none"
-                            onChange={(e) => setCheckOutDate(e.target.value)}
-                            value={checkOutDate ?? ''}
-                            min={checkInDate ? formatLocalDate(addDays(parseLocalDate(checkInDate), 1)) : getTodayLocal()}
-                            />
-                    </div>
-                    <div className="flex flex-col">
-                        <label htmlFor="guests" className="text-sm text-gray-600 mb-1">人数</label>
-                        <input type="number" id="guests" required min={1} step={1} className="border rounded-lg p-2 outline-none"
-                         placeholder="1"
-                        onChange={(e) => {
-                            const v = parseInt(e.target.value, 10);
-                            setGuests((Number.isInteger(v) && v >= 1) ? v : 1);
-                        }}
-                        value={guests} />
+                    <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-gray-700">
+                        <span>酒店：{room?.hotel?.name || '—'}</span>
+                        <span>房型：{room ? getRoomTypeLabel(room.roomType) : '—'}</span>
                     </div>
                 </div>
-                <button type='submit' className="bg-blue-600 text-white px-5 py-2 rounded-lg hover:bg-blue-700 transition">
-                    {isAvailable ? "立即预订" : "查询可订"}
-                </button>
+                <div className="space-y-4 mb-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">姓名 <span className="text-red-500">*</span></label>
+                        <input
+                            type="text"
+                            value={guestName}
+                            onChange={(e) => setGuestName(e.target.value)}
+                            placeholder="请输入姓名"
+                            className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-800 focus:border-gray-800"
+                            required
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">邮箱 <span className="text-red-500">*</span></label>
+                        <input
+                            type="email"
+                            value={guestEmail}
+                            onChange={(e) => setGuestEmail(e.target.value)}
+                            placeholder="请输入邮箱"
+                            className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-800 focus:border-gray-800"
+                            required
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">手机号 <span className="text-red-500">*</span></label>
+                        <input
+                            type="tel"
+                            value={guestPhone}
+                            onChange={(e) => setGuestPhone(e.target.value)}
+                            placeholder="请输入手机号"
+                            className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-800 focus:border-gray-800"
+                            required
+                        />
+                    </div>
+                </div>
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">备注（选填）</label>
+                    <textarea
+                        value={guestRemark}
+                        onChange={(e) => setGuestRemark(e.target.value)}
+                        placeholder="如有特殊需求可在此填写"
+                        rows={2}
+                        className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-800 focus:border-gray-800 resize-none"
+                    />
+                </div>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-3">
+                    <button type="submit" className="bg-black text-white px-5 py-2 rounded-lg hover:bg-gray-800 transition">
+                        确认预订
+                    </button>
+                    <button type="button" onClick={() => navigate(-1)} className="bg-white border border-gray-300 text-gray-700 px-5 py-2 rounded-lg hover:bg-gray-50 transition">
+                        返回
+                    </button>
+                </div>
             </form>
+                );
+            })()}
 
             {/* Room Specs */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
                 {roomCommonData.map((spec, index) => (
-                    <div key={index} className="flex items-start gap-4 bg-white rounded-xl shadow p-4">
+                    <div key={index} className="flex items-start gap-4 bg-white rounded-xl p-4" style={{ boxShadow: '0 0 20px rgba(0,0,0,0.12)' }}>
                         <img src={spec.icon} alt={spec.title} className="w-10 h-10" />
                         <div>
                             <h3 className="font-semibold text-gray-800">{spec.title}</h3>
@@ -300,7 +358,7 @@ function RoomDetail() {
             </div>
 
             {/* Room Story */}
-            <div className="bg-gray-50 p-6 rounded-xl shadow mb-8">
+            <div className="bg-gray-50 p-6 rounded-xl mb-8" style={{ boxShadow: '0 0 20px rgba(0,0,0,0.12)' }}>
                 <p className="text-gray-700 leading-relaxed text-sm md:text-base">
                     在我们的客房中享受舒适与雅致，无论是商务出行还是休闲度假，均可享受完善设施、宽敞空间与贴心服务。立即预订，开启难忘入住体验。
                 </p>

@@ -30,6 +30,14 @@ export function getTodayLocal() {
 
 const WEEKDAY_ZH = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
 
+/** 格式化为 "02.13" 紧凑月日 */
+export function formatDateCompact(d) {
+  if (!d || !(d instanceof Date) || isNaN(d)) return '';
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${m}.${day}`;
+}
+
 /** 格式化为 "2月13日" 仅月日 */
 export function formatDateShort(d) {
   if (!d || !(d instanceof Date) || isNaN(d)) return '';

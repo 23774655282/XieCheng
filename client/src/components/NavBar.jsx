@@ -132,20 +132,20 @@ const NavBar = () => {
                 )}
             </div>
 
-            {/* Mobile Left Side Login / Logout (仅在非登录页显示) */}
+            {/* Mobile Left Side Login / Logout (仅在非登录页显示，样式与 PC 端一致) */}
             <div className="flex items-center gap-2 md:hidden">
                 {!isLoginPath && (
                     isAuthenticated ? (
                         <button
                             onClick={logout}
-                            className="px-3 py-1.5 rounded-md bg-black text-white text-xs font-medium"
+                            className={`border px-4 py-1 text-sm font-light rounded-full cursor-pointer transition-all ${isScrolled ? 'text-gray-700 border-gray-700 hover:bg-gray-100' : 'text-white border-white hover:bg-white/10'}`}
                         >
                             退出登录
                         </button>
                     ) : (
                         <button
                             onClick={() => navigate('/login')}
-                            className="px-3 py-1.5 rounded-md bg-black text-white text-xs font-medium"
+                            className={`px-6 py-2 text-sm font-medium rounded-full transition-all duration-500 ${isScrolled ? 'bg-gray-800 text-white hover:bg-gray-700' : 'bg-white text-gray-800 hover:bg-white/90'}`}
                         >
                             登录
                         </button>
@@ -157,8 +157,16 @@ const NavBar = () => {
                 </button>
             </div>
 
-            {/* Mobile Menu */}
-            <div className={`fixed top-0 left-0 w-full h-screen bg-white flex flex-col items-center justify-center gap-6 text-gray-800 text-base font-medium transition-transform duration-500 ${isMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+            {/* Mobile Menu Backdrop */}
+            {isMenuOpen && (
+                <div
+                    className="fixed inset-0 bg-black/30 z-40 md:hidden"
+                    onClick={() => setIsMenuOpen(false)}
+                    aria-hidden="true"
+                />
+            )}
+            {/* Mobile Menu Drawer */}
+            <div className={`fixed top-0 left-0 h-screen w-[280px] max-w-[85vw] bg-white flex flex-col items-center justify-center gap-6 text-gray-800 text-base font-medium shadow-xl z-50 transition-transform duration-300 ease-out md:hidden ${isMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
                 
                 <button onClick={() => setIsMenuOpen(false)} aria-label="关闭菜单" className="absolute top-4 right-4">
                     <IoClose className="h-6.5" />

@@ -145,6 +145,20 @@ export const registerHotel = async (req, res) => {
     }
 };
 
+/** 商户：获取名下所有酒店列表（精简信息，用于酒店卡片展示） */
+export const getOwnerHotels = async (req, res) => {
+    try {
+        const hotels = await Hotel.find({ owner: req.user._id })
+            .select("name nameEn address city starRating images hotelIntro")
+            .sort({ updatedAt: -1 })
+            .lean();
+        return res.status(200).json({ success: true, hotels });
+    } catch (error) {
+        console.error("Error fetching owner hotels:", error);
+        res.status(500).json({ success: false, message: "error in fetching hotels" });
+    }
+};
+
 /** 商户：获取自己的酒店（用于编辑） */
 export const getMyHotel = async (req, res) => {
     try {

@@ -1,12 +1,18 @@
 import Hotel from "../models/hotel.model.js";
 import Room from "../models/room.model.js";
+import RoomEditApplication from "../models/roomEditApplication.model.js";
 import OpenAI from "openai";
 
 export const createRoom = async (req, res) => {
     try {
-        const { roomType, pricePerNight, amenities, promoDiscount } = req.body;
+        const { roomType, pricePerNight, amenities, promoDiscount, roomCount, hotelId } = req.body;
 
-        const hotel = await Hotel.findOne({ owner: req.user._id });
+        let hotel;
+        if (hotelId) {
+            hotel = await Hotel.findOne({ _id: hotelId, owner: req.user._id });
+        } else {
+            hotel = await Hotel.findOne({ owner: req.user._id });
+        }
 
         if (!hotel) {
             return res.status(404).json({
@@ -31,6 +37,7 @@ export const createRoom = async (req, res) => {
 
 
         const promoVal = promoDiscount !== undefined && promoDiscount !== "" ? Math.min(100, Math.max(0, Number(promoDiscount))) : null;
+        const countVal = roomCount != null && Number(roomCount) >= 1 ? Math.max(1, Math.floor(Number(roomCount))) : 1;
         const newRoom = await Room.create({
             hotel: hotel._id,
             roomType,
@@ -38,6 +45,7 @@ export const createRoom = async (req, res) => {
             amenties: x,
             images,
             promoDiscount: promoVal === 0 ? null : promoVal,
+            roomCount: countVal,
         });
 
         console.log(newRoom)
@@ -155,7 +163,13 @@ export const getRoomById = async (req, res) => {
 
 export const getOwnerRooms = async (req, res) => {
     try {
-        const hotel = await Hotel.findOne({ owner: req.user._id });
+        const hotelId = req.query.hotelId;
+        let hotel;
+        if (hotelId) {
+            hotel = await Hotel.findOne({ _id: hotelId, owner: req.user._id });
+        } else {
+            hotel = await Hotel.findOne({ owner: req.user._id });
+        }
 
         if (!hotel) {
             return res.status(404).json({
@@ -202,7 +216,7 @@ export const getOwnerRoomById = async (req, res) => {
 };
 
 
-/** 商户编辑房间：仅当酒店已被管理员下线（status === 'offline'）时允许 */
+/** 商户编辑房间：编辑后需管理员审核（当酒店在线时创建待审核修改，离线时直接更新） */
 export const updateRoom = async (req, res) => {
     try {
         const { id } = req.params;
@@ -210,34 +224,57 @@ export const updateRoom = async (req, res) => {
         if (!hotel) {
             return res.status(404).json({ success: false, message: "Hotel not found" });
         }
-        if (hotel.status !== "offline") {
-            return res.status(403).json({
-                success: false,
-                message: "仅当酒店被管理员下线后才可以编辑房间",
-            });
-        }
         const room = await Room.findOne({ _id: id, hotel: hotel._id.toString() });
         if (!room) {
             return res.status(404).json({ success: false, message: "Room not found or not your room" });
         }
         const { roomType, pricePerNight, amenities, promoDiscount } = req.body;
-        if (roomType !== undefined) room.roomType = roomType;
-        if (pricePerNight !== undefined) room.pricePerNight = Number(pricePerNight);
+        const baseUrl = process.env.PUBLIC_URL || `${req.protocol}://${req.get("host")}`;
+
+        if (hotel.status === "offline") {
+            // 酒店下线时直接更新
+            if (roomType !== undefined) room.roomType = roomType;
+            if (pricePerNight !== undefined) room.pricePerNight = Number(pricePerNight);
+            if (amenities !== undefined) {
+                const list = typeof amenities === "string" ? JSON.parse(amenities) : amenities;
+                room.amenties = Array.isArray(list) ? list : [];
+            }
+            if (promoDiscount !== undefined && promoDiscount !== "") {
+                const val = Math.min(100, Math.max(0, Number(promoDiscount)));
+                room.promoDiscount = val === 0 ? null : val;
+            } else if (promoDiscount === "" || promoDiscount === null) room.promoDiscount = null;
+            if (req.body.roomCount !== undefined) {
+                const c = Math.max(1, Math.floor(Number(req.body.roomCount) || 1));
+                room.roomCount = c;
+            }
+            if (req.files && req.files.length > 0) {
+                room.images = req.files.map((f) => `${baseUrl}/uploads/rooms/${f.filename}`);
+            }
+            await room.save({ validateBeforeSave: false });
+            return res.status(200).json({ success: true, message: "房间已更新", room });
+        }
+
+        // 酒店在线时提交待审核
+        const updates = {};
+        if (roomType !== undefined) updates.roomType = roomType;
+        if (pricePerNight !== undefined) updates.pricePerNight = Number(pricePerNight);
         if (amenities !== undefined) {
             const list = typeof amenities === "string" ? JSON.parse(amenities) : amenities;
-            room.amenties = Array.isArray(list) ? list : [];
+            updates.amenties = Array.isArray(list) ? list : [];
         }
-        if (promoDiscount !== undefined && promoDiscount !== "") {
-            const val = Math.min(100, Math.max(0, Number(promoDiscount)));
-            room.promoDiscount = val === 0 ? null : val;
+        if (promoDiscount !== undefined) {
+            updates.promoDiscount = promoDiscount === "" || promoDiscount == null ? null : Math.min(100, Math.max(0, Number(promoDiscount)));
         }
-        if (req.files && req.files.length > 0) {
-            const baseUrl = process.env.PUBLIC_URL || `${req.protocol}://${req.get("host")}`;
-            room.images = req.files.map((f) => `${baseUrl}/uploads/rooms/${f.filename}`);
-        }
-        await room.save({ validateBeforeSave: false });
-        // 编辑时至少保留原有图片或新图：若未传新图则上面未改 room.images
-        return res.status(200).json({ success: true, message: "Room updated successfully", room });
+        if (req.body.roomCount !== undefined) updates.roomCount = Math.max(1, Math.floor(Number(req.body.roomCount) || 1));
+        if (req.files && req.files.length > 0) updates.images = req.files.map((f) => `${baseUrl}/uploads/rooms/${f.filename}`);
+
+        await RoomEditApplication.create({
+            room: id,
+            hotel: hotel._id,
+            ...updates,
+            status: "pending",
+        });
+        return res.status(200).json({ success: true, message: "修改已提交，等待管理员审核", needsApproval: true });
     } catch (error) {
         console.error("Error updating room:", error);
         return res.status(500).json({ success: false, message: "error in updating room" });
@@ -300,6 +337,117 @@ export const toggleRoomAvailability = async (req, res) => {
             success: false,
             message: "error in toggling room availability"
         });
+    }
+};
+
+/** 商户更新房间优惠幅度（0-100，null 表示无优惠） */
+export const updatePromoDiscount = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { promoDiscount } = req.body;
+        const hotel = await Hotel.findOne({ owner: req.user._id });
+        if (!hotel) return res.status(404).json({ success: false, message: "Hotel not found" });
+        const room = await Room.findOne({ _id: id, hotel: hotel._id.toString() });
+        if (!room) return res.status(404).json({ success: false, message: "Room not found or not your room" });
+        const val = promoDiscount == null || promoDiscount === "" ? null : Math.min(100, Math.max(0, Math.floor(Number(promoDiscount) || 0)));
+        room.promoDiscount = val === 0 ? null : val;
+        await room.save({ validateBeforeSave: false });
+        return res.status(200).json({ success: true, message: "优惠幅度已更新", room });
+    } catch (error) {
+        console.error("Error updating promo discount:", error);
+        return res.status(500).json({ success: false, message: "更新优惠幅度失败" });
+    }
+};
+
+/** 商户更新房间数量（无需酒店下线，可直接修改） */
+export const updateRoomCount = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { roomCount } = req.body;
+        const hotel = await Hotel.findOne({ owner: req.user._id });
+        if (!hotel) {
+            return res.status(404).json({ success: false, message: "Hotel not found" });
+        }
+        const room = await Room.findOne({ _id: id, hotel: hotel._id.toString() });
+        if (!room) {
+            return res.status(404).json({ success: false, message: "Room not found or not your room" });
+        }
+        const c = Math.max(1, Math.floor(Number(roomCount) || 1));
+        room.roomCount = c;
+        await room.save({ validateBeforeSave: false });
+        return res.status(200).json({ success: true, message: "房间数量已更新", room });
+    } catch (error) {
+        console.error("Error updating room count:", error);
+        return res.status(500).json({
+            success: false,
+            message: "更新房间数量失败"
+        });
+    }
+};
+
+/** 管理员：列出待审核的房间修改申请 */
+export const listRoomEditApplications = async (req, res) => {
+    try {
+        const apps = await RoomEditApplication.find({ status: "pending" })
+            .populate("room")
+            .populate({ path: "hotel", model: "Hotel", select: "name" })
+            .sort({ createdAt: -1 })
+            .lean();
+        return res.status(200).json({ success: true, applications: apps });
+    } catch (error) {
+        console.error("Error listing room edit applications:", error);
+        return res.status(500).json({ success: false, message: "获取列表失败" });
+    }
+};
+
+/** 管理员：通过房间修改申请 */
+export const approveRoomEdit = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const app = await RoomEditApplication.findById(id);
+        if (!app || app.status !== "pending") {
+            return res.status(404).json({ success: false, message: "申请不存在或已处理" });
+        }
+        const room = await Room.findById(app.room);
+        if (!room) {
+            return res.status(404).json({ success: false, message: "房间不存在" });
+        }
+        if (app.roomType !== undefined) room.roomType = app.roomType;
+        if (app.pricePerNight !== undefined) room.pricePerNight = app.pricePerNight;
+        if (app.amenties !== undefined) room.amenties = app.amenties;
+        if (app.promoDiscount !== undefined) room.promoDiscount = app.promoDiscount;
+        if (app.roomCount !== undefined) room.roomCount = app.roomCount;
+        if (app.images && app.images.length > 0) room.images = app.images;
+        await room.save({ validateBeforeSave: false });
+        app.status = "approved";
+        app.reviewedAt = new Date();
+        app.reviewedBy = req.user._id;
+        await app.save();
+        return res.status(200).json({ success: true, message: "已通过", room });
+    } catch (error) {
+        console.error("Error approving room edit:", error);
+        return res.status(500).json({ success: false, message: "操作失败" });
+    }
+};
+
+/** 管理员：驳回房间修改申请 */
+export const rejectRoomEdit = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { reason } = req.body || {};
+        const app = await RoomEditApplication.findById(id);
+        if (!app || app.status !== "pending") {
+            return res.status(404).json({ success: false, message: "申请不存在或已处理" });
+        }
+        app.status = "rejected";
+        app.rejectReason = reason || "未填写原因";
+        app.reviewedAt = new Date();
+        app.reviewedBy = req.user._id;
+        await app.save();
+        return res.status(200).json({ success: true, message: "已驳回" });
+    } catch (error) {
+        console.error("Error rejecting room edit:", error);
+        return res.status(500).json({ success: false, message: "操作失败" });
     }
 };
 

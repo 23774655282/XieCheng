@@ -189,6 +189,24 @@ function MerchantApplications() {
                               />
                             </div>
                           )}
+                          {app.starRatingCertificateUrl && (
+                            <div className="col-span-2">
+                              <span className="text-gray-500 block mb-1">星级评定证明：</span>
+                              <a
+                                href={app.starRatingCertificateUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-600 hover:underline"
+                              >
+                                查看星级评定证明
+                              </a>
+                              <img
+                                src={app.starRatingCertificateUrl}
+                                alt="星级评定证明"
+                                className="mt-2 max-h-40 rounded border border-gray-200"
+                              />
+                            </div>
+                          )}
                           {(app.hotelExteriorImages?.length > 0 || app.hotelInteriorImages?.length > 0) && (
                             <div className="col-span-2 space-y-3">
                               {app.hotelExteriorImages?.length > 0 && (

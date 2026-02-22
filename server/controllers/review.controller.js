@@ -66,27 +66,17 @@ export const createReview = async (req, res) => {
                 });
             }
         } else {
-            // 如果没有传入 bookingId，查找用户是否已完成过该酒店的订单
-            linkedBooking = await Booking.findOne({
-                user: userId,
-                hotel: hotelId,
-                isCompleted: true,
-                status: { $ne: 'cancelled' },
-            });
-            if (!linkedBooking) {
-                return res.status(403).json({
-                    success: false,
-                    message: "只有完成过该酒店订单的用户才能评价",
-                });
-            }
-        }
-
-        // 检查用户是否已经评论过该酒店（可选，如果需要限制每个用户只能评论一次）
-        const existingReview = await Review.findOne({ user: userId, hotel: hotelId });
-        if (existingReview) {
             return res.status(400).json({
                 success: false,
-                message: "您已经评论过该酒店了",
+                message: "评价需关联订单，请从订单详情提交",
+            });
+        }
+
+        // 每笔订单只能评价一次：若已传入订单且该订单已评价，则拒绝
+        if (linkedBooking && linkedBooking.hasReview) {
+            return res.status(400).json({
+                success: false,
+                message: "该订单已评价过",
             });
         }
 
@@ -130,6 +120,26 @@ export const createReview = async (req, res) => {
     }
 };
 
+/** 用户端：获取酒店评论统计（评分 + 点评数），用于列表页 */
+export const getHotelReviewStats = async (req, res) => {
+    try {
+        const { hotelId } = req.params;
+        if (!hotelId || !mongoose.Types.ObjectId.isValid(hotelId)) {
+            return res.status(400).json({ success: false, message: "无效的酒店ID" });
+        }
+        const total = await Review.countDocuments({ hotel: String(hotelId) });
+        const result = await Review.aggregate([
+            { $match: { hotel: String(hotelId) } },
+            { $group: { _id: null, avgRating: { $avg: "$rating" } } },
+        ]);
+        const avgRating = result.length > 0 ? Number(result[0].avgRating.toFixed(1)) : 0;
+        return res.status(200).json({ success: true, avgRating, total });
+    } catch (error) {
+        console.error("Error fetching hotel review stats:", error);
+        return res.status(500).json({ success: false, message: "获取评论统计失败" });
+    }
+};
+
 /** 用户端：获取酒店的评论列表 */
 export const getHotelReviews = async (req, res) => {
     try {
@@ -152,7 +162,8 @@ export const getHotelReviews = async (req, res) => {
             });
         }
 
-        const skip = (Math.max(1, Number(page)) - 1) * Math.min(50, Math.max(1, Number(limit)));
+        const limitNum = Math.min(200, Math.max(1, Number(limit)));
+        const skip = (Math.max(1, Number(page)) - 1) * limitNum;
         
         // 确保 hotelId 是有效的 ObjectId
         if (!mongoose.Types.ObjectId.isValid(hotelId)) {
@@ -166,7 +177,7 @@ export const getHotelReviews = async (req, res) => {
             .populate("user", "username email")
             .sort({ createdAt: -1 })
             .skip(skip)
-            .limit(Math.min(50, Math.max(1, Number(limit))));
+            .limit(limitNum);
 
         const total = await Review.countDocuments({ hotel: hotelId });
 
