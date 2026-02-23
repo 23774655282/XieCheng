@@ -130,11 +130,11 @@ function Hero() {
           ))}
         </div>
       )}
-      <div className='relative z-10 flex flex-col items-center justify-center'>
+      <div className='relative z-10 w-full flex flex-col items-center justify-center'>
         <h1 className='md:text-5xl font-bold text-center  text-white'>找到您的理想住宿</h1>
         <p className='font-playfair md:text-lg text-center text-white mt-4'>发现最适合您的酒店与体验。</p>
         <div
-         className="w-full max-w-5xl mx-auto"
+         className="w-full max-w-[1124px] mx-auto flex flex-col self-stretch"
          onClick={(e) => {
            if (!e.target.closest('input, button, a, label, [role="option"], [role="listbox"], ul, li, .react-datepicker-wrapper')) {
              document.activeElement?.blur?.();
@@ -149,7 +149,7 @@ function Hero() {
         >
         <form
          onSubmit={handleSumbit}
-         className='bg-white/80 backdrop-blur-sm text-gray-500 rounded-lg px-6 py-5 flex flex-col md:flex-row md:items-end max-md:items-start gap-3 max-md:mx-auto my-2 shadow-lg w-full'>
+         className='bg-white/80 backdrop-blur-sm text-gray-500 rounded-lg px-6 py-5 flex flex-col md:flex-row md:items-end max-md:items-start gap-3 my-2 shadow-lg w-full min-w-0'>
             <div className="relative w-full md:flex-shrink-0 md:w-[240px]" ref={destinationRef}>
                 <div className='flex items-center gap-2'>
                     <SlCalender/>
@@ -248,9 +248,9 @@ function Hero() {
             </div>
 
             <div className="relative flex md:flex-col max-md:gap-2 max-md:items-center w-full md:flex-shrink-0 md:w-[240px]" ref={guestsRef}>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 shrink-0">
                     <img src={assets.guestsIcon} alt="" className="w-4 h-4 flex-shrink-0 opacity-70" />
-                    <label className="mb-1.5 md:mb-0">人数</label>
+                    <label className="mb-1.5 md:mb-0 whitespace-nowrap">人数</label>
                 </div>
                 <div className="relative w-full min-w-0">
                 <button type="button" onClick={() => setGuestsOpen((o) => !o)} className={`flex items-center gap-2 rounded-lg border px-3 py-2 mt-2 text-sm outline-none w-full min-w-0 min-h-[56px] text-left cursor-pointer ${guestsOpen ? 'border-gray-700 bg-gray-100/50' : 'border-gray-200'}`}>

@@ -3,6 +3,7 @@ export const getUserData = (req, res) => {
         const u = req.user;
         res.status(200).json({
             success: true,
+            _id: u._id?.toString?.(),
             role: u.role,
             merchantApplicationStatus: u.merchantApplicationStatus || 'none',
             recentSerachCities: u.recentSerachCities,

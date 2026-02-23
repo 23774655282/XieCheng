@@ -43,7 +43,6 @@ function Login() {
         if (redirectTo && redirectTo.startsWith("/") && !redirectTo.startsWith("//")) {
           navigate(redirectTo, { replace: true });
         } else if (role === "admin") navigate("/admin", { replace: true });
-        else if (role === "merchant") navigate("/owner", { replace: true });
         else navigate("/", { replace: true });
       } else {
         toast.error(data.message || "登录失败");
@@ -90,7 +89,6 @@ function Login() {
         if (redirectTo && redirectTo.startsWith("/") && !redirectTo.startsWith("//")) {
           navigate(redirectTo, { replace: true });
         } else if (role === "admin") navigate("/admin", { replace: true });
-        else if (role === "merchant") navigate("/owner", { replace: true });
         else navigate("/", { replace: true });
       } else {
         toast.error(data.message || "登录失败");

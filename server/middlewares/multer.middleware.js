@@ -67,6 +67,7 @@ export const uploadMerchantApply = multer({
   storage: merchantApplyStorage,
 }).fields([
   { name: "license", maxCount: 1 },
+  { name: "starRating", maxCount: 1 },
   { name: "exterior", maxCount: 5 },
   { name: "interior", maxCount: 5 },
 ]);

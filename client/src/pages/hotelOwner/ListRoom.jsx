@@ -1,27 +1,114 @@
 import Title from "../../components/Title"
-import  {  useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import toast from "react-hot-toast"
 import { useAppContext } from "../../context/AppContext"
-import { useNavigate } from "react-router-dom"
+import { useNavigate, useParams } from "react-router-dom"
+import { IoAdd } from "react-icons/io5"
+
+function RoomCountStepper({ value, roomId, onUpdate, axios, getToken }) {
+  const [count, setCount] = useState(value)
+  const [updating, setUpdating] = useState(false)
+  useEffect(() => { setCount(value) }, [value])
+  async function saveCount(newVal) {
+    const v = Math.max(1, Math.floor(Number(newVal) || 1))
+    setCount(v)
+    setUpdating(true)
+    try {
+      const token = await getToken()
+      const { data } = await axios.patch(`/api/rooms/${roomId}/room-count`, { roomCount: v }, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      if (data.success) {
+        toast.success("房间数量已更新")
+        onUpdate?.()
+      } else {
+        toast.error(data.message || "更新失败")
+        setCount(value)
+      }
+    } catch (err) {
+      toast.error("更新房间数量失败")
+      setCount(value)
+    } finally {
+      setUpdating(false)
+    }
+  }
+  return (
+    <div className="inline-flex items-center border border-gray-300 rounded-lg overflow-hidden bg-white">
+      <button
+        type="button"
+        onClick={() => !updating && saveCount(count - 1)}
+        disabled={updating || count <= 1}
+        className="w-8 h-8 flex items-center justify-center border-r border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+      >
+        −
+      </button>
+      <input
+        type="number"
+        min={1}
+        value={count}
+        onChange={(e) => setCount(e.target.value)}
+        onBlur={(e) => {
+          const v = e.target.value
+          const n = Math.max(1, Math.floor(Number(v) || 1))
+          setCount(n)
+          if (n !== value) saveCount(n)
+        }}
+        onKeyDown={(e) => e.key === "Enter" && e.target.blur()}
+        className="w-10 h-8 text-center text-sm font-medium text-gray-900 border-none outline-none bg-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+      />
+      <button
+        type="button"
+        onClick={() => !updating && saveCount(count + 1)}
+        disabled={updating}
+        className="w-8 h-8 flex items-center justify-center border-l border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        +
+      </button>
+    </div>
+  )
+}
+
+function PromoDiscountStepper({ value, roomId, onUpdate, axios, getToken }) {
+  const [discount, setDiscount] = useState(value ?? "")
+  const [updating, setUpdating] = useState(false)
+  useEffect(() => { setDiscount(value != null ? value : "") }, [value])
+  async function saveDiscount(val) {
+    const v = val === "" || val == null ? null : Math.min(100, Math.max(0, Math.floor(Number(val) || 0)))
+    setDiscount(v ?? "")
+    setUpdating(true)
+    try {
+      const token = await getToken()
+      const { data } = await axios.patch(`/api/rooms/${roomId}/promo-discount`, { promoDiscount: v }, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      if (data.success) onUpdate?.()
+      else setDiscount(value ?? "")
+    } catch {
+      setDiscount(value ?? "")
+    } finally {
+      setUpdating(false)
+    }
+  }
+  return (
+    <div className="inline-flex items-center border border-gray-300 rounded-lg overflow-hidden bg-white">
+      <button type="button" onClick={() => !updating && saveDiscount(discount === "" ? 0 : Math.max(0, (Number(discount) || 0) - 1))} disabled={updating} className="w-7 h-7 flex items-center justify-center border-r border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-50">−</button>
+      <input type="number" min={0} max={100} placeholder="—" value={discount} onChange={(e) => setDiscount(e.target.value === "" ? "" : e.target.value)} onBlur={(e) => { const v = e.target.value; if (v === "") { saveDiscount(null); return } const n = Math.min(100, Math.max(0, Math.floor(Number(v) || 0))); setDiscount(n); if (n !== (value ?? -1)) saveDiscount(n) }} className="w-9 h-7 text-center text-sm text-gray-900 border-none outline-none bg-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+      <span className="pr-1 text-gray-500 text-xs">%</span>
+      <button type="button" onClick={() => !updating && saveDiscount(Math.min(100, (Number(discount) || 0) + 1))} disabled={updating} className="w-7 h-7 flex items-center justify-center border-l border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-50">+</button>
+    </div>
+  )
+}
 
 function ListRoom() {
   const [rooms, setRooms] = useState([]);
-  const [hotelStatus, setHotelStatus] = useState(null);
+  const [hotel, setHotel] = useState(null);
   const [roomToDelete, setRoomToDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
 
   const { axios, getToken, user } = useAppContext();
   const navigate = useNavigate();
-  const canEditRooms = hotelStatus === "offline";
-
-  const amenityLabelMap = {
-    'Free Wifi': '免费 Wi-Fi',
-    'Free Breakfast': '免费早餐',
-    'Room Service': '客房服务',
-    'Mountain View': '山景',
-    'Pool Access': '泳池使用',
-  };
-
+  const { hotelId } = useParams();
+  const hasPreReview = hotel && (hotel.applicantName || hotel.licenseUrl);
   const roomTypeToCn = {
     'Single Bed': '单人间',
     'Double Bed': '双人间',
@@ -39,12 +126,12 @@ function ListRoom() {
   async function fetchRooms() {
     try {
       const token = await getToken()
-      const { data } = await axios.get("/api/rooms/owner", {
+      const url = hotelId ? `/api/rooms/owner?hotelId=${hotelId}` : "/api/rooms/owner"
+      const { data } = await axios.get(url, {
         headers: { Authorization: `Bearer ${token}` }
       })
       if (data.success) {
         setRooms(data.rooms || [])
-        toast.success("房间列表获取成功")
       } else {
         toast.error(data.message || "获取房间列表失败")
       }
@@ -54,19 +141,21 @@ function ListRoom() {
     }
   }
 
-  async function fetchHotelStatus() {
+  async function fetchHotel() {
+    if (!hotelId) return;
     try {
-      const token = await getToken()
-      const { data } = await axios.get("/api/hotels/my", {
-        headers: { Authorization: `Bearer ${token}` }
-      })
-      if (data.success && data.hotel) setHotelStatus(data.hotel.status || null)
+      const token = await getToken();
+      const { data } = await axios.get(`/api/hotels/owner/${hotelId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (data.success) setHotel(data.hotel);
+      else setHotel(null);
     } catch {
-      setHotelStatus(null)
+      setHotel(null);
     }
   }
 
-async function toggleRoomAvailability(roomId) {
+  async function toggleRoomAvailability(roomId) {
   try {
     const token = await getToken(); 
     const { data } = await axios.post('/api/rooms/toogle-avalibility', {
@@ -118,32 +207,137 @@ async function toggleRoomAvailability(roomId) {
 
   useEffect(() => {
     if (user) {
-      fetchRooms()
-      fetchHotelStatus()
+      fetchRooms();
+      if (hotelId) fetchHotel();
     }
-  }, [user])
+  }, [user, hotelId])
+
+  const goToAddRoom = () => {
+    const target = hotelId ? `/owner/hotels/${hotelId}/add-room` : "/owner/add-room"
+    navigate(target)
+  }
+
+  const goBackToHotels = () => {
+    navigate("/owner/hotel-info")
+  }
 
   return (
     <div>
-      <Title
-        align="left"
-        font="outfit"
-        title="房间列表"
-        subtitle="管理您名下酒店的所有房间"
-      />
-      {hotelStatus && hotelStatus !== "offline" && (
-        <p className="text-amber-600 text-sm mb-2">仅当酒店被管理员下线后，才可编辑房间信息。</p>
+      {/* 预审单信息（不可修改） - 仅预审通过的酒店展示 */}
+      {hotelId && hasPreReview && (
+        <div className="mb-6 p-4 bg-gray-50 rounded-xl border border-gray-200">
+          <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+            <span>预审单信息</span>
+            <span className="text-xs font-normal text-amber-600">（不可修改）</span>
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
+            {hotel.applicantName && (
+              <div>
+                <span className="text-gray-500">申请人姓名</span>
+                <p className="font-medium text-gray-800">{hotel.applicantName}</p>
+              </div>
+            )}
+            {hotel.applicantPhone && (
+              <div>
+                <span className="text-gray-500">申请人手机号</span>
+                <p className="font-medium text-gray-800">{hotel.applicantPhone}</p>
+              </div>
+            )}
+            {hotel.name && (
+              <div>
+                <span className="text-gray-500">酒店名称</span>
+                <p className="font-medium text-gray-800">{hotel.name}</p>
+              </div>
+            )}
+            {hotel.city && (
+              <div>
+                <span className="text-gray-500">酒店所在城市</span>
+                <p className="font-medium text-gray-800">{hotel.city}</p>
+              </div>
+            )}
+            {hotel.address && (
+              <div className="sm:col-span-2">
+                <span className="text-gray-500">酒店地址</span>
+                <p className="font-medium text-gray-800">{hotel.address}</p>
+              </div>
+            )}
+            {hotel.contact && (
+              <div>
+                <span className="text-gray-500">酒店联系电话</span>
+                <p className="font-medium text-gray-800">{hotel.contact}</p>
+              </div>
+            )}
+          </div>
+          <div className="mt-4 flex flex-wrap gap-4">
+            {hotel.licenseUrl && (
+              <div>
+                <span className="block text-gray-500 text-xs mb-1">营业执照</span>
+                <a href={hotel.licenseUrl} target="_blank" rel="noopener noreferrer" className="inline-block">
+                  <img src={hotel.licenseUrl} alt="营业执照" className="h-20 w-auto rounded border border-gray-200 object-cover" />
+                </a>
+              </div>
+            )}
+            {hotel.starRatingCertificateUrl && (
+              <div>
+                <span className="block text-gray-500 text-xs mb-1">星级评定证明</span>
+                <a href={hotel.starRatingCertificateUrl} target="_blank" rel="noopener noreferrer" className="inline-block">
+                  <img src={hotel.starRatingCertificateUrl} alt="星级评定证明" className="h-20 w-auto rounded border border-gray-200 object-cover" />
+                </a>
+              </div>
+            )}
+            {hotel.images && hotel.images.length > 0 && (
+              <div className="w-full">
+                <span className="block text-gray-500 text-xs mb-2">酒店照片</span>
+                <div className="flex flex-wrap gap-2">
+                  {hotel.images.map((img, i) => (
+                    <a key={i} href={img} target="_blank" rel="noopener noreferrer" className="inline-block">
+                      <img src={img} alt="" className="h-20 w-24 object-cover rounded border border-gray-200" />
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       )}
+
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+        <div>
+          <Title
+            align="left"
+            font="outfit"
+            title="房间列表"
+            subtitle={hotelId ? "管理该酒店下的所有房间" : "管理您名下酒店的所有房间"}
+          />
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={goBackToHotels}
+            className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm"
+          >
+            返回酒店列表
+          </button>
+          <button
+            type="button"
+            onClick={goToAddRoom}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 text-sm font-medium"
+          >
+            <IoAdd size={18} />
+            新增
+          </button>
+        </div>
+      </div>
       <div className='w-full overflow-x-auto -mx-1 px-1 border border-gray-300 rounded-lg max-h-[36rem] sm:max-h-[42rem] overflow-y-auto'>
-        <table className='w-full min-w-[520px] text-left'>
+        <table className='w-full min-w-[480px] text-left'>
               <thead className='bg-gray-100 sticky top-0 z-10'>
                 <tr>
                   <th className='p-2 sm:p-4 text-left text-gray-600 font-medium text-xs sm:text-sm'>图片</th>
-                  <th className='p-2 sm:p-4 text-left text-gray-600 font-medium text-xs sm:text-sm'>房型</th>
-                  <th className='p-2 sm:p-4 text-left text-gray-600 font-medium text-xs sm:text-sm hidden md:table-cell'>设施</th>
-                  <th className='p-2 sm:p-4 text-left text-gray-600 font-medium text-xs sm:text-sm'>价格/晚</th>
-                  <th className='p-2 sm:p-4 text-left text-gray-600 font-medium text-xs sm:text-sm'>优惠</th>
-                  <th className='p-2 sm:p-4 text-left text-gray-600 font-medium text-xs sm:text-sm'>操作</th>
+                  <th className='p-2 sm:p-4 text-left text-gray-600 font-medium text-xs sm:text-sm w-24 sm:w-32'>房型</th>
+                  <th className='p-2 sm:p-4 text-left text-gray-600 font-medium text-xs sm:text-sm'>预定价格/晚</th>
+                  <th className='p-2 sm:p-4 text-left text-gray-600 font-medium text-xs sm:text-sm min-w-[4rem] whitespace-nowrap'>优惠</th>
+                  <th className='p-2 sm:p-4 text-left text-gray-600 font-medium text-xs sm:text-sm'>数量</th>
+                  <th className='p-2 sm:p-4 text-left text-gray-600 font-medium text-xs sm:text-sm'>状态</th>
                 </tr>
             </thead>
             <tbody className="text-sm">
@@ -158,52 +352,58 @@ async function toggleRoomAvailability(roomId) {
                         />
                       )}
                     </td>
-                    <td className="p-2 sm:p-4 font-medium text-gray-800 text-xs sm:text-sm">
+                    <td className="p-2 sm:p-4 font-medium text-gray-800 text-xs sm:text-sm w-24 sm:w-32">
                       {getRoomTypeLabel(room.roomType)}
-                    </td>
-                    <td className="p-2 sm:p-4 text-gray-600 hidden md:table-cell">
-                      {room.amenties?.map((a, i) =>
-                        (amenityLabelMap[a] || a) + (i < room.amenties.length - 1 ? '，' : '')
-                      )}
                     </td>
                     <td className="p-2 sm:p-4 text-gray-600 text-xs sm:text-sm">
                       {room.pricePerNight} 元/晚
                     </td>
-                    <td className="p-2 sm:p-4 text-gray-600 text-xs sm:text-sm">
-                      {room.promoDiscount != null && room.promoDiscount > 0 ? (
-                        <span className="font-medium text-green-600">{room.promoDiscount}%</span>
-                      ) : (
-                        <span className="text-gray-400">—</span>
-                      )}
+                    <td className="p-2 sm:p-4 text-gray-600 text-xs sm:text-sm min-w-[4rem]">
+                      <PromoDiscountStepper
+                        value={room.promoDiscount ?? null}
+                        roomId={room._id}
+                        onUpdate={() => fetchRooms()}
+                        axios={axios}
+                        getToken={getToken}
+                      />
                     </td>
                     <td className="p-2 sm:p-4">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <label className="inline-flex items-center cursor-pointer">
-                          <input type="checkbox" 
+                      <RoomCountStepper
+                        value={room.roomCount ?? 1}
+                        roomId={room._id}
+                        onUpdate={() => fetchRooms()}
+                        axios={axios}
+                        getToken={getToken}
+                      />
+                    </td>
+                    <td className="p-2 sm:p-4">
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                        <label className="inline-flex items-center cursor-pointer shrink-0">
+                          <input type="checkbox"
                             onChange={() => toggleRoomAvailability(room._id)}
                             className="form-checkbox h-5 w-5 text-blue-600 transition duration-150 ease-in-out"
                             checked={room.isAvailable}
                           />
-                          <span className="ml-2 text-gray-700">
+                          <span className="ml-2 text-gray-700 text-xs sm:text-sm">
                             {room.isAvailable ? '在售' : '已下架'}
                           </span>
                         </label>
-                        <button
-                          type="button"
-                          onClick={() => canEditRooms && navigate(`/owner/edit-room/${room._id}`)}
-                          disabled={!canEditRooms}
-                          title={!canEditRooms ? "仅当酒店被管理员下线后可编辑房间" : "编辑"}
-                          className="px-2.5 py-1.5 min-h-[36px] text-xs sm:text-sm text-blue-600 border border-blue-300 rounded hover:bg-blue-50 active:bg-blue-100 transition disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-                        >
-                          编辑
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => openDeleteConfirm(room)}
-                          className="px-2.5 py-1.5 min-h-[36px] text-xs sm:text-sm text-red-600 border border-red-300 rounded hover:bg-red-50 active:bg-red-100 transition"
-                        >
-                          删除
-                        </button>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/owner/edit-room/${room._id}`, { state: { hotelId: room.hotel?._id || room.hotel } })}
+                            className="px-2.5 py-1.5 text-xs sm:text-sm bg-blue-500 text-white rounded hover:bg-blue-600 transition"
+                          >
+                            编辑
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openDeleteConfirm(room)}
+                            className="px-2.5 py-1.5 text-xs sm:text-sm bg-red-500 text-white rounded hover:bg-red-600 transition"
+                          >
+                            删除
+                          </button>
+                        </div>
                       </div>
                     </td>
                   </tr>

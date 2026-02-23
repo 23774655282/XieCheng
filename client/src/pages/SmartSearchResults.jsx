@@ -2,6 +2,8 @@ import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { facilityIcons } from '../assets/assets';
 import Title from '../components/Title';
+import { useAppContext } from '../context/AppContext';
+import toast from 'react-hot-toast';
 
 const roomTypeToCn = { 'Single Bed': '单人间', 'Double Bed': '双人间', 'Luxury Room': '豪华房', 'Family Suite': '家庭套房' };
 const getRoomTypeLabel = (roomType) => roomTypeToCn[roomType] || roomType;
@@ -23,6 +25,7 @@ const facilityLabelMap = {
 function SmartSearchResults() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { user: userInfo, role } = useAppContext();
   const state = location.state;
   const criteria = state?.criteria;
   const rooms = Array.isArray(state?.rooms) ? state.rooms : [];
@@ -89,13 +92,27 @@ function SmartSearchResults() {
                       <span className="text-sm text-gray-500 ml-1">约 {room.pricePerNight * nights} 元 / {nights} 晚</span>
                     )}
                   </p>
+                  {(() => {
+                    const isAdmin = role === 'admin';
+                    const ownerId = room?.hotel?.owner?._id || room?.hotel?.owner;
+                    const isOwnHotel = role === 'merchant' && ownerId && userInfo?._id && String(ownerId) === String(userInfo._id);
+                    const canBook = !isAdmin && !isOwnHotel;
+                    return (
                   <button
                     type="button"
-                    onClick={() => { navigate(`/rooms/${room._id}`); window.scrollTo(0, 0); }}
-                    className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
+                    onClick={() => {
+                      if (isOwnHotel) { toast('不能预定自己名下的酒店哦'); return; }
+                      if (isAdmin) { toast('管理员不能预订酒店'); return; }
+                      if (canBook) { navigate(`/rooms/${room._id}`); window.scrollTo(0, 0); }
+                    }}
+                    disabled={false}
+                    title={!canBook ? (role === 'admin' ? '管理员不能预订酒店' : '不能预订自己的酒店') : undefined}
+                    className={`px-3 py-1.5 text-sm rounded-lg ${canBook ? 'bg-black text-white hover:bg-gray-800' : 'bg-gray-400 text-gray-200 cursor-not-allowed'}`}
                   >
                     预订
                   </button>
+                    );
+                  })()}
                 </div>
               </div>
             </div>

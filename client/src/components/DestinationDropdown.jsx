@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { domesticHotCities, overseasHotCities, popularPlacesByCity, getPopularPlacesForCity } from '../assets/assets';
 import { matchKeyword, formatRecentSubtitle } from '../utils/destinationSearch';
 
@@ -50,6 +51,7 @@ function TrashIcon({ className = 'w-4 h-4' }) {
 }
 
 export default function DestinationDropdown({
+  compact = false,
   destination,
   recentSearchRecords = [],
   clearRecentSearch,
@@ -112,16 +114,31 @@ export default function DestinationDropdown({
     more.length > 0 ||
     hotels.length > 0;
 
+  const gridCols = compact ? 'grid-cols-5' : 'grid-cols-3 sm:grid-cols-4 md:grid-cols-5';
+
   if (!hasAny) {
     return (
-      <div className="absolute top-full left-0 mt-1 w-full md:min-w-[480px] md:max-w-[95vw] py-4 px-4 rounded-lg bg-white/95 backdrop-blur-sm border border-gray-200/80 shadow-xl z-[100]">
+      <div
+        className={
+          compact
+            ? 'fixed left-0 top-[7.5rem] w-full py-4 px-4 bg-white/95 backdrop-blur-sm border-b border-gray-200/80 shadow-xl z-[100]'
+            : 'absolute top-full left-0 mt-1 w-full md:min-w-[480px] md:max-w-[95vw] py-4 px-4 rounded-lg bg-white/95 backdrop-blur-sm border border-gray-200/80 shadow-xl z-[100]'
+        }
+      >
         <p className="text-sm text-gray-500">未找到匹配的目的地或酒店</p>
       </div>
     );
   }
 
-  return (
-    <div className="absolute top-full left-0 mt-1 w-full md:min-w-[480px] md:max-w-[95vw] py-3 max-h-[70vh] overflow-y-auto rounded-lg bg-white/95 backdrop-blur-sm border border-gray-200/80 shadow-xl z-[100]">
+  const content = (
+    <div
+      data-destination-dropdown
+      className={
+        compact
+          ? 'fixed left-0 top-[7.5rem] w-full max-h-[calc(100vh-7.5rem)] overflow-y-auto py-4 px-4 bg-white/95 backdrop-blur-sm border-b border-gray-200/80 shadow-xl z-[100]'
+          : 'absolute top-full left-0 mt-1 w-full md:min-w-[480px] md:max-w-[95vw] py-3 max-h-[70vh] overflow-y-auto rounded-lg bg-white/95 backdrop-blur-sm border border-gray-200/80 shadow-xl z-[100]'
+      }
+    >
       {popularPlaces.length > 0 && (
         <div className="mb-4 px-4">
           <p className="text-sm font-medium text-gray-700 mb-2">当地热门地点推荐</p>
@@ -202,7 +219,7 @@ export default function DestinationDropdown({
       {domestic.length > 0 && !kw && (
         <div className="mb-4 px-4">
           <p className="text-sm font-medium text-gray-700 mb-2">国内热门城市</p>
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
+          <div className={`grid ${gridCols} gap-2`}>
             {domestic.map((c) => (
               <button
                 key={c}
@@ -220,7 +237,7 @@ export default function DestinationDropdown({
       {overseas.length > 0 && !kw && (
         <div className="mb-4 px-4">
           <p className="text-sm font-medium text-gray-700 mb-2">海外热门城市</p>
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
+          <div className={`grid ${gridCols} gap-2`}>
             {overseas.map((c) => (
               <button
                 key={c}
@@ -238,20 +255,50 @@ export default function DestinationDropdown({
       {more.length > 0 && (
         <div className="px-4">
           <p className="text-sm font-medium text-gray-700 mb-2">更多城市</p>
-          <ul className="space-y-0.5">
-            {more.map((c) => (
-              <li
-                key={c}
-                role="option"
-                className="px-3 py-2 text-sm text-gray-700 cursor-pointer rounded-lg hover:bg-blue-50"
-                onClick={() => handleSelect(c)}
-              >
-                {c}
-              </li>
-            ))}
-          </ul>
+          {compact ? (
+            <div className={`grid ${gridCols} gap-2`}>
+              {more.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => handleSelect(c)}
+                  className="px-2 py-1.5 text-sm text-gray-700 rounded-lg hover:bg-blue-50 text-center"
+                >
+                  {c}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <ul className="space-y-0.5">
+              {more.map((c) => (
+                <li
+                  key={c}
+                  role="option"
+                  className="px-3 py-2 text-sm text-gray-700 cursor-pointer rounded-lg hover:bg-blue-50"
+                  onClick={() => handleSelect(c)}
+                >
+                  {c}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
     </div>
   );
+
+  if (compact) {
+    return createPortal(
+      <>
+        <div
+          className="fixed inset-0 top-14 z-[99] bg-transparent"
+          onClick={(e) => { e.stopPropagation(); onClose?.(); }}
+          aria-hidden
+        />
+        {content}
+      </>,
+      document.body
+    );
+  }
+  return content;
 }

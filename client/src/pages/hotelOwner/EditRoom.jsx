@@ -4,7 +4,7 @@ import { MdOutlineCloudUpload } from 'react-icons/md';
 import { useAppContext } from '../../context/AppContext';
 import toast from 'react-hot-toast';
 import { AiOutlineLoading3Quarters } from 'react-icons/ai';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { checkImageResolution, MIN_RECOMMENDED_LONG_EDGE } from '../../utils/imageUtils';
 
 const amenityLabelMap = {
@@ -40,10 +40,17 @@ const defaultAmenities = {
 function EditRoom() {
   const { roomId } = useParams();
   const navigate = useNavigate();
+  const { state } = useLocation();
   const { axios, getToken } = useAppContext();
+  const hotelIdFromState = state?.hotelId;
+  const returnToSupplement = state?.returnTo === "supplement";
+  const getBackUrl = () => {
+    const id = hotelIdFromState || room?.hotel?._id || room?.hotel;
+    if (!id) return '/owner/hotel-info';
+    return returnToSupplement ? `/owner/hotels/${id}/supplement` : `/owner/hotels/${id}/rooms`;
+  };
 
   const [room, setRoom] = useState(null);
-  const [hotelStatus, setHotelStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -56,20 +63,13 @@ function EditRoom() {
   });
   const [newAmenity, setNewAmenity] = useState('');
 
-  const canEdit = hotelStatus === 'offline';
 
   useEffect(() => {
     (async () => {
       const token = await getToken();
       const headers = { Authorization: `Bearer ${token}` };
       try {
-        const [roomRes, hotelRes] = await Promise.all([
-          axios.get(`/api/rooms/owner/${roomId}`, { headers }),
-          axios.get('/api/hotels/my', { headers }),
-        ]);
-        if (hotelRes.data?.success && hotelRes.data.hotel) {
-          setHotelStatus(hotelRes.data.hotel.status || null);
-        }
+        const roomRes = await axios.get(`/api/rooms/owner/${roomId}`, { headers });
         if (roomRes.data?.success && roomRes.data.room) {
           const r = roomRes.data.room;
           setRoom(r);
@@ -134,10 +134,6 @@ function EditRoom() {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!canEdit) {
-      toast.error('仅当酒店被管理员下线后可编辑房间');
-      return;
-    }
     if (!inputData.roomType || !inputData.pricePerNight) {
       toast.error('请填写房型与价格');
       return;
@@ -166,8 +162,8 @@ function EditRoom() {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (data.success) {
-        toast.success('房间已更新');
-        navigate('/owner/list-rooms');
+        toast.success(data.needsApproval ? '修改已提交，等待管理员审核' : '房间已更新');
+        navigate(getBackUrl());
       } else {
         toast.error(data.message || '更新失败');
       }
@@ -192,7 +188,7 @@ function EditRoom() {
       <div className="max-w-3xl mx-auto p-3 sm:p-6 min-w-0">
         <button
           type="button"
-          onClick={() => navigate('/owner/list-rooms')}
+          onClick={() => navigate(getBackUrl())}
           className="flex items-center gap-1 text-sm font-medium px-3 py-2 rounded-md bg-black text-white hover:bg-gray-800 mb-4"
         >
           返回房间列表
@@ -202,32 +198,16 @@ function EditRoom() {
     );
   }
 
-  if (!canEdit) {
-    return (
-      <div className="max-w-3xl mx-auto p-3 sm:p-6 bg-white shadow-md rounded-lg min-w-0">
-        <button
-          type="button"
-          onClick={() => navigate('/owner/list-rooms')}
-          className="flex items-center gap-1 text-sm font-medium px-3 py-2 rounded-md bg-black text-white hover:bg-gray-800 mb-4"
-        >
-          返回房间列表
-        </button>
-        <Title align="left" font="outfit" title="编辑房间" subtitle="仅当酒店被管理员下线后可编辑房间" />
-        <p className="text-amber-600 mt-4">当前酒店状态不可编辑房间，请等待管理员将酒店下线后再操作。</p>
-      </div>
-    );
-  }
-
   return (
     <form onSubmit={handleSubmit} className="w-full max-w-3xl mx-auto min-w-0 p-3 sm:p-6 bg-white shadow-md rounded-lg">
       <button
         type="button"
-        onClick={() => navigate('/owner/list-rooms')}
+        onClick={() => navigate(getBackUrl())}
         className="flex items-center gap-1 text-sm font-medium px-3 py-2 rounded-md bg-black text-white hover:bg-gray-800 mb-4"
       >
-        返回房间列表
+        {returnToSupplement ? "返回酒店信息表" : "返回房间列表"}
       </button>
-      <Title align="left" font="outfit" title="编辑房间" subtitle={room.roomType || '修改房型信息'} />
+      <Title align="left" font="outfit" title="编辑房间" subtitle={room.roomType ? `${room.roomType} · 修改后需管理员再审核` : '修改房型信息'} />
 
       <p className="text-lg font-semibold text-neutral-800 mb-4">房间图片（可保留原图或重新上传）</p>
       <p className="text-sm text-gray-500 mb-2">建议上传更长边 ≥ {MIN_RECOMMENDED_LONG_EDGE} 像素的图片，保证放大后不模糊。</p>
@@ -357,7 +337,7 @@ function EditRoom() {
       <div className="flex gap-3 mt-6">
         <button
           type="button"
-          onClick={() => navigate('/owner/list-rooms')}
+          onClick={() => navigate(getBackUrl())}
           className="px-4 py-2 rounded-lg bg-black text-white hover:bg-gray-800"
         >
           返回房间列表

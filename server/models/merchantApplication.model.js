@@ -17,6 +17,8 @@ const schema = new Schema(
     hotelContact: { type: String, required: true, trim: true },
     /** 营业执照图片 URL */
     licenseUrl: { type: String, required: true },
+    /** 星级评定证明图片 URL */
+    starRatingCertificateUrl: { type: String, default: "" },
     /** 酒店外部照片 URL 列表 */
     hotelExteriorImages: { type: [String], default: [] },
     /** 酒店内部照片 URL 列表 */

@@ -52,6 +52,15 @@ function AdminLayout() {
                     </div>
                     <nav className="flex flex-col gap-1">
                         <NavLink
+                            to="/admin/merchant-applications"
+                            onClick={() => setSidebarOpen(false)}
+                            className={({ isActive }) =>
+                                `flex items-center gap-2 p-3 rounded-lg min-h-[44px] ${isActive ? "bg-blue-500 text-white" : "text-gray-700 hover:bg-gray-300 active:bg-gray-400"}`
+                            }
+                        >
+                            预审核（执照审核）
+                        </NavLink>
+                        <NavLink
                             to="/admin"
                             end
                             onClick={() => setSidebarOpen(false)}
@@ -59,16 +68,7 @@ function AdminLayout() {
                                 `flex items-center gap-2 p-3 rounded-lg min-h-[44px] ${isActive ? "bg-blue-500 text-white" : "text-gray-700 hover:bg-gray-300 active:bg-gray-400"}`
                             }
                         >
-                            酒店审核/发布/下线
-                        </NavLink>
-                        <NavLink
-                            to="/admin/merchant-applications"
-                            onClick={() => setSidebarOpen(false)}
-                            className={({ isActive }) =>
-                                `flex items-center gap-2 p-3 rounded-lg min-h-[44px] ${isActive ? "bg-blue-500 text-white" : "text-gray-700 hover:bg-gray-300 active:bg-gray-400"}`
-                            }
-                        >
-                            商户申请审核
+                            再审核（酒店信息）
                         </NavLink>
                     </nav>
                 </aside>
