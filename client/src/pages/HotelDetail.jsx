@@ -160,6 +160,7 @@ function HotelDetail() {
                             room: r._id,
                             checkInDate: checkIn,
                             checkOutDate: checkOut,
+                            roomQuantity: roomCount,
                         })
                     )
                 ).then((responses) => {
@@ -511,7 +512,7 @@ function HotelDetail() {
                                     )}
                                     {isUnavailable && (
                                         <div className="absolute inset-0 flex items-center justify-center bg-white/70 rounded-lg">
-                                            <span className="bg-gray-700/90 text-white px-3 py-1.5 rounded-lg text-sm font-medium">已预订</span>
+                                            <span className="bg-gray-700/90 text-white px-3 py-1.5 rounded-lg text-sm font-medium">已订完</span>
                                         </div>
                                     )}
                                 </div>

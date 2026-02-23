@@ -73,6 +73,8 @@ function HotelReauditDetail() {
     const { axios, getToken } = useAppContext();
     const [hotel, setHotel] = useState(null);
     const [rooms, setRooms] = useState([]);
+    const [roomToDelete, setRoomToDelete] = useState(null);
+    const [deleting, setDeleting] = useState(false);
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const [form, setForm] = useState({
@@ -179,6 +181,43 @@ function HotelReauditDetail() {
 
     const goToAddRoom = () => {
         navigate(`/owner/hotels/${hotelId}/add-room`, { state: { returnTo: "supplement" } });
+    };
+
+    const toggleRoomAvailability = async (roomId) => {
+        try {
+            const token = await getToken();
+            const { data } = await axios.post("/api/rooms/toogle-avalibility", { roomId }, { headers: { Authorization: `Bearer ${token}` } });
+            if (data.success) {
+                toast.success(data.needsApproval ? "上架申请已提交，等待管理员审核" : (data.room?.isAvailable ? "已上架" : "已下架"));
+                fetchData(false);
+            } else {
+                toast.error(data.message || "操作失败");
+            }
+        } catch (e) {
+            toast.error(e?.response?.data?.message || "操作失败");
+        }
+    };
+
+    const openDeleteConfirm = (room) => setRoomToDelete(room);
+
+    const confirmDelete = async () => {
+        if (!roomToDelete) return;
+        setDeleting(true);
+        try {
+            const token = await getToken();
+            const { data } = await axios.delete(`/api/rooms/${roomToDelete._id}`, { headers: { Authorization: `Bearer ${token}` } });
+            if (data.success) {
+                toast.success("房间已删除");
+                setRoomToDelete(null);
+                fetchData(false);
+            } else {
+                toast.error(data.message || "删除失败");
+            }
+        } catch (e) {
+            toast.error(e?.response?.data?.message || "删除失败");
+        } finally {
+            setDeleting(false);
+        }
     };
 
     if (loading || !hotel) return <p className="text-gray-600 p-4">加载中...</p>;
@@ -360,7 +399,8 @@ function HotelReauditDetail() {
                                     <th className="p-2 sm:p-3 text-gray-600 font-medium">价格/晚</th>
                                     <th className="p-2 sm:p-3 text-gray-600 font-medium">打折</th>
                                     <th className="p-2 sm:p-3 text-gray-600 font-medium">间数</th>
-                                    <th className="p-2 sm:p-3 text-gray-600 font-medium w-20">操作</th>
+                                    <th className="p-2 sm:p-3 text-gray-600 font-medium">状态</th>
+                                    <th className="p-2 sm:p-3 text-gray-600 font-medium w-28">操作</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -384,14 +424,35 @@ function HotelReauditDetail() {
                                             <RoomCountStepper value={r.roomCount ?? 1} roomId={r._id} onUpdate={() => fetchData(false)} axios={axios} getToken={getToken} />
                                         </td>
                                         <td className="p-2 sm:p-3">
-                                            <button
-                                                type="button"
-                                                onClick={() => navigate(`/owner/edit-room/${r._id}`, { state: { hotelId: hotelId, returnTo: "supplement" } })}
-                                                className="inline-flex items-center gap-1 px-2 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded-lg"
-                                                title="编辑房间（修改后需再审核）"
-                                            >
-                                                <IoCreateOutline size={16} /> 编辑
-                                            </button>
+                                            <label className="inline-flex items-center cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={r.isAvailable ?? true}
+                                                    onChange={() => toggleRoomAvailability(r._id)}
+                                                    className="form-checkbox h-4 w-4 text-blue-600"
+                                                />
+                                                <span className="ml-2 text-sm text-gray-700">{r.isAvailable ? "在售" : "已下架"}</span>
+                                            </label>
+                                        </td>
+                                        <td className="p-2 sm:p-3">
+                                            <div className="flex items-center gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => navigate(`/owner/edit-room/${r._id}`, { state: { hotelId: hotelId, returnTo: "supplement" } })}
+                                                    className="inline-flex items-center gap-1 px-2 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded-lg"
+                                                    title="编辑房间（修改后需再审核）"
+                                                >
+                                                    <IoCreateOutline size={16} /> 编辑
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => openDeleteConfirm(r)}
+                                                    className="inline-flex items-center px-2 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-lg"
+                                                    title="删除该房型"
+                                                >
+                                                    删除
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                 ))}
@@ -426,6 +487,36 @@ function HotelReauditDetail() {
                     )}
                 </div>
             </div>
+
+            {/* 删除确认弹窗 */}
+            {roomToDelete && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50" onClick={() => !deleting && setRoomToDelete(null)}>
+                    <div className="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full mx-4" onClick={(e) => e.stopPropagation()}>
+                        <p className="text-gray-800 font-medium mb-1">确认删除</p>
+                        <p className="text-gray-600 text-sm mb-6">
+                            确定要删除房型「{roomTypeToCn[roomToDelete.roomType] || roomToDelete.roomType}」吗？删除后不可恢复。
+                        </p>
+                        <div className="flex justify-end gap-3">
+                            <button
+                                type="button"
+                                disabled={deleting}
+                                onClick={() => setRoomToDelete(null)}
+                                className="px-4 py-2 text-gray-700 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50"
+                            >
+                                取消
+                            </button>
+                            <button
+                                type="button"
+                                disabled={deleting}
+                                onClick={confirmDelete}
+                                className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 disabled:opacity-50"
+                            >
+                                {deleting ? "删除中..." : "确定删除"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

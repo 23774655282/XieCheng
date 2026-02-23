@@ -156,25 +156,20 @@ function ListRoom() {
   }
 
   async function toggleRoomAvailability(roomId) {
-  try {
-    const token = await getToken(); 
-    const { data } = await axios.post('/api/rooms/toogle-avalibility', {
-      roomId
-    }, {
-      headers: {
-        Authorization: `Bearer ${token}`
+    try {
+      const token = await getToken();
+      const { data } = await axios.post('/api/rooms/toogle-avalibility', { roomId }, { headers: { Authorization: `Bearer ${token}` } });
+      if (data.success) {
+        toast.success(data.needsApproval ? "上架申请已提交，等待管理员审核" : (data.room?.isAvailable ? "已上架" : "已下架"));
+        fetchRooms();
+      } else {
+        toast.error(data.message || "操作失败");
       }
-    });
-
-    if (data.success) {
-      toast.success("房间售卖状态已更新");
-      fetchRooms();
+    } catch (error) {
+      console.error("Error toggling room availability:", error);
+      toast.error("更新房间售卖状态失败，请稍后重试");
     }
-  } catch (error) {
-    console.error("Error toggling room availability:", error);
-    toast.error("更新房间售卖状态失败，请稍后重试");
   }
-}
 
   function openDeleteConfirm(room) {
     setRoomToDelete(room);

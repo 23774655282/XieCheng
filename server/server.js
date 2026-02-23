@@ -10,6 +10,7 @@ import morgan from 'morgan';
 import hotelRouter from './routes/hotel.route.js';
 import roomRouter from './routes/room.routes.js';
 import bookingRouter from './routes/booking.route.js';
+import { cancelExpiredUnpaidBookings } from './controllers/booking.controller.js';
 import reviewRouter from './routes/review.route.js';
 import stripeWebhook from './controllers/stripe.webhook.js';
 import path from 'path';
@@ -58,6 +59,14 @@ const PORT = process.env.PORT || 5000;
 
 // 先连接数据库，再启动监听，避免监听后因 MongoDB 未就绪而 process.exit(1)
 await connectDB();
+
+// 定时取消超时未支付订单（15分钟），每分钟执行一次
+setInterval(() => {
+  cancelExpiredUnpaidBookings().catch((err) => console.error("[定时任务] 取消超时订单失败:", err));
+}, 60 * 1000);
+// 启动时立即执行一次
+cancelExpiredUnpaidBookings().catch((err) => console.error("[定时任务] 取消超时订单失败:", err));
+
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });

@@ -19,6 +19,7 @@ import Layout from './pages/hotelOwner/Layout';
 import AdminLayout from './pages/admin/AdminLayout';
 import AuditHotels from './pages/admin/AuditHotels';
 import MerchantApplications from './pages/admin/MerchantApplications';
+import PendingRoomAdds from './pages/admin/PendingRoomAdds';
 import ApplyMerchant from './pages/ApplyMerchant';
 import HotelInfo from './pages/hotelOwner/HotelInfo';
 import NotFound from './components/NotFound';
@@ -77,6 +78,7 @@ function App() {
             <Route path='/admin' element={<AdminLayout/>}>
               <Route index element={<AuditHotels/>} />
               <Route path='merchant-applications' element={<MerchantApplications/>} />
+              <Route path='room-adds' element={<PendingRoomAdds/>} />
             </Route>
             <Route path='*' element={<NotFound/>}/>
 

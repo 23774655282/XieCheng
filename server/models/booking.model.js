@@ -11,6 +11,8 @@ const bookingSchema = new Schema({
         ref: 'Room',
         required: true,
     },
+    /** 该订单预订的该房型间数 */
+    roomQuantity: { type: Number, default: 1, min: 1 },
     hotel:{
         type: String,
         ref: 'Hotel',
@@ -44,7 +46,7 @@ const bookingSchema = new Schema({
     },
     cancelledBy: {
         type: String,
-        enum: ['user', 'merchant'],
+        enum: ['user', 'merchant', 'system'],
         default: null,
     },
     cancelReason: {

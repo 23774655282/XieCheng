@@ -65,6 +65,11 @@ function EditRoom() {
 
 
   useEffect(() => {
+    window.scrollTo(0, 0);
+    document.querySelector('[data-owner-scroll]')?.scrollTo?.(0, 0);
+  }, [roomId]);
+
+  useEffect(() => {
     (async () => {
       const token = await getToken();
       const headers = { Authorization: `Bearer ${token}` };

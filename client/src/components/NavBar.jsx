@@ -16,6 +16,7 @@ const NavBar = () => {
 
     const [isScrolled, setIsScrolled] = useState(false);
     const [isMenuOpen, setIsMenuOpen] = useState(false);
+    const [isAvatarDropdownOpen, setIsAvatarDropdownOpen] = useState(false);
 
     const location = useLocation();
 
@@ -100,27 +101,31 @@ const NavBar = () => {
             {/* Desktop Right Side */}
             <div className="hidden md:flex items-center gap-3">
                 {isAuthenticated && (
-                    <>
+                    <div className="relative group">
                         <button
-                            onClick={() => navigate("/profile")}
-                            className={`flex items-center gap-2 border px-3 py-1.5 rounded-full cursor-pointer transition-all ${isScrolled ? 'text-gray-700 border-gray-700 hover:bg-gray-100' : 'text-white border-white hover:bg-white/10'}`}
+                            className={`flex items-center gap-2.5 pl-1 pr-3 py-1.5 rounded-full cursor-pointer transition-all ${isScrolled ? 'hover:bg-gray-100/80 border border-transparent hover:border-gray-200' : 'hover:bg-white/15 border border-transparent hover:border-white/30'}`}
                         >
-                            {userInfo?.avatar ? (
-                                <img src={userInfo.avatar} alt="" className="w-7 h-7 rounded-full object-cover" />
-                            ) : (
-                                <span className="w-7 h-7 rounded-full bg-gray-400 flex items-center justify-center text-white text-xs font-medium">
-                                    {(userInfo?.username || '用')[0]}
-                                </span>
-                            )}
-                            <span className="text-sm font-medium max-w-[80px] truncate">{userInfo?.username || ''}</span>
+                            <span className={`flex-shrink-0 w-8 h-8 rounded-full overflow-hidden ring-2 ${isScrolled ? 'ring-gray-200' : 'ring-white/50'}`}>
+                                {userInfo?.avatar ? (
+                                    <img src={userInfo.avatar} alt="" className="w-full h-full object-cover" />
+                                ) : (
+                                    <span className={`w-full h-full flex items-center justify-center text-sm font-medium ${isScrolled ? 'bg-gray-300 text-gray-700' : 'bg-white/40 text-white'}`}>
+                                        {(userInfo?.username || '用')[0]}
+                                    </span>
+                                )}
+                            </span>
+                            <span className={`text-sm font-medium max-w-[100px] truncate ${isScrolled ? 'text-gray-700' : 'text-white'}`}>{userInfo?.username || '用户'}</span>
                         </button>
-                        <button
-                            onClick={logout}
-                            className={`border px-4 py-1 text-sm font-light rounded-full cursor-pointer transition-all ${isScrolled ? 'text-gray-700 border-gray-700 hover:bg-gray-100' : 'text-white border-white hover:bg-white/10'}`}
-                        >
-                            退出登录
-                        </button>
-                    </>
+                        <div className="absolute left-1/2 -translate-x-1/2 top-full pt-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
+                            <div className="py-1 rounded-xl shadow-xl border border-gray-100 bg-gradient-to-b from-white via-gray-50/90 to-gray-100/95 backdrop-blur-sm min-w-[160px] overflow-hidden">
+                                <button onClick={() => navigate("/profile?tab=info")} className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-100/80 transition-colors">我的信息</button>
+                                <button onClick={() => navigate("/profile?tab=orders")} className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-100/80 transition-colors">我的订单</button>
+                                <button onClick={() => navigate("/profile?tab=favorites")} className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-100/80 transition-colors">我的收藏</button>
+                                <div className="my-1 border-t border-gray-200" />
+                                <button onClick={logout} className="w-full px-4 py-2.5 text-left text-sm text-red-600 hover:bg-red-50/80 transition-colors">退出登录</button>
+                            </div>
+                        </div>
+                    </div>
                 )}
                 {!isAuthenticated && !isLoginPath && (
                     <button
@@ -132,16 +137,39 @@ const NavBar = () => {
                 )}
             </div>
 
-            {/* Mobile Left Side Login / Logout (仅在非登录页显示，样式与 PC 端一致) */}
+            {/* Mobile Right Side: Avatar dropdown / Login (仅在非登录页显示) */}
             <div className="flex items-center gap-2 md:hidden">
                 {!isLoginPath && (
                     isAuthenticated ? (
-                        <button
-                            onClick={logout}
-                            className={`border px-4 py-1 text-sm font-light rounded-full cursor-pointer transition-all ${isScrolled ? 'text-gray-700 border-gray-700 hover:bg-gray-100' : 'text-white border-white hover:bg-white/10'}`}
-                        >
-                            退出登录
-                        </button>
+                        <div className="relative">
+                            <button
+                                onClick={() => setIsAvatarDropdownOpen(!isAvatarDropdownOpen)}
+                                className={`flex items-center gap-2 pl-0.5 pr-2.5 py-1 rounded-full transition-all ${isScrolled ? 'active:bg-gray-100' : 'active:bg-white/20'}`}
+                            >
+                                <span className={`flex-shrink-0 w-8 h-8 rounded-full overflow-hidden ring-2 ${isScrolled ? 'ring-gray-200' : 'ring-white/50'}`}>
+                                    {userInfo?.avatar ? (
+                                        <img src={userInfo.avatar} alt="" className="w-full h-full object-cover" />
+                                    ) : (
+                                        <span className={`w-full h-full flex items-center justify-center text-sm font-medium ${isScrolled ? 'bg-gray-300 text-gray-700' : 'bg-white/40 text-white'}`}>
+                                            {(userInfo?.username || '用')[0]}
+                                        </span>
+                                    )}
+                                </span>
+                                <span className={`text-sm font-medium max-w-[80px] truncate ${isScrolled ? 'text-gray-700' : 'text-white'}`}>{userInfo?.username || '用户'}</span>
+                            </button>
+                            {isAvatarDropdownOpen && (
+                                <>
+                                    <div className="fixed inset-0 z-40" onClick={() => setIsAvatarDropdownOpen(false)} aria-hidden />
+                                    <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 py-1 rounded-xl shadow-xl border border-gray-100 bg-gradient-to-b from-white via-gray-50/90 to-gray-100/95 backdrop-blur-sm min-w-[160px] overflow-hidden z-50">
+                                        <button onClick={() => { setIsAvatarDropdownOpen(false); navigate("/profile?tab=info"); }} className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-100/80">我的信息</button>
+                                        <button onClick={() => { setIsAvatarDropdownOpen(false); navigate("/profile?tab=orders"); }} className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-100/80">我的订单</button>
+                                        <button onClick={() => { setIsAvatarDropdownOpen(false); navigate("/profile?tab=favorites"); }} className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-100/80">我的收藏</button>
+                                        <div className="my-1 border-t border-gray-200" />
+                                        <button onClick={() => { setIsAvatarDropdownOpen(false); logout(); }} className="w-full px-4 py-2.5 text-left text-sm text-red-600 hover:bg-red-50/80">退出登录</button>
+                                    </div>
+                                </>
+                            )}
+                        </div>
                     ) : (
                         <button
                             onClick={() => navigate('/login')}
@@ -152,7 +180,7 @@ const NavBar = () => {
                     )
                 )}
                 {/* Mobile Menu Button */}
-                <button onClick={() => setIsMenuOpen(!isMenuOpen)} aria-label="打开菜单">
+                <button onClick={() => { setIsAvatarDropdownOpen(false); setIsMenuOpen(!isMenuOpen); }} aria-label="打开菜单">
                     <CiMenuFries className={`h-4 ${isScrolled ? 'invert' : ''}`} />
                 </button>
             </div>

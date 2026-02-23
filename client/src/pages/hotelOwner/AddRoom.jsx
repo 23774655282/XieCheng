@@ -116,6 +116,11 @@ function AddRoom() {
       toast.error('请至少上传一张房间图片');
       return;
     }
+    const selectedAmenities = Object.keys(inputData.amenities).filter(amenity => inputData.amenities[amenity]);
+    if (selectedAmenities.length === 0) {
+      toast.error('请至少选择一项房间设施');
+      return;
+    }
 
     setLoading(true);
 
@@ -126,10 +131,7 @@ function AddRoom() {
       formData.append('pricePerNight', inputData.pricePerNight);
       formData.append('promoDiscount', String(inputData.promoDiscount));
       if (hotelId) formData.append('hotelId', hotelId);
-      const amenities = Object.keys(inputData.amenities).filter(amenity => inputData.amenities[amenity]);
-      console.log(amenities);
-
-      formData.append('amenities', JSON.stringify(amenities));
+      formData.append('amenities', JSON.stringify(selectedAmenities));
 
       Object.keys(images).forEach((key)=>{
         images[key] && formData.append(`images`, images[key]);
