@@ -25,11 +25,16 @@ async function stripeWebhook(req,res) {
         })
 
         const {bookingId} = session.data[0].metadata;
-
-        await Booking.findByIdAndUpdate(bookingId,{
-            isPaid: true,
-            paymentMethod: "Stripe",
-        })
+        const booking = await Booking.findById(bookingId);
+        // 若订单已被超时自动取消，不再标记为已支付（用户需联系客服退款）
+        if (booking && booking.status !== "cancelled") {
+            await Booking.findByIdAndUpdate(bookingId, {
+                isPaid: true,
+                paymentMethod: "Stripe",
+            });
+        } else if (booking?.status === "cancelled") {
+            console.warn(`[Stripe] 订单 ${bookingId} 已取消，支付成功回调未更新状态`);
+        }
     }else{
         console.warn(`Unhandled event type: ${event.type}`);
     }

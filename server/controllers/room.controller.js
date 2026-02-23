@@ -38,15 +38,17 @@ export const createRoom = async (req, res) => {
 
         const promoVal = promoDiscount !== undefined && promoDiscount !== "" ? Math.min(100, Math.max(0, Number(promoDiscount))) : null;
         const countVal = roomCount != null && Number(roomCount) >= 1 ? Math.max(1, Math.floor(Number(roomCount))) : 1;
+        // 已上架酒店新增房型需再审核，待审核/待上架酒店新增房型随酒店一并审核
+        const hotelApproved = hotel.status === "approved";
         const newRoom = await Room.create({
             hotel: hotel._id,
             roomType,
             pricePerNight: +pricePerNight,
-            amenties: x,
+            amenties: Array.isArray(x) ? x : [],
             images,
             promoDiscount: promoVal === 0 ? null : promoVal,
             roomCount: countVal,
-            status: "approved",
+            status: hotelApproved ? "pending_audit" : "approved",
         });
 
         console.log(newRoom)
@@ -54,7 +56,7 @@ export const createRoom = async (req, res) => {
 
         return res.status(201).json({
             success: true,
-            message: "房间已添加",
+            message: hotelApproved ? "房间已提交，等待管理员审核上架" : "房间已添加",
             room: {
                 hotel: hotel._id,
                 roomType,
@@ -76,6 +78,11 @@ export const createRoom = async (req, res) => {
 
 const DEFAULT_PAGE_SIZE = 12;
 
+/** 转义正则特殊字符，避免用户输入导致正则异常 */
+function escapeRegex(str) {
+    return String(str || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 /** 首页优惠档位：仅支持 20、25、30，按房间的 promoDiscount 字段匹配 */
 const PROMO_VALUES = [20, 25, 30];
 
@@ -89,13 +96,15 @@ export const getRooms = async (req, res) => {
 
         const hotelFilter = { status: "approved" };
         if (destination) {
-            const re = new RegExp(destination, "i");
-            hotelFilter.$or = [{ city: re }, { name: re }];
+            const re = new RegExp(escapeRegex(destination), "i");
+            hotelFilter.$or = [{ city: re }, { name: re }, { address: re }];
         }
         const approvedHotelIds = await Hotel.find(hotelFilter).distinct("_id").then(ids => ids.map(id => id.toString()));
+        // 只排除待审核房间，兼容旧数据：无 status 或 status 非 pending_audit 的房型均可展示
         const filter = {
             isAvailable: true,
             hotel: { $in: approvedHotelIds },
+            status: { $ne: "pending_audit" },
         };
 
         let rooms, total, hasMore;
@@ -205,6 +214,7 @@ export const getOwnerRooms = async (req, res) => {
             if (edit.promoDiscount !== undefined) merged.promoDiscount = edit.promoDiscount;
             if (edit.roomCount !== undefined) merged.roomCount = edit.roomCount;
             if (edit.images && edit.images.length > 0) merged.images = edit.images;
+            if (edit.isAvailable !== undefined) merged.isAvailable = edit.isAvailable;
             return merged;
         });
 
@@ -326,42 +336,44 @@ export const deleteRoom = async (req, res) => {
     }
 };
 
+/** 商户切换房间上架/下架。下架直接生效；上架时酒店已上架需管理员审核 */
 export const toggleRoomAvailability = async (req, res) => {
     try {
-
-        console.log("Toggling room availability");
-        const {roomId} = req.body;
-        const _id = roomId;
-        const room = await Room.findById(_id);
-
-        if (!room) {
-            return res.status(404).json({
-                success: false,
-                message: "Room not found"
+        const { roomId } = req.body;
+        const room = await Room.findById(roomId);
+        if (!room) return res.status(404).json({ success: false, message: "Room not found" });
+        const hotel = await Hotel.findById(room.hotel);
+        if (!hotel || hotel.owner.toString() !== req.user._id.toString()) {
+            return res.status(404).json({ success: false, message: "Room not found or not your room" });
+        }
+        const newAvailable = !room.isAvailable;
+        // 下架直接生效；上架时酒店已上架需管理员审核
+        const needApproval = newAvailable && (hotel.status === "approved" || hotel.status === "pending_list");
+        if (needApproval) {
+            const existing = await RoomEditApplication.findOne({ room: roomId, hotel: hotel._id, status: "pending" });
+            const preserveAmenties = Array.isArray(room.amenties) ? room.amenties : [];
+            if (existing) {
+                existing.isAvailable = newAvailable;
+                // 上架时保留房间原有设施：无 amenties 或空数组且房间有设施时，写入保留
+                const wouldClear = existing.amenties === undefined || (Array.isArray(existing.amenties) && existing.amenties.length === 0);
+                if (wouldClear && preserveAmenties.length > 0) existing.amenties = preserveAmenties;
+                await existing.save();
+            } else {
+                await RoomEditApplication.create({ room: roomId, hotel: hotel._id, isAvailable: newAvailable, amenties: preserveAmenties, status: "pending" });
+            }
+            return res.status(200).json({
+                success: true,
+                message: "上架申请已提交，等待管理员审核",
+                needsApproval: true,
+                room: { ...room.toObject(), isAvailable: newAvailable },
             });
         }
-
-        console.log(room)
-
-
-        room.isAvailable = !room.isAvailable;
-
-        await room.save({
-            validateBeforeSave: false
-        });
-
-
-        return res.status(200).json({
-            success: true,
-            message: "Room availability toggled successfully",
-            room
-        });
+        room.isAvailable = newAvailable;
+        await room.save({ validateBeforeSave: false });
+        return res.status(200).json({ success: true, message: newAvailable ? "已上架" : "已下架", room });
     } catch (error) {
         console.error("Error toggling room availability:", error);
-        return res.status(500).json({
-            success: false,
-            message: "error in toggling room availability"
-        });
+        return res.status(500).json({ success: false, message: "error in toggling room availability" });
     }
 };
 
@@ -465,6 +477,7 @@ export const approveRoomEdit = async (req, res) => {
         if (app.promoDiscount !== undefined) room.promoDiscount = app.promoDiscount;
         if (app.roomCount !== undefined) room.roomCount = app.roomCount;
         if (app.images && app.images.length > 0) room.images = app.images;
+        if (app.isAvailable !== undefined) room.isAvailable = app.isAvailable;
         await room.save({ validateBeforeSave: false });
         app.status = "approved";
         app.reviewedAt = new Date();
@@ -638,9 +651,12 @@ export const smartSearchRooms = async (req, res) => {
         const roomType = VALID_ROOM_TYPES.includes(rawRoomType) ? rawRoomType : null;
         const criteriaOut = { destination: destination || null, adults, children, nights, budget: budget || null, roomType };
         const hotelFilter = { status: "approved" };
-        if (destination) hotelFilter.city = new RegExp(destination, "i");
+        if (destination) {
+            const re = new RegExp(escapeRegex(destination), "i");
+            hotelFilter.$or = [{ city: re }, { name: re }, { address: re }];
+        }
         const approvedHotelIds = await Hotel.find(hotelFilter).distinct("_id").then((ids) => ids.map((id) => id.toString()));
-        const roomFilter = { isAvailable: true, hotel: { $in: approvedHotelIds } };
+        const roomFilter = { isAvailable: true, hotel: { $in: approvedHotelIds }, status: { $ne: "pending_audit" } };
         if (roomType) roomFilter.roomType = roomType;
         if (budget > 0 && nights >= 1) {
             const maxPricePerNight = Math.floor(budget / nights);

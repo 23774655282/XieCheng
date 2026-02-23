@@ -9,6 +9,21 @@ import toast from 'react-hot-toast';
 const roomTypeToCn = { 'Single Bed': '单人间', 'Double Bed': '双人间', 'Luxury Room': '豪华房', 'Family Suite': '家庭套房' };
 const getRoomTypeLabel = (roomType) => roomTypeToCn[roomType] || roomType;
 
+const PAYMENT_DEADLINE_MINUTES = 15;
+
+/** 未支付订单倒计时：返回剩余秒数，≤0 表示已超时 */
+function getPaymentCountdownSeconds(booking) {
+    if (!booking?.createdAt) return 0;
+    const deadline = new Date(new Date(booking.createdAt).getTime() + PAYMENT_DEADLINE_MINUTES * 60 * 1000);
+    return Math.max(0, Math.floor((deadline - Date.now()) / 1000));
+}
+
+function formatCountdown(seconds) {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m} 分 ${String(s).padStart(2, '0')} 秒`;
+}
+
 const CANCEL_REASONS = [
   { value: '行程有变', label: '行程有变' },
   { value: '重复下单', label: '重复下单' },
@@ -45,6 +60,7 @@ function MyBooking({ embedded = false }) {
     const [ratingActive, setRatingActive] = useState(false);
     const starContainerRef = useRef(null);
     const pollRef = useRef(null);
+    const [countdownTick, setCountdownTick] = useState(0);
 
     function getStarRatingFromEvent(e) {
         const el = starContainerRef.current;
@@ -270,6 +286,29 @@ function MyBooking({ embedded = false }) {
         }
     }, [user]);
 
+    // 未支付订单倒计时：每秒更新，超时时刷新订单
+    useEffect(() => {
+        const unpaid = bookings.filter((b) => b.status !== 'cancelled' && !b.isPaid);
+        if (unpaid.length === 0) return;
+        const timer = setInterval(() => {
+            const anyExpired = unpaid.some((b) => getPaymentCountdownSeconds(b) <= 0);
+            if (anyExpired) {
+                fetchBookings(true);
+            }
+            setCountdownTick((t) => t + 1);
+        }, 1000);
+        return () => clearInterval(timer);
+    }, [bookings]);
+
+    // 支付弹窗：若订单已被取消（含超时自动取消），关闭弹窗
+    useEffect(() => {
+        if (!payQRModal.open || !payQRModal.bookingId) return;
+        const b = bookings.find((x) => x._id === payQRModal.bookingId);
+        if (b && (b.status === 'cancelled' || getPaymentCountdownSeconds(b) <= 0)) {
+            setPayQRModal({ open: false, bookingId: null, payUrl: '' });
+        }
+    }, [bookings, countdownTick, payQRModal.open, payQRModal.bookingId]);
+
     // 扫码付款：轮询订单状态，支付成功后关闭二维码弹窗并提示
     useEffect(() => {
         if (!payQRModal.open || !payQRModal.bookingId) return;
@@ -424,10 +463,18 @@ function MyBooking({ embedded = false }) {
                             : payLabel === '已完成' ? 'bg-emerald-100 text-emerald-700'
                             : payLabel === '已支付' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600';
                         const suffix = payLabel === '已完成' && booking.hasReview ? ' · 已评价' : '';
+                        const countdown = payLabel === '待支付' ? getPaymentCountdownSeconds(booking) : 0;
                         return (
-                            <span className={`px-3 py-1 rounded-full text-sm font-medium ${payClass}`}>
-                                {payLabel}{suffix}
-                            </span>
+                            <div className="flex flex-col items-end gap-1 min-w-[200px]">
+                                <span className={`px-3 py-1 rounded-full text-sm font-medium ${payClass}`}>
+                                    {payLabel}{suffix}
+                                </span>
+                                {payLabel === '待支付' && countdown > 0 && (
+                                    <span className="text-xs text-amber-600 font-medium w-full text-right whitespace-nowrap">
+                                        剩余 {formatCountdown(countdown)} 未支付将自动取消
+                                    </span>
+                                )}
+                            </div>
                         );
                     })()}
                     {booking.status !== 'cancelled' && !booking.isPaid && (
@@ -507,11 +554,20 @@ function MyBooking({ embedded = false }) {
     </div>
 
     {/* 扫码付款二维码弹窗 */}
-    {payQRModal.open && payQRModal.payUrl && (
+    {payQRModal.open && payQRModal.payUrl && payQRModal.bookingId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setPayQRModal({ open: false, bookingId: null, payUrl: '' })}>
             <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm mx-4 flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
                 <h3 className="text-lg font-semibold text-gray-900 mb-1">扫码付款</h3>
-                <p className="text-sm text-gray-500 mb-4">请使用手机扫描二维码完成支付</p>
+                <p className="text-sm text-gray-500 mb-2">请使用手机扫描二维码完成支付</p>
+                {(() => {
+                    const b = bookings.find((x) => x._id === payQRModal.bookingId);
+                    const secs = b ? getPaymentCountdownSeconds(b) : 0;
+                    return secs > 0 ? (
+                        <p className="text-xs text-amber-600 font-medium mb-4">剩余 {formatCountdown(secs)} 未支付将自动取消</p>
+                    ) : (
+                        <p className="text-xs text-red-600 font-medium mb-4">订单已超时取消</p>
+                    );
+                })()}
                 <div className="bg-white p-3 rounded-xl border border-gray-200 mb-4">
                     <QRCodeSVG value={payQRModal.payUrl} size={220} level="M" />
                 </div>

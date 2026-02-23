@@ -251,7 +251,8 @@ function Dashboard() {
                       </div>
                     )}
                   </th>
-                  <th className='p-2 sm:p-4 text-left text-gray-600 font-medium text-xs sm:text-sm'>房型</th>
+                  <th className='p-2 sm:p-4 text-left text-gray-600 font-medium text-xs sm:text-sm'>房型/间数</th>
+                  <th className='p-2 sm:p-4 text-left text-gray-600 font-medium text-xs sm:text-sm'>库存量</th>
                   <th className='p-2 sm:p-4 text-left text-gray-600 font-medium text-xs sm:text-sm relative' ref={checkInDropdownRef}>
                     <button
                       type="button"
@@ -314,7 +315,8 @@ function Dashboard() {
                   >
                     <td className='p-2 sm:p-4 text-gray-800'>{item.user?.username ?? '-'}</td>
                     <td className='p-2 sm:p-4 text-gray-600'>{item.hotel?.name ?? '-'}</td>
-                    <td className='p-2 sm:p-4 text-gray-600'>{item.room?.roomType ? getRoomTypeLabel(item.room.roomType) : '-'}</td>
+                    <td className='p-2 sm:p-4 text-gray-600'>{item.room?.roomType ? `${getRoomTypeLabel(item.room.roomType)} x ${item.roomQuantity ?? 1}` : '-'}</td>
+                    <td className='p-2 sm:p-4 text-gray-600'>{typeof item.availableDuringStay === 'number' ? item.availableDuringStay : (item.room?.roomCount ?? '-')}</td>
                     <td className='p-2 sm:p-4 text-gray-600 whitespace-nowrap'>{formatDateStr(item.checkInDate)}</td>
                     <td className='p-2 sm:p-4 text-gray-600 whitespace-nowrap'>{formatDateStr(item.checkOutDate)}</td>
                     <td className='p-2 sm:p-4' onClick={(e) => e.stopPropagation()}>
@@ -337,7 +339,7 @@ function Dashboard() {
                       })()}
                     </td>
                     <td className='p-2 sm:p-4' onClick={(e) => e.stopPropagation()}>
-                      {item.status === 'cancelled' ? (
+                      {item.status === 'cancelled' || !item.isPaid ? (
                         <span className="text-gray-500 text-xs sm:text-sm">-</span>
                       ) : (
                         <select
@@ -432,7 +434,8 @@ function Dashboard() {
                         </div>
                         <div className="flex flex-wrap gap-x-6 gap-y-1 text-gray-700">
                           <span>酒店：{b.hotel?.name ?? '—'}</span>
-                          <span>房型：{b.room?.roomType ? getRoomTypeLabel(b.room.roomType) : '—'}</span>
+                          <span>房型：{b.room?.roomType ? `${getRoomTypeLabel(b.room.roomType)} x ${b.roomQuantity ?? 1}` : '—'}</span>
+                          <span>库存量：{typeof b.availableDuringStay === 'number' ? b.availableDuringStay : (b.room?.roomCount ?? '—')}</span>
                         </div>
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

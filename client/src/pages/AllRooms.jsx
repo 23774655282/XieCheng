@@ -220,12 +220,14 @@ function AllRooms() {
       const roomsToCheck = roomsSource;
       
       // 批量检查房间可用性
+      const roomQuantity = Math.max(1, Number(searchParams.get('rooms')) || 1);
       const checkPromises = roomsToCheck.map(async (room) => {
         try {
           const { data } = await axios.post('/api/bookings/check-availability', {
             room: room._id,
             checkInDate: checkIn,
             checkOutDate: checkOut,
+            roomQuantity,
           });
           availabilityMap[room._id] = data.success && data.isAvail;
         } catch (error) {
@@ -240,7 +242,7 @@ function AllRooms() {
     };
     
     checkRoomsAvailability();
-  }, [checkIn, checkOut, roomsSource, promo, axios]);
+  }, [checkIn, checkOut, roomsSource, promo, axios, searchParams]);
 
   const PRICE_SLIDER_MIN = 0;
   const PRICE_SLIDER_MAX = 2000;
@@ -909,7 +911,7 @@ function AllRooms() {
           </div>
         </aside>
         )}
-        <div className="flex flex-col gap-8 flex-1 order-1 lg:order-2">
+        <div className="flex flex-col gap-8 flex-1 min-w-0 order-1 lg:order-2">
           {isPromoMode && loadingPromo && promoRooms.length === 0 ? (
             <p className="text-gray-500">加载优惠房型中...</p>
           ) : destination && loadingSearch && localRooms.length === 0 ? (
@@ -941,7 +943,7 @@ function AllRooms() {
                           <>
                             <div className="absolute inset-0 bg-white/70 backdrop-blur-sm" />
                             <div className="absolute inset-0 flex items-center justify-center">
-                              <span className="bg-gray-800/90 text-white px-4 py-2 rounded-lg text-sm font-semibold shadow-lg">已预订</span>
+                              <span className="bg-gray-800/90 text-white px-4 py-2 rounded-lg text-sm font-semibold shadow-lg">已订完</span>
                             </div>
                           </>
                         )}
@@ -990,23 +992,23 @@ function AllRooms() {
               {roomsByHotel.map(({ hotel, rooms }) => (
                 <div
                   key={hotel?._id ?? hotel}
-                  className="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-md hover:shadow-lg transition-shadow duration-200"
+                  className="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-md hover:shadow-lg transition-shadow duration-200 min-w-0"
                 >
-                  {/* 布局：左侧大图 + 右侧酒店信息 + 右下方房型列表，PC/移动端同一结构等比例缩放 */}
-                  <div className="flex flex-row min-h-[200px] md:min-h-[360px] gap-3 md:gap-6">
-                    {/* 左侧：酒店主图（竖版，约 2:1 高宽比） */}
+                  {/* 布局：左侧大图 + 右侧酒店信息 + 右下方房型列表，固定宽度不随房型数量变化 */}
+                  <div className="flex flex-row min-h-[133px] md:min-h-[360px] gap-3 md:gap-6 min-w-0">
+                    {/* 左侧：酒店主图（竖版，约 2:1 高宽比；移动端高度约 200px 的 2/3） */}
                     <div className="relative w-2/5 min-w-[100px] max-w-[200px] md:max-w-[280px] flex-shrink-0 rounded-l-2xl overflow-hidden">
                       <HotelImageCarousel
                         images={hotel?.images}
                         fallbackImage={rooms[0]?.images?.[0]}
-                        className="w-full h-full min-h-[200px] md:min-h-[360px]"
+                        className="w-full h-full min-h-[133px] md:min-h-[360px]"
                         onClick={() => navigate(appendSearch(`/hotels/${hotel?._id ?? hotel}`))}
                       />
                     </div>
-                    {/* 右侧：上方酒店信息 + 下方房型列表 */}
+                    {/* 右侧：上方酒店信息 + 下方房型列表（移动端更紧凑以减小整体高度） */}
                     <div className="flex-1 flex flex-col min-w-0">
-                      <div className="p-4 md:p-6 flex flex-col flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5 md:gap-2 mb-2 flex-wrap">
+                      <div className="p-3 md:p-6 flex flex-col flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 md:gap-2 mb-1 md:mb-2 flex-wrap">
                         <h2 className="text-base md:text-2xl font-extrabold text-gray-800 leading-snug line-clamp-2">{hotel?.name}</h2>
                         {(hotel?.starRating ?? 0) > 0 && (
                           <span className="text-[#f7ad1a] shrink-0 inline-flex items-center gap-0.5 text-sm md:text-xl">
@@ -1023,10 +1025,10 @@ function AllRooms() {
                         const stats = hid ? hotelReviewStats[hid] : null;
                         const avgRating = stats?.avgRating ?? 0;
                         const total = stats?.total ?? 0;
-                        const displayScore = avgRating > 0 ? (Number(avgRating) * 2).toFixed(1) : null;
-                        const ratingLabel = displayScore ? (parseFloat(displayScore) >= 9 ? '很棒' : parseFloat(displayScore) >= 8 ? '很好' : parseFloat(displayScore) >= 7 ? '不错' : parseFloat(displayScore) >= 6 ? '一般' : '较差') : null;
+                        const displayScore = avgRating > 0 ? Number(avgRating).toFixed(1) : null;
+                        const ratingLabel = displayScore ? (parseFloat(displayScore) >= 4.5 ? '很棒' : parseFloat(displayScore) >= 4 ? '很好' : parseFloat(displayScore) >= 3 ? '不错' : parseFloat(displayScore) >= 2 ? '一般' : '较差') : null;
                         return (
-                          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-2.5">
+                          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2 md:gap-3 mb-1.5 md:mb-2.5">
                             <div className="flex flex-wrap items-center gap-2">
                               {ratingLabel && displayScore ? (
                                 <>
@@ -1053,28 +1055,28 @@ function AllRooms() {
                           </div>
                         );
                       })()}
-                      <div className="text-gray-700 text-xs mb-2.5">
+                      <div className="text-gray-700 text-xs mb-1.5 md:mb-2.5">
                         <span className="line-clamp-2 font-medium">{hotel?.address} · {hotel?.city}</span>
                       </div>
                       {hotel?.hotelIntro && (
-                        <p className="text-xs text-gray-500 leading-relaxed line-clamp-3 flex-1">
+                        <p className="text-xs text-gray-500 leading-relaxed line-clamp-2 md:line-clamp-3 flex-1">
                           {hotel.hotelIntro}
                         </p>
                       )}
                       </div>
-                    {/* 右下方：房型滑动列表（小框） */}
-                    <div className="border-t border-gray-50 bg-gray-50/30 flex-shrink-0">
-                      <p className="px-3 md:px-4 pt-2 md:pt-3 pb-1.5 md:pb-2 text-xs font-semibold text-gray-600 uppercase tracking-wide">可选房型</p>
-                      <div className="overflow-x-auto overflow-y-hidden pb-3 md:pb-4 px-3 md:px-4 flex gap-2 md:gap-3 flex-nowrap" style={{ scrollbarWidth: 'thin', WebkitOverflowScrolling: 'touch' }}>
+                    {/* 右下方：房型滑动列表（固定宽度，1~4 种房型时横向滚动，宽度不变） */}
+                    <div className="border-t border-gray-50 bg-gray-50/30 flex-shrink-0 min-w-0 w-full">
+                      <p className="px-3 md:px-4 pt-1.5 md:pt-3 pb-1 md:pb-2 text-xs font-semibold text-gray-600 uppercase tracking-wide">可选房型</p>
+                      <div className="overflow-x-auto overflow-y-hidden pb-2 md:pb-4 px-3 md:px-4 flex gap-2 md:gap-3 flex-nowrap min-w-0" style={{ scrollbarWidth: 'thin', WebkitOverflowScrolling: 'touch' }}>
                       {rooms.map((room) => {
                         const isUnavailable = checkIn && checkOut && roomAvailability[room._id] === false;
                         return (
                           <div
                             key={room._id}
-                            className={`flex-shrink-0 w-36 md:w-44 rounded-lg border border-gray-200 bg-white overflow-hidden shadow-md hover:shadow-lg hover:border-gray-300 transition-all duration-200 ${isUnavailable ? 'opacity-60' : ''}`}
+                            className={`flex-shrink-0 w-28 md:w-44 rounded-lg border border-gray-200 bg-white overflow-hidden shadow-md hover:shadow-lg hover:border-gray-300 transition-all duration-200 ${isUnavailable ? 'opacity-60' : ''}`}
                           >
                             <div
-                              className="relative h-16 md:h-20 cursor-pointer overflow-hidden group"
+                              className="relative h-12 md:h-20 cursor-pointer overflow-hidden group"
                               onClick={() => {
                                 if (isOwnHotelRoom(room)) { toast('不能预定自己名下的酒店哦'); return; }
                                 if (role === 'admin') { toast('管理员不能预订酒店'); return; }
@@ -1084,12 +1086,12 @@ function AllRooms() {
                               <img src={room.images?.[0]} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" />
                               {isUnavailable && (
                                 <div className="absolute inset-0 bg-white/80 flex items-center justify-center">
-                                  <span className="bg-gray-700/90 text-white px-2 py-1 rounded text-xs font-medium">已预订</span>
+                              <span className="bg-gray-700/90 text-white px-2 py-1 rounded text-xs font-medium">已订完</span>
                                 </div>
                               )}
                             </div>
-                            <div className="p-2 md:p-2.5">
-                              <p className="text-xs font-semibold text-gray-800 truncate mb-2" title={getRoomTypeLabel(room.roomType)}>{getRoomTypeLabel(room.roomType)}</p>
+                            <div className="p-1.5 md:p-2.5">
+                              <p className="text-xs font-semibold text-gray-800 truncate mb-1 md:mb-2" title={getRoomTypeLabel(room.roomType)}>{getRoomTypeLabel(room.roomType)}</p>
                               <div className="flex items-center justify-between gap-2">
                                 <span className="text-sm font-bold text-black">{isAuthenticated && (room.promoDiscount ?? 0) > 0 ? Math.round(room.pricePerNight * (1 - room.promoDiscount / 100)) : room.pricePerNight}<span className="text-xs font-normal text-gray-500 ml-0.5">元/晚</span></span>
                                 <button

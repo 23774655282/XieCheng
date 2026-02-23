@@ -11,6 +11,7 @@ const schema = new Schema(
     promoDiscount: { type: Number },
     roomCount: { type: Number },
     images: { type: [String] },
+    isAvailable: { type: Boolean },
     status: { type: String, enum: ["pending", "approved", "rejected"], default: "pending" },
     rejectReason: { type: String, default: "" },
     reviewedAt: { type: Date },

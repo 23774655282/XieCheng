@@ -11,7 +11,7 @@ export const getHotelPublicById = async (req, res) => {
         const { id } = req.params;
         const hotel = await Hotel.findOne({ _id: id, status: "approved" });
         if (!hotel) return res.status(404).json({ success: false, message: "Hotel not found" });
-        const rooms = await Room.find({ hotel: id.toString() }).sort({ pricePerNight: 1 });
+        const rooms = await Room.find({ hotel: id.toString(), status: { $ne: "pending_audit" } }).sort({ pricePerNight: 1 });
         return res.status(200).json({ success: true, hotel, rooms });
     } catch (error) {
         console.error("Error fetching hotel:", error);
@@ -626,6 +626,7 @@ export const approveHotel = async (req, res) => {
                     if (app.promoDiscount !== undefined) room.promoDiscount = app.promoDiscount;
                     if (app.roomCount !== undefined) room.roomCount = app.roomCount;
                     if (app.images && app.images.length > 0) room.images = app.images;
+                    if (app.isAvailable !== undefined) room.isAvailable = app.isAvailable;
                     await room.save({ validateBeforeSave: false });
                 }
                 app.status = "approved";

@@ -46,6 +46,8 @@ function RoomDetail() {
     const [children, setChildren] = useState(0);
     const [roomCount, setRoomCount] = useState(1);
     const [roomNotFound, setRoomNotFound] = useState(false);
+    const [availableInventory, setAvailableInventory] = useState(null);
+    const [inventoryExceededModal, setInventoryExceededModal] = useState(false);
     const [guestName, setGuestName] = useState('');
     const [guestEmail, setGuestEmail] = useState('');
     const [guestPhone, setGuestPhone] = useState('');
@@ -95,6 +97,29 @@ function RoomDetail() {
         if (userInfo?.username) setGuestName(userInfo.username);
     }, [userInfo?.username]);
 
+    // 日期或房间变化时检查剩余库存
+    useEffect(() => {
+        if (!id || !checkIn || !checkOut || checkIn >= checkOut) {
+            setAvailableInventory(null);
+            return;
+        }
+        axios
+            .post('/api/bookings/check-availability', {
+                room: id,
+                checkInDate: checkIn,
+                checkOutDate: checkOut,
+                roomQuantity: 1,
+            })
+            .then(({ data }) => {
+                if (data.success && typeof data.available === 'number') {
+                    setAvailableInventory(data.available);
+                } else {
+                    setAvailableInventory(null);
+                }
+            })
+            .catch(() => setAvailableInventory(null));
+    }, [id, checkIn, checkOut, axios]);
+
     async function handleSubmit(e) {
         e.preventDefault();
         if (!checkIn || !checkOut || checkIn >= checkOut) {
@@ -126,6 +151,7 @@ function RoomDetail() {
                 checkInDate: checkIn,
                 checkOutDate: checkOut,
                 guests,
+                roomQuantity: roomCount,
                 paymentMethod: "Pay At Hotel",
                 guestName: guestName?.trim() || undefined,
                 guestEmail: guestEmail?.trim() || undefined,
@@ -266,6 +292,7 @@ function RoomDetail() {
                 }
                 const nights = checkIn && checkOut ? differenceInCalendarDays(parseLocalDate(checkOut), parseLocalDate(checkIn)) : 0;
                 return (
+            <>
             <form
                 onSubmit={handleSubmit}
                 className="bg-white rounded-2xl p-6 mb-12"
@@ -278,11 +305,32 @@ function RoomDetail() {
                         <span>入住：{checkIn ? formatDateShort(parseLocalDate(checkIn)) + (formatDateSuffix(parseLocalDate(checkIn)) || '') : '—'}</span>
                         <span>退房：{checkOut ? formatDateShort(parseLocalDate(checkOut)) + (formatDateSuffix(parseLocalDate(checkOut)) || '') : '—'}</span>
                         <span>{nights}晚</span>
-                        <span>{adults}位成人 · {children}名儿童 · {roomCount}间客房</span>
+                        <span>{adults}位成人 · {children}名儿童 ·</span>
+                        <span className="flex items-center gap-1">
+                            间数：
+                            <button type="button" onClick={() => setRoomCount((r) => Math.max(1, r - 1))} disabled={roomCount <= 1} className="w-7 h-7 flex items-center justify-center rounded border border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-sm">−</button>
+                            <span className="w-7 text-center font-medium">{roomCount}</span>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    const next = roomCount + 1;
+                                    if (typeof availableInventory === 'number' && next > availableInventory) {
+                                        setInventoryExceededModal(true);
+                                    } else {
+                                        setRoomCount((r) => Math.min(9, r + 1));
+                                    }
+                                }}
+                                disabled={roomCount >= 9}
+                                className="w-7 h-7 flex items-center justify-center rounded border border-gray-600 text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                            >
+                                +
+                            </button>
+                        </span>
                     </div>
                     <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-gray-700">
                         <span>酒店：{room?.hotel?.name || '—'}</span>
                         <span>房型：{room ? getRoomTypeLabel(room.roomType) : '—'}</span>
+                        <span className="font-medium">预估总价：{room && checkIn && checkOut ? (room.pricePerNight * nights * roomCount).toFixed(0) : '—'} 元</span>
                     </div>
                 </div>
                 <div className="space-y-4 mb-4">
@@ -341,6 +389,26 @@ function RoomDetail() {
                     </button>
                 </div>
             </form>
+
+            {/* 间数超出库存弹窗 */}
+            {inventoryExceededModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setInventoryExceededModal(false)}>
+                    <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4" onClick={(e) => e.stopPropagation()}>
+                        <h3 className="text-lg font-semibold text-gray-900 mb-3">库存不足</h3>
+                        <p className="text-sm text-gray-600 mb-4">
+                            当前选择数量已超过剩余最大库存，最多可订 {availableInventory ?? 0} 间
+                        </p>
+                        <button
+                            type="button"
+                            onClick={() => setInventoryExceededModal(false)}
+                            className="w-full py-2.5 bg-black text-white rounded-lg hover:bg-gray-800"
+                        >
+                            知道了
+                        </button>
+                    </div>
+                </div>
+            )}
+            </>
                 );
             })()}
 

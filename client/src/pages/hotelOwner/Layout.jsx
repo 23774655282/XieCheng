@@ -17,13 +17,14 @@ function Layout() {
   }, [authChecked, isOwner, navigate]);
 
   return (
-    <div className="w-full min-h-screen bg-gray-100 flex flex-col">
+    <div className="w-full h-screen bg-gray-100 flex flex-col overflow-hidden">
       <NavBar onMenuClick={() => setSidebarOpen((o) => !o)} />
 
       <div className="flex flex-1 relative min-h-0 items-stretch">
         <SideBar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
         <div
+          data-owner-scroll
           className="flex-1 min-w-0 p-3 sm:p-4 overflow-auto"
           onClick={() => setSidebarOpen(false)}
         >

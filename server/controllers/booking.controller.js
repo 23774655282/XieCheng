@@ -6,32 +6,75 @@ import transporter from "../utils/mailer.js";
 import Stripe from "stripe";
 import crypto from "crypto";
 
-async function checkAvailability({ checkInDate, checkOutDate, room }) {
-    // 只把「未取消且未完成」的订单视为占用；已完成的订单视为已退房，该房间对应日期可再次预订
+/** 未支付订单自动取消时限（分钟） */
+const PAYMENT_DEADLINE_MINUTES = 15;
+
+/** 判断订单是否已超过付款时限 */
+function isPaymentExpired(booking) {
+    if (!booking?.createdAt) return false;
+    const deadline = new Date(booking.createdAt.getTime() + PAYMENT_DEADLINE_MINUTES * 60 * 1000);
+    return new Date() > deadline;
+}
+
+/** 取消超时未支付的订单（定时任务调用，也可在请求中调用） */
+export async function cancelExpiredUnpaidBookings() {
+    const deadline = new Date(Date.now() - PAYMENT_DEADLINE_MINUTES * 60 * 1000);
+    const result = await Booking.updateMany(
+        { isPaid: false, status: { $ne: "cancelled" }, createdAt: { $lt: deadline } },
+        { $set: { status: "cancelled", cancelledBy: "system", cancelReason: "超时未支付自动取消" } }
+    );
+    if (result.modifiedCount > 0) {
+        console.log(`[定时任务] 已取消 ${result.modifiedCount} 个超时未支付订单`);
+    }
+}
+
+// 计算某个房型在给定日期区间内「剩余可订间数」
+async function getAvailableQuantity({ checkInDate, checkOutDate, room }) {
+    const roomDoc = await Room.findById(room).select("roomCount").lean();
+    if (!roomDoc) return 0;
+    const total = roomDoc.roomCount ?? 1;
+
     const bookings = await Booking.find({
         room,
-        status: { $ne: 'cancelled' },
+        status: { $ne: "cancelled" },
         isCompleted: { $ne: true },
         checkInDate: { $lte: checkOutDate },
         checkOutDate: { $gte: checkInDate },
-    });
-    const isAvail = bookings.length === 0;
-    return isAvail;
+    })
+        .select("roomQuantity")
+        .lean();
+
+    const booked = bookings.reduce((sum, b) => sum + (b.roomQuantity || 1), 0);
+    return Math.max(0, total - booked);
+}
+
+// 按间数判断是否可订
+async function checkAvailability({ checkInDate, checkOutDate, room, roomQuantity = 1 }) {
+    const available = await getAvailableQuantity({ checkInDate, checkOutDate, room });
+    return available >= roomQuantity;
 }
 
 
 async function checkAvailabilityApi(req,res) {
     try {
-        const {checkInDate, checkOutDate, room} = req.body;
+        const {checkInDate, checkOutDate, room, roomQuantity = 1} = req.body;
+        const available = await getAvailableQuantity({ checkInDate, checkOutDate, room });
+        const isAvail = available >= roomQuantity;
 
-        console.log(checkInDate,checkOutDate,room)
-
-        const isAvail = await checkAvailability({checkInDate, checkOutDate, room});
+        let message;
+        if (isAvail) {
+            message = `当前可订 ${available} 间`;
+        } else if (available <= 0) {
+            message = "该房型在所选日期已订完";
+        } else {
+            message = `库存不足，当前最多可订 ${available} 间`;
+        }
 
         return res.status(200).json({
             success: true,
-            message: isAvail ? "Room is available" : "Room is not available",
-            isAvail
+            message,
+            isAvail,
+            available,
         });
     } catch (error) {
         console.error("Error checking availability:", error);
@@ -45,7 +88,8 @@ async function checkAvailabilityApi(req,res) {
 
 async function createBooking(req,res,next) {
     try {
-        const {room,checkInDate,checkOutDate,guests,guestName,guestEmail,guestPhone,guestRemark} = req.body;
+        const {room,checkInDate,checkOutDate,guests,guestName,guestEmail,guestPhone,guestRemark,roomQuantity: qty} = req.body;
+        const roomQuantity = Math.max(1, Math.floor(Number(qty) || 1));
         const user = req.user._id;
         const userRole = req.user.role;
 
@@ -56,15 +100,17 @@ async function createBooking(req,res,next) {
             });
         }
 
-        const isAvail = await checkAvailability({checkInDate, checkOutDate, room});
-
-
-        console.log(isAvail)
-
+        const isAvail = await checkAvailability({checkInDate, checkOutDate, room, roomQuantity});
         if (!isAvail) {
+            const available = await getAvailableQuantity({ checkInDate, checkOutDate, room });
+            const message =
+                available <= 0
+                    ? "该房型在所选日期已订完，请选择其他日期或房型"
+                    : `该房型库存不足，当前最多可订 ${available} 间`;
             return res.status(400).json({
                 success: false,
-                message: "Room is not available for the selected dates"
+                message,
+                available,
             });
         }
 
@@ -79,7 +125,6 @@ async function createBooking(req,res,next) {
                 success: false,
                 message: "不能预订自己的酒店"
             });
-            
         }
 
         const roomPrice = roomData.pricePerNight
@@ -88,16 +133,12 @@ async function createBooking(req,res,next) {
         const checkOut = new Date(checkOutDate);
 
         const nights = Math.ceil((checkOut - checkIn) / (1000 * 60 * 60 * 24));
-
-        console.log("Nights:", nights)
-
-
-
-        const totalPrice = nights * roomPrice;
+        const totalPrice = nights * roomPrice * roomQuantity;
 
         const booking = await Booking.create({
             user,
             room,
+            roomQuantity,
             hotel: roomData.hotel._id,
             checkInDate: checkIn,
             checkOutDate: checkOut,
@@ -189,10 +230,26 @@ async function getHotelBooking(req,res) {
 
     const bookings = await Booking.find({ hotel: { $in: hotelIds } })
         .populate('room hotel user')
-        .sort({ createdAt: -1 });
+        .sort({ createdAt: -1 })
+        .lean();
 
-    const totalBookings = bookings.length;
-    const totalRevenue = bookings.reduce((acc, booking) => acc + booking.totalPrice, 0);
+    // 为每条订单计算该房型在对应日期区间的剩余可订数量（库存量会随预订更新）
+    for (const b of bookings) {
+        if (!b.room || b.status === 'cancelled' || b.isCompleted) continue;
+        const overlapping = await Booking.find({
+            room: b.room._id,
+            status: { $ne: 'cancelled' },
+            isCompleted: { $ne: true },
+            checkInDate: { $lte: b.checkOutDate },
+            checkOutDate: { $gte: b.checkInDate },
+        }).select('roomQuantity').lean();
+        const booked = overlapping.reduce((s, o) => s + (o.roomQuantity || 1), 0);
+        b.availableDuringStay = Math.max(0, (b.room.roomCount ?? 1) - booked);
+    }
+
+    const completedBookings = bookings.filter((b) => b.isCompleted === true);
+    const totalBookings = completedBookings.length;
+    const totalRevenue = completedBookings.reduce((acc, b) => acc + (b.totalPrice || 0), 0);
 
     return res.status(200).json({
         success: true,
@@ -209,14 +266,23 @@ async function stripePayment(req,res) {
     try {
         const {bookingId} = req.body;
 
-        const booking = await Booking.findById(bookingId)
+        const booking = await Booking.findById(bookingId);
         if (!booking) {
             return res.status(404).json({
                 success: false,
                 message: "Booking not found"
             });
         }
-
+        if (booking.status === "cancelled") {
+            return res.status(400).json({ success: false, message: "订单已取消" });
+        }
+        if (booking.isPaid) {
+            return res.status(400).json({ success: false, message: "订单已支付" });
+        }
+        if (isPaymentExpired(booking)) {
+            await Booking.findByIdAndUpdate(bookingId, { status: "cancelled", cancelledBy: "system", cancelReason: "超时未支付自动取消" });
+            return res.status(400).json({ success: false, message: "订单已超时取消（超过15分钟未支付），请重新预订" });
+        }
 
         const room = await Room.findById(booking.room)
                                .populate('hotel');
@@ -296,6 +362,10 @@ async function getPayQr(req, res) {
         if (booking.isPaid) {
             return res.status(400).json({ success: false, message: "订单已支付" });
         }
+        if (isPaymentExpired(booking)) {
+            await Booking.findByIdAndUpdate(bookingId, { status: "cancelled", cancelledBy: "system", cancelReason: "超时未支付自动取消" });
+            return res.status(400).json({ success: false, message: "订单已超时取消（超过15分钟未支付），请重新预订" });
+        }
         const token = crypto.randomBytes(24).toString("hex");
         const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 分钟有效
         booking.paymentConfirmToken = token;
@@ -329,6 +399,13 @@ async function confirmPayment(req, res) {
         }
         if (booking.isPaid) {
             return res.status(200).json({ success: true, message: "已支付" });
+        }
+        if (booking.status === "cancelled") {
+            return res.status(400).json({ success: false, message: "订单已取消" });
+        }
+        if (isPaymentExpired(booking)) {
+            await Booking.findByIdAndUpdate(bookingId, { status: "cancelled", cancelledBy: "system", cancelReason: "超时未支付自动取消" });
+            return res.status(400).json({ success: false, message: "订单已超时取消（超过15分钟未支付），请重新预订" });
         }
         if (booking.paymentConfirmToken !== token) {
             return res.status(400).json({ success: false, message: "无效的支付链接" });
