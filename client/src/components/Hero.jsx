@@ -1,5 +1,4 @@
 import { SlCalender } from 'react-icons/sl'
-import { LuMapPinCheckInside } from 'react-icons/lu'
 import { useState, useEffect, useRef } from 'react'
 import DatePicker from 'react-datepicker'
 import { flip, offset } from '@floating-ui/react'
@@ -10,11 +9,16 @@ import 'react-datepicker/dist/react-datepicker.css'
 import { useAppContext } from '../context/AppContext'
 import { heroCarouselImages, assets } from '../assets/assets'
 import DestinationDropdown from './DestinationDropdown'
+import { regeoAmap, wgs84ToGcj02 } from '../utils/amap'
 
 const HERO_SLIDE_INTERVAL_MS = 5000;
 
+const MY_LOCATION_LABEL = '我的位置';
+
 function Hero() {
-    const [destination, setDestination] = useState("");
+    const [destination, setDestination] = useState(MY_LOCATION_LABEL);
+    const myLocationCityRef = useRef(null);
+    const [locationLoading, setLocationLoading] = useState(false);
     const [checkIn, setCheckIn] = useState(getTodayLocal);
     const [checkOut, setCheckOut] = useState(() => {
         const today = parseLocalDate(getTodayLocal());
@@ -60,6 +64,39 @@ function Hero() {
     }, []);
 
     useEffect(() => {
+        resolveMyLocationCity().then((city) => {
+            if (city) myLocationCityRef.current = city;
+        });
+    }, []);
+
+    async function resolveMyLocationCity() {
+        if (!navigator.geolocation) return null;
+        return new Promise((resolve) => {
+            navigator.geolocation.getCurrentPosition(
+                async (pos) => {
+                    const [lat, lng] = wgs84ToGcj02(pos.coords.latitude, pos.coords.longitude);
+                    const key = import.meta.env.VITE_AMAP_KEY;
+                    const addr = await regeoAmap(key, lng, lat);
+                    const city = addr?.city || addr?.province || addr?.district || null;
+                    resolve(city || null);
+                },
+                () => resolve(null),
+                { timeout: 8000, maximumAge: 300000 }
+            );
+        });
+    }
+
+    function handleLocationIconClick() {
+        setDestination(MY_LOCATION_LABEL);
+        setDestinationError('');
+        setLocationLoading(true);
+        resolveMyLocationCity().then((city) => {
+            myLocationCityRef.current = city;
+            setLocationLoading(false);
+        });
+    }
+
+    useEffect(() => {
         if (heroCarouselImages.length <= 1) return;
         const timer = setInterval(() => {
             setSlideIndex((i) => (i + 1) % heroCarouselImages.length);
@@ -69,14 +106,32 @@ function Hero() {
 
     async function handleSumbit(e) {
         e.preventDefault();
-        if (!destination || !destination.trim()) {
+        let searchDestination = destination?.trim() || '';
+        if (searchDestination === MY_LOCATION_LABEL) {
+            const cached = myLocationCityRef.current;
+            if (cached) {
+                searchDestination = cached;
+            } else {
+                setLocationLoading(true);
+                const city = await resolveMyLocationCity();
+                setLocationLoading(false);
+                if (city) {
+                    myLocationCityRef.current = city;
+                    searchDestination = city;
+                } else {
+                    setDestinationError('请允许定位或输入目的地');
+                    return;
+                }
+            }
+        }
+        if (!searchDestination) {
             setDestinationError('请输入目的地');
             return;
         }
         setDestinationError('');
         const token = await getToken();
         const params = new URLSearchParams();
-        if (destination) params.set("destination", destination);
+        params.set("destination", searchDestination);
         if (checkIn) params.set("checkIn", checkIn);
         if (checkOut) params.set("checkOut", checkOut);
         params.set("adults", String(adults));
@@ -86,12 +141,12 @@ function Hero() {
         if (token) {
             axios.post(
               '/api/users/store-recent-search',
-              { recentSerachCity: destination },
+              { recentSerachCity: searchDestination },
               { headers: { Authorization: `Bearer ${token}` } },
             ).catch(() => {});
         }
 
-        addRecentSearch({ destination: destination.trim(), checkIn, checkOut, rooms, adults });
+        addRecentSearch({ destination: searchDestination, checkIn, checkOut, rooms, adults });
     }
 
   return (
@@ -155,16 +210,37 @@ function Hero() {
                     <SlCalender/>
                     <label htmlFor="destinationInput">目的地</label>
                 </div>
-                <input
-                    onChange={(e) => { setDestination(e.target.value); setDestinationOpen(true); setDestinationError(''); }}
-                    onFocus={() => setDestinationOpen(true)}
-                    value={destination}
-                    id="destinationInput"
-                    type="text"
-                    className={`rounded-lg border px-3 py-2 mt-2 text-sm font-semibold text-gray-900 placeholder:font-normal placeholder:text-gray-400 outline-none w-full min-w-0 min-h-[56px] ${destinationOpen ? 'border-gray-700 bg-gray-100/50' : 'border-gray-200'}`}
-                    placeholder="输入或选择目的地"
-                    autoComplete="off"
-                />
+                <div className="relative mt-2">
+                    <input
+                        onChange={(e) => { setDestination(e.target.value); setDestinationOpen(true); setDestinationError(''); }}
+                        onFocus={() => setDestinationOpen(true)}
+                        value={destination}
+                        id="destinationInput"
+                        type="text"
+                        className={`rounded-lg border pl-3 pr-10 py-2 text-sm font-semibold text-gray-900 placeholder:font-normal placeholder:text-gray-400 outline-none w-full min-w-0 min-h-[56px] ${destinationOpen ? 'border-gray-700 bg-gray-100/50' : 'border-gray-200'}`}
+                        placeholder="输入或选择目的地"
+                        autoComplete="off"
+                    />
+                    <button
+                        type="button"
+                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleLocationIconClick(); }}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-md text-gray-600 hover:bg-gray-200/80 hover:text-gray-900 transition-colors"
+                        title="定位到我的位置"
+                        aria-label="定位到我的位置"
+                    >
+                        {locationLoading ? (
+                            <svg className="animate-spin w-5 h-5 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden>
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                            </svg>
+                        ) : (
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                        )}
+                    </button>
+                </div>
                 {destinationOpen && (
                     <DestinationDropdown
                         destination={destination}
