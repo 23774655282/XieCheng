@@ -121,6 +121,7 @@ const NavBar = () => {
                                 <button onClick={() => navigate("/profile?tab=info")} className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-100/80 transition-colors">我的信息</button>
                                 <button onClick={() => navigate("/profile?tab=orders")} className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-100/80 transition-colors">我的订单</button>
                                 <button onClick={() => navigate("/profile?tab=favorites")} className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-100/80 transition-colors">我的收藏</button>
+                                <button onClick={() => navigate("/profile?tab=reviews")} className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-100/80 transition-colors">我的评价</button>
                                 <div className="my-1 border-t border-gray-200" />
                                 <button onClick={logout} className="w-full px-4 py-2.5 text-left text-sm text-red-600 hover:bg-red-50/80 transition-colors">退出登录</button>
                             </div>
@@ -164,6 +165,7 @@ const NavBar = () => {
                                         <button onClick={() => { setIsAvatarDropdownOpen(false); navigate("/profile?tab=info"); }} className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-100/80">我的信息</button>
                                         <button onClick={() => { setIsAvatarDropdownOpen(false); navigate("/profile?tab=orders"); }} className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-100/80">我的订单</button>
                                         <button onClick={() => { setIsAvatarDropdownOpen(false); navigate("/profile?tab=favorites"); }} className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-100/80">我的收藏</button>
+                                        <button onClick={() => { setIsAvatarDropdownOpen(false); navigate("/profile?tab=reviews"); }} className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-100/80">我的评价</button>
                                         <div className="my-1 border-t border-gray-200" />
                                         <button onClick={() => { setIsAvatarDropdownOpen(false); logout(); }} className="w-full px-4 py-2.5 text-left text-sm text-red-600 hover:bg-red-50/80">退出登录</button>
                                     </div>

@@ -33,7 +33,9 @@ function HotelCard({ room, idx }) {
         </div>
         <div className="flex items-center justify-between mt-auto pt-2">
           <p className="text-lg font-semibold text-gray-900">
-            {room.pricePerNight} 元
+            {(room.promoDiscount != null && room.promoDiscount > 0)
+              ? Math.round(room.pricePerNight * (1 - room.promoDiscount / 100))
+              : room.pricePerNight} 元
             <span className="text-xs text-gray-500 font-normal">/晚</span>
           </p>
           <button className="bg-gray-900 hover:bg-gray-800 text-white px-4 py-2 rounded font-medium transition">

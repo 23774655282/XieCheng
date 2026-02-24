@@ -272,7 +272,15 @@ function RoomDetail() {
                     ))}
                 </div>
 
-                <p className="text-xl font-bold text-gray-800">{room.pricePerNight} 元 <span className="text-sm text-gray-500">/晚</span></p>
+                <p className="text-xl font-bold text-gray-800">
+                    {(room.promoDiscount != null && room.promoDiscount > 0)
+                        ? Math.round(room.pricePerNight * (1 - room.promoDiscount / 100))
+                        : room.pricePerNight} 元
+                    <span className="text-sm text-gray-500">/晚</span>
+                    {(room.promoDiscount != null && room.promoDiscount > 0) && (
+                        <span className="ml-2 text-sm font-normal text-amber-600">已享{room.promoDiscount}%优惠</span>
+                    )}
+                </p>
             </div>
 
             {/* Booking Form - 与首页搜索栏一致（无目的地）；管理员不可订，商家不可订自己的酒店 */}
@@ -330,7 +338,12 @@ function RoomDetail() {
                     <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-gray-700">
                         <span>酒店：{room?.hotel?.name || '—'}</span>
                         <span>房型：{room ? getRoomTypeLabel(room.roomType) : '—'}</span>
-                        <span className="font-medium">预估总价：{room && checkIn && checkOut ? (room.pricePerNight * nights * roomCount).toFixed(0) : '—'} 元</span>
+                        <span className="font-medium">预估总价：{room && checkIn && checkOut ? (() => {
+                            const pricePerNight = (room.promoDiscount != null && room.promoDiscount > 0)
+                                ? Math.round(room.pricePerNight * (1 - room.promoDiscount / 100))
+                                : room.pricePerNight;
+                            return (pricePerNight * nights * roomCount).toFixed(0);
+                        })() : '—'} 元</span>
                     </div>
                 </div>
                 <div className="space-y-4 mb-4">

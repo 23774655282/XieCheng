@@ -452,12 +452,14 @@ function MyBooking({ embedded = false }) {
                 {/* Payment & Status - 与商家仪表盘支付列统一：待支付/已支付/已取消/退款中/已退款/已完成 */}
                 <div className="flex flex-col justify-between items-start lg:items-end gap-4 min-w-[130px]">
                     {(() => {
-                        const payLabel = booking.refundStatus === 'approved' ? '已退款'
+                        const payLabel = (booking.refundStatus === 'rejected' && booking.refundPlatformReviewRequested) ? '客服介入中'
+                            : booking.refundStatus === 'approved' ? '已退款'
                             : booking.refundStatus === 'pending' ? '退款中'
                             : booking.status === 'cancelled' ? '已取消'
                             : booking.isCompleted ? '已完成'
                             : booking.isPaid ? '已支付' : '待支付';
-                        const payClass = payLabel === '已退款' ? 'bg-slate-100 text-slate-600'
+                        const payClass = payLabel === '客服介入中' ? 'bg-purple-100 text-purple-700'
+                            : payLabel === '已退款' ? 'bg-slate-100 text-slate-600'
                             : payLabel === '退款中' ? 'bg-amber-100 text-amber-700'
                             : payLabel === '已取消' ? 'bg-gray-100 text-gray-600'
                             : payLabel === '已完成' ? 'bg-emerald-100 text-emerald-700'

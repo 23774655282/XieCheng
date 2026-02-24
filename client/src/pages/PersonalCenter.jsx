@@ -9,6 +9,7 @@ const TABS = [
   { id: 'info', label: '我的信息' },
   { id: 'orders', label: '我的订单' },
   { id: 'favorites', label: '我的收藏' },
+  { id: 'reviews', label: '我的评价' },
 ];
 
 function PersonalCenter() {
@@ -19,6 +20,8 @@ function PersonalCenter() {
   const [saving, setSaving] = useState(false);
   const [favorites, setFavorites] = useState([]);
   const [loadingFav, setLoadingFav] = useState(false);
+  const [reviews, setReviews] = useState([]);
+  const [loadingReviews, setLoadingReviews] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -49,6 +52,26 @@ function PersonalCenter() {
           setFavorites([]);
         } finally {
           setLoadingFav(false);
+        }
+      })();
+    }
+  }, [tab, isAuthenticated, getToken, axios]);
+
+  useEffect(() => {
+    if (tab === 'reviews' && isAuthenticated) {
+      (async () => {
+        setLoadingReviews(true);
+        try {
+          const token = await getToken();
+          const { data } = await axios.get('/api/reviews/me', {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (data.success) setReviews(data.reviews || []);
+          else setReviews([]);
+        } catch {
+          setReviews([]);
+        } finally {
+          setLoadingReviews(false);
         }
       })();
     }
@@ -221,6 +244,71 @@ function PersonalCenter() {
                         >
                           ×
                         </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {tab === 'reviews' && (
+              <div>
+                {loadingReviews ? (
+                  <p className="text-gray-500 py-8">加载中...</p>
+                ) : reviews.length === 0 ? (
+                  <p className="text-gray-500 py-8">暂无评价，完成入住后可在订单页对酒店进行评价</p>
+                ) : (
+                  <div className="space-y-4">
+                    {reviews.map((r) => (
+                      <div key={r._id} className="p-4 rounded-lg border border-gray-200 bg-gray-50/50">
+                        <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/hotels/${r.hotel?._id || r.hotel}`)}
+                            className="font-medium text-gray-900 hover:text-gray-700 hover:underline"
+                          >
+                            {r.hotel?.name || '酒店'}
+                          </button>
+                          <span className="text-sm text-gray-500">
+                            {r.createdAt ? new Date(r.createdAt).toLocaleDateString('zh-CN') : ''}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1 mb-2">
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <span key={star} className={star <= (r.rating || 0) ? 'text-amber-500' : 'text-gray-300'}>★</span>
+                          ))}
+                          <span className="text-sm text-gray-600 ml-1">{r.rating} 分</span>
+                        </div>
+                        <p className="text-gray-700 text-sm whitespace-pre-wrap">{r.comment}</p>
+                        {r.images && r.images.length > 0 && (
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            {r.images.map((url, i) => (
+                              <img key={i} src={url} alt="" className="w-16 h-16 rounded object-cover" />
+                            ))}
+                          </div>
+                        )}
+                        <div className="mt-2 flex justify-end">
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (!window.confirm('确定删除这条评价？')) return;
+                              try {
+                                const token = await getToken();
+                                const { data } = await axios.delete(`/api/reviews/${r._id}`, {
+                                  headers: { Authorization: `Bearer ${token}` },
+                                });
+                                if (data.success) {
+                                  setReviews((prev) => prev.filter((x) => x._id !== r._id));
+                                  toast.success('已删除');
+                                }
+                              } catch (err) {
+                                toast.error(err.response?.data?.message || '删除失败');
+                              }
+                            }}
+                            className="text-sm text-red-600 hover:text-red-700"
+                          >
+                            删除
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
