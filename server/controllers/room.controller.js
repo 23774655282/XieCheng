@@ -658,15 +658,39 @@ export const smartSearchRooms = async (req, res) => {
         const approvedHotelIds = await Hotel.find(hotelFilter).distinct("_id").then((ids) => ids.map((id) => id.toString()));
         const roomFilter = { isAvailable: true, hotel: { $in: approvedHotelIds }, status: { $ne: "pending_audit" } };
         if (roomType) roomFilter.roomType = roomType;
-        if (budget > 0 && nights >= 1) {
-            const maxPricePerNight = Math.floor(budget / nights);
-            roomFilter.pricePerNight = { $lte: maxPricePerNight };
+        const maxPricePerNight = budget > 0 && nights >= 1 ? Math.floor(budget / nights) : null;
+        let rooms;
+        if (maxPricePerNight != null && maxPricePerNight >= 0) {
+            // 预算筛选：按“折后单价”<= 预算/晚数，包含小于预算的房间（如预算500、460的房间要出现）
+            const pipeline = [
+                { $match: roomFilter },
+                {
+                    $addFields: {
+                        effectivePricePerNight: {
+                            $cond: {
+                                if: { $and: [{ $gt: ["$promoDiscount", 0] }, { $ne: ["$promoDiscount", null] }] },
+                                then: { $round: [{ $multiply: ["$pricePerNight", { $subtract: [1, { $divide: ["$promoDiscount", 100] }] }] }, 0] },
+                                else: "$pricePerNight"
+                            }
+                        }
+                    }
+                },
+                { $match: { effectivePricePerNight: { $lte: maxPricePerNight } } },
+                { $sort: { pricePerNight: 1, createdAt: -1 } },
+                { $limit: 50 },
+                { $addFields: { hotelIdForLookup: { $toObjectId: "$hotel" } } },
+                { $lookup: { from: "hotels", localField: "hotelIdForLookup", foreignField: "_id", as: "hotel" } },
+                { $unwind: { path: "$hotel", preserveNullAndEmptyArrays: false } },
+                { $project: { hotelIdForLookup: 0, effectivePricePerNight: 0 } }
+            ];
+            rooms = await Room.aggregate(pipeline);
+        } else {
+            rooms = await Room.find(roomFilter)
+                .populate({ path: "hotel" })
+                .sort({ pricePerNight: 1, createdAt: -1 })
+                .limit(50)
+                .lean();
         }
-        const rooms = await Room.find(roomFilter)
-            .populate({ path: "hotel" })
-            .sort({ pricePerNight: 1, createdAt: -1 })
-            .limit(50)
-            .lean();
         return res.status(200).json({
             success: true,
             criteria: criteriaOut,

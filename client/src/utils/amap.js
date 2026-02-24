@@ -72,5 +72,37 @@ export function wgs84ToGcj02(wgsLat, wgsLng) {
   return [gcjLat, gcjLng];
 }
 
+/**
+ * 高德逆地理编码：根据经纬度获取地址信息（GCJ-02 坐标）
+ * @param {string} key - 高德 Web 服务 Key
+ * @param {number} lng - 经度
+ * @param {number} lat - 纬度
+ * @returns {{ city: string, province: string, district: string } | null}
+ */
+export async function regeoAmap(key, lng, lat) {
+  if (!Number.isFinite(lng) || !Number.isFinite(lat)) return null;
+  const k = (key || import.meta.env.VITE_AMAP_KEY || '').trim();
+  if (!k) {
+    console.warn('[amap] 未配置 VITE_AMAP_KEY，逆地理编码不可用');
+    return null;
+  }
+  const location = `${lng},${lat}`;
+  const url = `https://restapi.amap.com/v3/geocode/regeo?location=${encodeURIComponent(location)}&key=${encodeURIComponent(k)}`;
+  try {
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data.status !== '1' || !data.regeocode?.addressComponent) return null;
+    const comp = data.regeocode.addressComponent;
+    return {
+      province: comp.province || '',
+      city: comp.city || comp.province || '',
+      district: comp.district || '',
+    };
+  } catch (e) {
+    console.warn('[amap] regeo error', e);
+    return null;
+  }
+}
+
 /** 高德路网瓦片 URL（Leaflet 用），style=8 路网，国内访问稳定 */
 export const AMAP_TILE_URL = 'https://wprd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}';
