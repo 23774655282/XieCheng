@@ -10,6 +10,7 @@ import { useAppContext } from '../context/AppContext'
 import { heroCarouselImages, assets } from '../assets/assets'
 import DestinationDropdown from './DestinationDropdown'
 import { regeoAmap, wgs84ToGcj02 } from '../utils/amap'
+import toast from 'react-hot-toast'
 
 const HERO_SLIDE_INTERVAL_MS = 5000;
 
@@ -38,6 +39,13 @@ function Hero() {
     const guestsRef = useRef(null);
 
     const { navigate, getToken, axios, addRecentSearch, recentSearchRecords, clearRecentSearch } = useAppContext();
+    const backendRegeo = async (lng, lat) => {
+        try {
+            const { data } = await axios.get('/api/amap/regeo', { params: { lng, lat }, timeout: 10000 });
+            if (data?.success && (data.city || data.province)) return data.city || data.province || data.district || null;
+        } catch (_) {}
+        return null;
+    };
 
     useEffect(() => {
         if (!destinationOpen) return;
@@ -75,9 +83,12 @@ function Hero() {
             navigator.geolocation.getCurrentPosition(
                 async (pos) => {
                     const [lat, lng] = wgs84ToGcj02(pos.coords.latitude, pos.coords.longitude);
-                    const key = import.meta.env.VITE_AMAP_KEY;
-                    const addr = await regeoAmap(key, lng, lat);
-                    const city = addr?.city || addr?.province || addr?.district || null;
+                    let city = await backendRegeo(lng, lat);
+                    if (!city) {
+                        const key = import.meta.env.VITE_AMAP_KEY;
+                        const addr = await regeoAmap(key, lng, lat);
+                        city = addr?.city || addr?.province || addr?.district || null;
+                    }
                     resolve(city || null);
                 },
                 () => resolve(null),
@@ -93,6 +104,12 @@ function Hero() {
         resolveMyLocationCity().then((city) => {
             myLocationCityRef.current = city;
             setLocationLoading(false);
+            if (city) {
+                setDestination(city);
+                toast.success(`已定位到 ${city}`);
+            } else {
+                toast.error('定位失败，请允许浏览器定位权限或手动输入城市名');
+            }
         });
     }
 
@@ -119,7 +136,8 @@ function Hero() {
                     myLocationCityRef.current = city;
                     searchDestination = city;
                 } else {
-                    setDestinationError('请允许定位或输入目的地');
+                    setDestinationError('无法获取当前位置，请检查浏览器定位权限或直接输入城市名搜索');
+                    toast.error('定位失败，请允许定位权限或输入目的地');
                     return;
                 }
             }

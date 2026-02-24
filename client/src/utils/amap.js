@@ -91,11 +91,20 @@ export async function regeoAmap(key, lng, lat) {
   try {
     const res = await fetch(url);
     const data = await res.json();
-    if (data.status !== '1' || !data.regeocode?.addressComponent) return null;
-    const comp = data.regeocode.addressComponent;
+    if (data.status !== '1') {
+      if (import.meta.env.DEV && (data.info || data.infocode)) {
+        console.warn('[amap] regeo 返回异常:', data.info || data.infocode, data);
+      }
+      return null;
+    }
+    const comp = data.regeocode?.addressComponent;
+    if (!comp) return null;
+    const province = comp.province || '';
+    const cityRaw = comp.city;
+    const city = Array.isArray(cityRaw) ? (cityRaw[0] || province) : (cityRaw || province);
     return {
-      province: comp.province || '',
-      city: comp.city || comp.province || '',
+      province,
+      city: city || province,
       district: comp.district || '',
     };
   } catch (e) {

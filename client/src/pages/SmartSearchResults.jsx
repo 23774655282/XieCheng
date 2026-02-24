@@ -86,10 +86,18 @@ function SmartSearchResults() {
                 </div>
                 <div className="mt-auto flex items-center justify-between">
                   <p>
-                    <span className="text-lg font-bold text-gray-800">{room.pricePerNight} 元</span>
+                    <span className="text-lg font-bold text-gray-800">
+                      {(room.promoDiscount != null && room.promoDiscount > 0)
+                        ? Math.round(room.pricePerNight * (1 - room.promoDiscount / 100))
+                        : room.pricePerNight} 元
+                    </span>
                     <span className="text-sm text-gray-500 ml-0.5">/晚</span>
                     {nights > 1 && (
-                      <span className="text-sm text-gray-500 ml-1">约 {room.pricePerNight * nights} 元 / {nights} 晚</span>
+                      <span className="text-sm text-gray-500 ml-1">
+                        约 {((room.promoDiscount != null && room.promoDiscount > 0)
+                          ? Math.round(room.pricePerNight * (1 - room.promoDiscount / 100))
+                          : room.pricePerNight) * nights} 元 / {nights} 晚
+                      </span>
                     )}
                   </p>
                   {(() => {
