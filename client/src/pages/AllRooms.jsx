@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { createPortal } from 'react-dom';
 import { facilityIcons } from '../assets/assets';
 import { useSearchParams, useNavigate } from 'react-router-dom';
@@ -7,6 +8,9 @@ import { HotelImageCarousel } from '../components/HotelImageCarousel';
 import SearchBar from '../components/SearchBar';
 import toast from 'react-hot-toast';
 import { formatDateShort, parseLocalDate } from '../utils/dateUtils';
+import { usePerf } from '../context/PerfContext';
+import { VirtualListPerformanceMonitor } from '../components/VirtualListPerformanceMonitor';
+import { virtualListPerf } from '../utils/virtualListPerf';
 
 function CheckBox({ label, selected = false, onChange }) {
   return (
@@ -118,7 +122,10 @@ function AllRooms() {
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const bottomRef = useRef(null);
+  const promoListParentRef = useRef(null);
   const mobileFilterRef = useRef(null);
+  const listRenderStartRef = useRef(null);
+  const { isPerfMode: perfMode, isLegacyList: isLegacyList } = usePerf();
   const sortBtnRef = useRef(null);
   const priceBtnRef = useRef(null);
   const filterBtnRef = useRef(null);
@@ -133,6 +140,7 @@ function AllRooms() {
 
   useEffect(() => {
     if (!destination) return;
+    if (perfMode && !isLegacyList) listRenderStartRef.current = performance.now();
     setLoadingSearch(true);
     axios.get(`/api/rooms/?page=1&limit=12&destination=${encodeURIComponent(destination)}`)
       .then(({ data }) => {
@@ -143,20 +151,21 @@ function AllRooms() {
         }
       })
       .finally(() => setLoadingSearch(false));
-  }, [destination]);
+  }, [destination, perfMode, isLegacyList]);
 
   useEffect(() => {
     if (!promo) return;
     axios.get(`/api/rooms/?page=1&limit=6&promo=${encodeURIComponent(promo)}`)
       .then(({ data }) => {
         if (data.success) {
+          if (perfMode) listRenderStartRef.current = performance.now();
           setPromoRooms(data.rooms || []);
           setPromoHasMore(data.hasMore || false);
           setPromoNextPage(2);
         }
       })
       .finally(() => setLoadingPromo(false));
-  }, [promo, axios]);
+  }, [promo, axios, perfMode]);
 
   const loadMore = useCallback(async () => {
     if (loadingMoreSource || !hasMoreSource) return;
@@ -194,17 +203,6 @@ function AllRooms() {
     setNextPage((p) => p + 1);
     setLoadingMore(false);
   }, [promo, promoNextPage, destination, localNextPage, hasMoreSource, loadingMoreSource, nextPage, fetchRooms, axios]);
-
-  useEffect(() => {
-    const el = bottomRef.current;
-    if (!el) return;
-    const observer = new IntersectionObserver(
-      (entries) => { if (entries[0].isIntersecting) loadMore(); },
-      { rootMargin: '100px', threshold: 0.1 }
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [loadMore]);
 
   // 检查房间可用性（当有日期选择时）
   useEffect(() => {
@@ -634,6 +632,128 @@ function AllRooms() {
     return n;
   }, [selectedFilters]);
 
+  const PROMO_ROW_ESTIMATE = 340;
+  const CARD_GAP = 24;
+  const promoRowCount = Math.ceil(filteredRooms.length / 3);
+  const promoVirtualizer = useVirtualizer({
+    count: promoRowCount,
+    getScrollElement: () => promoListParentRef.current,
+    estimateSize: () => PROMO_ROW_ESTIMATE + CARD_GAP,
+    overscan: 3,
+  });
+
+  useEffect(() => {
+    const el = bottomRef.current;
+    if (!el) return;
+    const root = promo ? promoListParentRef.current : null;
+    if (promo && !root) return;
+    const observer = new IntersectionObserver(
+      (entries) => { if (entries[0].isIntersecting) loadMore(); },
+      { root, rootMargin: '100px', threshold: 0.1 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [loadMore, promo, filteredRooms.length, roomsByHotel.length]);
+
+  // 酒店列表 优化模式（无 destination）：记录首屏加载开始时间（AppContext 拉取第一页）
+  useEffect(() => {
+    if (!perfMode || promo || destination) return;
+    if (contextRooms.length === 0) listRenderStartRef.current = performance.now();
+  }, [perfMode, promo, destination, contextRooms.length]);
+
+  // 酒店列表 legacy 模式：一次性拉取全部酒店（无 destination 用 context，有 destination 用 localRooms API）
+  useEffect(() => {
+    if (!isLegacyList || promo) return;
+    let cancelled = false;
+    if (destination) {
+      setLocalHasMore(false);
+      if (perfMode) listRenderStartRef.current = performance.now();
+      (async () => {
+        let page = 1;
+        let hasMore = true;
+        while (hasMore && !cancelled) {
+          const { data } = await axios.get(`/api/rooms/?page=${page}&limit=12&destination=${encodeURIComponent(destination)}`);
+          if (!data?.success) break;
+          if (page === 1) setLocalRooms(data.rooms || []);
+          else setLocalRooms((prev) => [...prev, ...(data.rooms || [])]);
+          hasMore = data.hasMore ?? false;
+          page++;
+        }
+        if (!cancelled) setLocalNextPage(page);
+      })();
+    } else {
+      setHasMore(false);
+      if (perfMode) listRenderStartRef.current = performance.now();
+      (async () => {
+        let page = 1;
+        let hasMore = true;
+        while (hasMore && !cancelled) {
+          const r = await fetchRooms(page);
+          hasMore = r?.hasMore ?? false;
+          page++;
+        }
+        if (!cancelled) setNextPage(page);
+      })();
+    }
+    return () => { cancelled = true; };
+  }, [isLegacyList, promo, destination, perfMode, fetchRooms, axios]);
+
+  const prevLegacyRef = useRef(isLegacyList);
+  useEffect(() => {
+    if (promo) return;
+    const switchedToOptimized = prevLegacyRef.current && !isLegacyList;
+    prevLegacyRef.current = isLegacyList;
+    if (switchedToOptimized) {
+      if (perfMode) listRenderStartRef.current = performance.now();
+      if (destination) {
+        setLoadingSearch(true);
+        axios.get(`/api/rooms/?page=1&limit=12&destination=${encodeURIComponent(destination)}`)
+          .then(({ data }) => {
+            if (data.success) {
+              setLocalRooms(data.rooms || []);
+              setLocalHasMore(data.hasMore ?? false);
+              setLocalNextPage(2);
+            }
+          })
+          .finally(() => setLoadingSearch(false));
+      } else {
+        fetchRooms(1).then((r) => {
+          setHasMore(r?.hasMore ?? false);
+          setNextPage(2);
+        });
+      }
+    }
+  }, [isLegacyList, promo, destination, fetchRooms, axios]);
+
+  useEffect(() => {
+    if (!perfMode) return;
+    if (promo) {
+      const total = filteredRooms.length;
+      if (total === 0) return;
+      const start = listRenderStartRef.current ?? performance.now();
+      requestAnimationFrame(() => {
+        const rendered = isLegacyList ? total : Math.min(filteredRooms.length, promoVirtualizer.getVirtualItems().length * 3);
+        virtualListPerf.isVirtual = !isLegacyList;
+        virtualListPerf.recordFirstRender(total, rendered, start);
+      });
+    } else {
+      const total = roomsByHotel.length;
+      if (total === 0) return;
+      const start = listRenderStartRef.current ?? performance.now();
+      requestAnimationFrame(() => {
+        virtualListPerf.isVirtual = !isLegacyList;
+        virtualListPerf.recordFirstRender(total, total, start);
+      });
+    }
+  }, [perfMode, promo, filteredRooms.length, roomsByHotel.length, isLegacyList, promoVirtualizer]);
+
+  useEffect(() => {
+    if (perfMode) {
+      listRenderStartRef.current = performance.now();
+      virtualListPerf.reset();
+    }
+  }, [perfMode, isLegacyList]);
+
   useEffect(() => {
     const handler = (e) => {
       if (e.target.closest('[data-mobile-filter-portal]')) return;
@@ -912,6 +1032,8 @@ function AllRooms() {
         </aside>
         )}
         <div className="flex flex-col gap-8 flex-1 min-w-0 order-1 lg:order-2">
+          {perfMode && isPromoMode && <VirtualListPerformanceMonitor itemLabel="房间" />}
+          {perfMode && !isPromoMode && <VirtualListPerformanceMonitor itemLabel="酒店" modeType="lazy" useWindowScroll />}
           {isPromoMode && loadingPromo && promoRooms.length === 0 ? (
             <p className="text-gray-500">加载优惠房型中...</p>
           ) : destination && loadingSearch && localRooms.length === 0 ? (
@@ -921,23 +1043,117 @@ function AllRooms() {
               {isPromoMode ? '暂无该优惠档位的房型。' : destination ? `未找到「${destination}」相关房间，请尝试其他目的地或清除筛选。` : '没有匹配筛选条件的房间。'}
             </p>
           ) : isPromoMode ? (
-            /* 优惠档位：平铺列表，每行 3 个，首屏 6 间，下拉加载 */
+            /* 优惠档位：虚拟列表或普通列表 */
             <>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filteredRooms.map((room) => {
+              <div
+                ref={promoListParentRef}
+                data-room-list-scroll
+                className="overflow-y-auto rounded-2xl border border-gray-100 bg-gradient-to-b from-gray-50/80 to-white shadow-[0_2px_12px_rgba(0,0,0,0.06)]"
+                style={{ maxHeight: 'min(80vh, 880px)' }}
+              >
+                {isLegacyList ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 p-6">
+                    {filteredRooms.map((room) => {
+                      const isUnavailable = checkIn && checkOut && roomAvailability[room._id] === false;
+                      return (
+                        <div
+                          key={room._id}
+                          className={`group flex flex-col bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm hover:shadow-xl hover:border-gray-200 transition-all duration-300 relative ${isUnavailable ? 'opacity-60' : ''}`}
+                        >
+                          <div className="relative overflow-hidden">
+                            <img
+                              onClick={() => { navigate(appendSearch(`/rooms/${room._id}`)); scrollTo(0, 0); }}
+                              src={room.images?.[0]}
+                              alt="房间"
+                              title="查看房间详情"
+                              className="w-full h-44 object-cover cursor-pointer group-hover:scale-105 transition-transform duration-500"
+                              loading="lazy"
+                              decoding="async"
+                            />
+                            {isUnavailable && (
+                              <>
+                                <div className="absolute inset-0 bg-white/70 backdrop-blur-sm" />
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                  <span className="bg-gray-800/90 text-white px-4 py-2 rounded-lg text-sm font-semibold shadow-lg">已订完</span>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                          <div className="p-5 flex flex-col flex-1">
+                            <p className="text-base font-semibold text-gray-800 mb-2 group-hover:text-gray-900">{getRoomTypeLabel(room.roomType)}</p>
+                            <div className="flex flex-wrap gap-2 mb-3">
+                              {room.amenties?.slice(0, 5).map((item, index) => (
+                                <div key={index} className="flex items-center gap-1">
+                                  {facilityIcons[item] && <img src={facilityIcons[item]} alt="" className="w-3.5 h-3.5 flex-shrink-0" />}
+                                  <span className="text-xs text-gray-600">{facilityLabelMap[item] || item}</span>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="mt-auto flex items-center justify-between">
+                              <p>
+                                <span className="text-lg font-bold text-gray-800">{isAuthenticated && (room.promoDiscount ?? 0) > 0 ? Math.round(room.pricePerNight * (1 - room.promoDiscount / 100)) : room.pricePerNight} 元</span>
+                                <span className="text-sm text-gray-500 ml-0.5">/晚</span>
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (isOwnHotelRoom(room)) { toast('不能预定自己名下的酒店哦'); return; }
+                                  if (role === 'admin') { toast('管理员不能预订酒店'); return; }
+                                  if (canBookRoom(room) && !isUnavailable) { navigate(appendSearch(`/rooms/${room._id}`)); scrollTo(0, 0); }
+                                }}
+                                disabled={isUnavailable}
+                                title={!canBookRoom(room) ? (role === 'admin' ? '管理员不能预订酒店' : '不能预订自己的酒店') : undefined}
+                                className={`px-3 py-1.5 text-white text-sm rounded-lg transition-colors cursor-pointer ${isUnavailable || !canBookRoom(room) ? 'bg-gray-400 cursor-not-allowed' : 'bg-black hover:bg-gray-800'}`}
+                              >
+                                {isAuthenticated ? '预订' : '显示价格'}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                <div
+                  style={{
+                    height: `${promoVirtualizer.getTotalSize()}px`,
+                    width: '100%',
+                    position: 'relative',
+                  }}
+                  className="px-6 pt-6"
+                >
+                  {promoVirtualizer.getVirtualItems().map((virtualRow) => {
+                    const startIdx = virtualRow.index * 3;
+                    const rowRooms = filteredRooms.slice(startIdx, startIdx + 3);
+                    return (
+                      <div
+                        key={virtualRow.key}
+                        style={{
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          width: '100%',
+                          transform: `translateY(${virtualRow.start}px)`,
+                          paddingBottom: `${CARD_GAP}px`,
+                        }}
+                      >
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                          {rowRooms.map((room) => {
                   const isUnavailable = checkIn && checkOut && roomAvailability[room._id] === false;
                   return (
                     <div
                       key={room._id}
-                      className={`flex flex-col bg-white rounded-xl border border-gray-200 overflow-hidden shadow-md hover:shadow-lg transition duration-200 relative ${isUnavailable ? 'opacity-60' : ''}`}
+                      className={`group flex flex-col bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm hover:shadow-xl hover:border-gray-200 transition-all duration-300 relative ${isUnavailable ? 'opacity-60' : ''}`}
                     >
-                      <div className="relative">
+                      <div className="relative overflow-hidden">
                         <img
                           onClick={() => { navigate(appendSearch(`/rooms/${room._id}`)); scrollTo(0, 0); }}
                           src={room.images?.[0]}
                           alt="房间"
                           title="查看房间详情"
-                          className="w-full h-40 object-cover cursor-pointer"
+                          className="w-full h-44 object-cover cursor-pointer group-hover:scale-105 transition-transform duration-500"
+                          loading="lazy"
+                          decoding="async"
                         />
                         {isUnavailable && (
                           <>
@@ -948,8 +1164,8 @@ function AllRooms() {
                           </>
                         )}
                       </div>
-                      <div className="p-4 flex flex-col flex-1">
-                        <p className="text-base font-semibold text-gray-800 mb-2">{getRoomTypeLabel(room.roomType)}</p>
+                      <div className="p-5 flex flex-col flex-1">
+                        <p className="text-base font-semibold text-gray-800 mb-2 group-hover:text-gray-900">{getRoomTypeLabel(room.roomType)}</p>
                         <div className="flex flex-wrap gap-2 mb-3">
                           {room.amenties?.slice(0, 5).map((item, index) => (
                             <div key={index} className="flex items-center gap-1">
@@ -980,148 +1196,152 @@ function AllRooms() {
                       </div>
                     </div>
                   );
-                })}
-              </div>
-              <div ref={bottomRef} className="h-14 flex items-center justify-center">
-                {loadingPromo && <span className="text-gray-500">加载中...</span>}
-                {!promoHasMore && filteredRooms.length > 0 && <span className="text-gray-400 text-sm">已加载全部 {filteredRooms.length} 间房型</span>}
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                )}
+                <div ref={bottomRef} className="h-16 flex items-center justify-center flex-shrink-0 border-t border-gray-100 bg-white/50">
+                  {loadingPromo && <span className="text-gray-500 text-sm">加载中...</span>}
+                  {!promoHasMore && filteredRooms.length > 0 && <span className="text-gray-400 text-sm">已加载全部 {filteredRooms.length} 间房型</span>}
+                </div>
               </div>
             </>
           ) : (
             <>
-              {roomsByHotel.map(({ hotel, rooms }) => (
-                <div
-                  key={hotel?._id ?? hotel}
-                  className="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-md hover:shadow-lg transition-shadow duration-200 min-w-0"
-                >
-                  {/* 布局：左侧大图 + 右侧酒店信息 + 右下方房型列表，固定宽度不随房型数量变化 */}
-                  <div className="flex flex-row min-h-[133px] md:min-h-[360px] gap-3 md:gap-6 min-w-0">
-                    {/* 左侧：酒店主图（竖版，约 2:1 高宽比；移动端高度约 200px 的 2/3） */}
-                    <div className="relative w-2/5 min-w-[100px] max-w-[200px] md:max-w-[280px] flex-shrink-0 rounded-l-2xl overflow-hidden">
-                      <HotelImageCarousel
-                        images={hotel?.images}
-                        fallbackImage={rooms[0]?.images?.[0]}
-                        className="w-full h-full min-h-[133px] md:min-h-[360px]"
-                        onClick={() => navigate(appendSearch(`/hotels/${hotel?._id ?? hotel}`))}
-                      />
-                    </div>
-                    {/* 右侧：上方酒店信息 + 下方房型列表（移动端更紧凑以减小整体高度） */}
-                    <div className="flex-1 flex flex-col min-w-0">
-                      <div className="p-3 md:p-6 flex flex-col flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5 md:gap-2 mb-1 md:mb-2 flex-wrap">
-                        <h2 className="text-base md:text-2xl font-extrabold text-gray-800 leading-snug line-clamp-2">{hotel?.name}</h2>
-                        {(hotel?.starRating ?? 0) > 0 && (
-                          <span className="text-[#f7ad1a] shrink-0 inline-flex items-center gap-0.5 text-sm md:text-xl">
-                          {Array.from({ length: hotel.starRating }, (_, i) => (
-                            <svg key={i} viewBox="0 0 24 24" className="w-[1em] h-[1em] flex-shrink-0">
-                              <path d="M12 2l3 7h7l-5.5 4 2 7-6.5-4.5L5.5 20l2-7L2 9h7z" fill="currentColor" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
-                            </svg>
-                          ))}
-                        </span>
-                        )}
-                        </div>
-                      {(() => {
-                        const hid = hotel?._id ?? hotel;
-                        const stats = hid ? hotelReviewStats[hid] : null;
-                        const avgRating = stats?.avgRating ?? 0;
-                        const total = stats?.total ?? 0;
-                        const displayScore = avgRating > 0 ? Number(avgRating).toFixed(1) : null;
-                        const ratingLabel = displayScore ? (parseFloat(displayScore) >= 4.5 ? '很棒' : parseFloat(displayScore) >= 4 ? '很好' : parseFloat(displayScore) >= 3 ? '不错' : parseFloat(displayScore) >= 2 ? '一般' : '较差') : null;
-                        return (
-                          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2 md:gap-3 mb-1.5 md:mb-2.5">
-                            <div className="flex flex-wrap items-center gap-2">
-                              {ratingLabel && displayScore ? (
-                                <>
-                                  <span className="text-gray-800 font-medium text-sm">{ratingLabel}</span>
-                                  <span className="inline-flex items-center justify-center min-w-[2rem] px-1.5 py-0.5 rounded bg-black text-white text-xs font-bold">{displayScore}</span>
-                                  {total > 0 && <span className="text-gray-500 text-xs block sm:inline">{total.toLocaleString()}条住客点评</span>}
-                                </>
-                              ) : stats && total === 0 ? (
-                                <span className="text-gray-500 text-sm">暂无评价</span>
-                              ) : null}
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (role === 'admin') { toast('管理员不能预订酒店'); return; }
-                                if (canBookRoom(hotel)) navigate(appendSearch(`/hotels/${hotel?._id ?? hotel}`));
-                              }}
-                              disabled={false}
-                              title={!canBookRoom(hotel) ? (role === 'admin' ? '管理员不能预订酒店' : '不能预订自己的酒店') : undefined}
-                              className={`shrink-0 px-3 py-2 rounded-md text-sm font-medium transition-colors cursor-pointer ${canBookRoom(hotel) ? 'bg-black text-white hover:bg-gray-800' : 'bg-gray-400 text-gray-200 cursor-not-allowed'}`}
-                            >
-                              {isAuthenticated ? '预订' : '查看优惠价'}
-                            </button>
+              <div className="space-y-8">
+                {roomsByHotel.map(({ hotel, rooms }) => (
+                      <div
+                        key={hotel?._id ?? hotel}
+                        className="group/card rounded-2xl border border-gray-100 bg-white overflow-hidden shadow-sm hover:shadow-xl hover:border-gray-200 transition-all duration-300 min-w-0"
+                      >
+                        <div className="flex flex-row min-h-[133px] md:min-h-[360px] gap-3 md:gap-6 min-w-0">
+                          <div className="relative w-2/5 min-w-[100px] max-w-[200px] md:max-w-[280px] flex-shrink-0 rounded-l-2xl overflow-hidden">
+                            <HotelImageCarousel
+                              images={hotel?.images}
+                              fallbackImage={rooms[0]?.images?.[0]}
+                              className="w-full h-full min-h-[133px] md:min-h-[360px]"
+                              onClick={() => navigate(appendSearch(`/hotels/${hotel?._id ?? hotel}`))}
+                            />
                           </div>
-                        );
-                      })()}
-                      <div className="text-gray-700 text-xs mb-1.5 md:mb-2.5">
-                        <span className="line-clamp-2 font-medium">{hotel?.address} · {hotel?.city}</span>
-                      </div>
-                      {hotel?.hotelIntro && (
-                        <p className="text-xs text-gray-500 leading-relaxed line-clamp-2 md:line-clamp-3 flex-1">
-                          {hotel.hotelIntro}
-                        </p>
-                      )}
-                      </div>
-                    {/* 右下方：房型滑动列表（固定宽度，1~4 种房型时横向滚动，宽度不变） */}
-                    <div className="border-t border-gray-50 bg-gray-50/30 flex-shrink-0 min-w-0 w-full">
-                      <p className="px-3 md:px-4 pt-1.5 md:pt-3 pb-1 md:pb-2 text-xs font-semibold text-gray-600 uppercase tracking-wide">可选房型</p>
-                      <div className="overflow-x-auto overflow-y-hidden pb-2 md:pb-4 px-3 md:px-4 flex gap-2 md:gap-3 flex-nowrap min-w-0" style={{ scrollbarWidth: 'thin', WebkitOverflowScrolling: 'touch' }}>
-                      {rooms.map((room) => {
-                        const isUnavailable = checkIn && checkOut && roomAvailability[room._id] === false;
-                        return (
-                          <div
-                            key={room._id}
-                            className={`flex-shrink-0 w-28 md:w-44 rounded-lg border border-gray-200 bg-white overflow-hidden shadow-md hover:shadow-lg hover:border-gray-300 transition-all duration-200 ${isUnavailable ? 'opacity-60' : ''}`}
-                          >
-                            <div
-                              className="relative h-12 md:h-20 cursor-pointer overflow-hidden group"
-                              onClick={() => {
-                                if (isOwnHotelRoom(room)) { toast('不能预定自己名下的酒店哦'); return; }
-                                if (role === 'admin') { toast('管理员不能预订酒店'); return; }
-                                if (canBookRoom(room) && !isUnavailable) { navigate(appendSearch(`/rooms/${room._id}`)); scrollTo(0, 0); }
-                              }}
-                            >
-                              <img src={room.images?.[0]} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" />
-                              {isUnavailable && (
-                                <div className="absolute inset-0 bg-white/80 flex items-center justify-center">
-                              <span className="bg-gray-700/90 text-white px-2 py-1 rounded text-xs font-medium">已订完</span>
-                                </div>
+                          <div className="flex-1 flex flex-col min-w-0">
+                            <div className="p-3 md:p-6 flex flex-col flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5 md:gap-2 mb-1 md:mb-2 flex-wrap">
+                                <h2 className="text-base md:text-2xl font-extrabold text-gray-800 leading-snug line-clamp-2">{hotel?.name}</h2>
+                                {(hotel?.starRating ?? 0) > 0 && (
+                                  <span className="text-[#f7ad1a] shrink-0 inline-flex items-center gap-0.5 text-sm md:text-xl">
+                                    {Array.from({ length: hotel.starRating }, (_, i) => (
+                                      <svg key={i} viewBox="0 0 24 24" className="w-[1em] h-[1em] flex-shrink-0">
+                                        <path d="M12 2l3 7h7l-5.5 4 2 7-6.5-4.5L5.5 20l2-7L2 9h7z" fill="currentColor" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
+                                      </svg>
+                                    ))}
+                                  </span>
+                                )}
+                              </div>
+                              {(() => {
+                                const hid = hotel?._id ?? hotel;
+                                const stats = hid ? hotelReviewStats[hid] : null;
+                                const avgRating = stats?.avgRating ?? 0;
+                                const total = stats?.total ?? 0;
+                                const displayScore = avgRating > 0 ? Number(avgRating).toFixed(1) : null;
+                                const ratingLabel = displayScore ? (parseFloat(displayScore) >= 4.5 ? '很棒' : parseFloat(displayScore) >= 4 ? '很好' : parseFloat(displayScore) >= 3 ? '不错' : parseFloat(displayScore) >= 2 ? '一般' : '较差') : null;
+                                return (
+                                  <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2 md:gap-3 mb-1.5 md:mb-2.5">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      {ratingLabel && displayScore ? (
+                                        <>
+                                          <span className="text-gray-800 font-medium text-sm">{ratingLabel}</span>
+                                          <span className="inline-flex items-center justify-center min-w-[2rem] px-1.5 py-0.5 rounded bg-black text-white text-xs font-bold">{displayScore}</span>
+                                          {total > 0 && <span className="text-gray-500 text-xs block sm:inline">{total.toLocaleString()}条住客点评</span>}
+                                        </>
+                                      ) : stats && total === 0 ? (
+                                        <span className="text-gray-500 text-sm">暂无评价</span>
+                                      ) : null}
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        if (role === 'admin') { toast('管理员不能预订酒店'); return; }
+                                        if (canBookRoom(hotel)) navigate(appendSearch(`/hotels/${hotel?._id ?? hotel}`));
+                                      }}
+                                      disabled={false}
+                                      title={!canBookRoom(hotel) ? (role === 'admin' ? '管理员不能预订酒店' : '不能预订自己的酒店') : undefined}
+                                      className={`shrink-0 px-3 py-2 rounded-md text-sm font-medium transition-colors cursor-pointer ${canBookRoom(hotel) ? 'bg-black text-white hover:bg-gray-800' : 'bg-gray-400 text-gray-200 cursor-not-allowed'}`}
+                                    >
+                                      {isAuthenticated ? '预订' : '查看优惠价'}
+                                    </button>
+                                  </div>
+                                );
+                              })()}
+                              <div className="text-gray-700 text-xs mb-1.5 md:mb-2.5">
+                                <span className="line-clamp-2 font-medium">{hotel?.address} · {hotel?.city}</span>
+                              </div>
+                              {hotel?.hotelIntro && (
+                                <p className="text-xs text-gray-500 leading-relaxed line-clamp-2 md:line-clamp-3 flex-1">
+                                  {hotel.hotelIntro}
+                                </p>
                               )}
                             </div>
-                            <div className="p-1.5 md:p-2.5">
-                              <p className="text-xs font-semibold text-gray-800 truncate mb-1 md:mb-2" title={getRoomTypeLabel(room.roomType)}>{getRoomTypeLabel(room.roomType)}</p>
-                              <div className="flex items-center justify-between gap-2">
-                                <span className="text-sm font-bold text-black">{isAuthenticated && (room.promoDiscount ?? 0) > 0 ? Math.round(room.pricePerNight * (1 - room.promoDiscount / 100)) : room.pricePerNight}<span className="text-xs font-normal text-gray-500 ml-0.5">元/晚</span></span>
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (isOwnHotelRoom(room)) { toast('不能预定自己名下的酒店哦'); return; }
-                                    if (role === 'admin') { toast('管理员不能预订酒店'); return; }
-                                    if (canBookRoom(room) && !isUnavailable) { navigate(appendSearch(`/rooms/${room._id}`)); scrollTo(0, 0); }
-                                  }}
-                                  disabled={isUnavailable}
-                                  title={!canBookRoom(room) ? (role === 'admin' ? '管理员不能预订酒店' : '不能预订自己的酒店') : undefined}
-                                  className={`shrink-0 px-2.5 py-1 text-xs font-medium rounded-md transition-colors cursor-pointer ${isUnavailable || !canBookRoom(room) ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-black text-white hover:bg-gray-800'}`}
-                                >
-                                  {isAuthenticated ? '预订' : '显示价格'}
-                                </button>
+                            <div className="border-t border-gray-50 bg-gray-50/30 flex-shrink-0 min-w-0 w-full">
+                              <p className="px-3 md:px-4 pt-1.5 md:pt-3 pb-1 md:pb-2 text-xs font-semibold text-gray-600 uppercase tracking-wide">可选房型</p>
+                              <div className="overflow-x-auto overflow-y-hidden pb-2 md:pb-4 px-3 md:px-4 flex gap-2 md:gap-3 flex-nowrap min-w-0" style={{ scrollbarWidth: 'thin', WebkitOverflowScrolling: 'touch' }}>
+                                {rooms.map((room) => {
+                                  const isUnavailable = checkIn && checkOut && roomAvailability[room._id] === false;
+                                  return (
+                                    <div
+                                      key={room._id}
+                                      className={`flex-shrink-0 w-28 md:w-44 rounded-lg border border-gray-200 bg-white overflow-hidden shadow-md hover:shadow-lg hover:border-gray-300 transition-all duration-200 ${isUnavailable ? 'opacity-60' : ''}`}
+                                    >
+                                      <div
+                                        className="relative h-12 md:h-20 cursor-pointer overflow-hidden group"
+                                        onClick={() => {
+                                          if (isOwnHotelRoom(room)) { toast('不能预定自己名下的酒店哦'); return; }
+                                          if (role === 'admin') { toast('管理员不能预订酒店'); return; }
+                                          if (canBookRoom(room) && !isUnavailable) { navigate(appendSearch(`/rooms/${room._id}`)); scrollTo(0, 0); }
+                                        }}
+                                      >
+                                        <img src={room.images?.[0]} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" loading="lazy" decoding="async" />
+                                        {isUnavailable && (
+                                          <div className="absolute inset-0 bg-white/80 flex items-center justify-center">
+                                            <span className="bg-gray-700/90 text-white px-2 py-1 rounded text-xs font-medium">已订完</span>
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div className="p-1.5 md:p-2.5">
+                                        <p className="text-xs font-semibold text-gray-800 truncate mb-1 md:mb-2" title={getRoomTypeLabel(room.roomType)}>{getRoomTypeLabel(room.roomType)}</p>
+                                        <div className="flex items-center justify-between gap-2">
+                                          <span className="text-sm font-bold text-black">{isAuthenticated && (room.promoDiscount ?? 0) > 0 ? Math.round(room.pricePerNight * (1 - room.promoDiscount / 100)) : room.pricePerNight}<span className="text-xs font-normal text-gray-500 ml-0.5">元/晚</span></span>
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              if (isOwnHotelRoom(room)) { toast('不能预定自己名下的酒店哦'); return; }
+                                              if (role === 'admin') { toast('管理员不能预订酒店'); return; }
+                                              if (canBookRoom(room) && !isUnavailable) { navigate(appendSearch(`/rooms/${room._id}`)); scrollTo(0, 0); }
+                                            }}
+                                            disabled={isUnavailable}
+                                            title={!canBookRoom(room) ? (role === 'admin' ? '管理员不能预订酒店' : '不能预订自己的酒店') : undefined}
+                                            className={`shrink-0 px-2.5 py-1 text-xs font-medium rounded-md transition-colors cursor-pointer ${isUnavailable || !canBookRoom(room) ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-black text-white hover:bg-gray-800'}`}
+                                          >
+                                            {isAuthenticated ? '预订' : '显示价格'}
+                                          </button>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
                               </div>
                             </div>
                           </div>
-                        );
-                      })}
+                        </div>
                       </div>
-                    </div>
-                    </div>
-                  </div>
+                    ))}
+                <div ref={bottomRef} className="h-16 flex items-center justify-center flex-shrink-0 border-t border-gray-100 bg-white/50">
+                  {loadingMoreSource && <span className="text-gray-500 text-sm">加载中...</span>}
+                  {!hasMoreSource && filteredRooms.length > 0 && <span className="text-gray-400 text-sm">已加载全部酒店</span>}
                 </div>
-              ))}
-              <div ref={bottomRef} className="h-14 flex items-center justify-center">
-                {loadingMoreSource && <span className="text-gray-500">加载中...</span>}
-                {!hasMoreSource && filteredRooms.length > 0 && <span className="text-gray-400 text-sm">已加载全部酒店</span>}
               </div>
             </>
           )}

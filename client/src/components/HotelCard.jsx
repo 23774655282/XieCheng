@@ -14,6 +14,8 @@ function HotelCard({ room, idx }) {
           src={room.images[0]}
           alt={room.hotel.name}
           className="w-full h-44 object-cover transition-transform duration-500 ease-out group-hover:scale-110"
+          loading="lazy"
+          decoding="async"
         />
       </div>
       <div className="p-4 pt-5 flex-1 flex flex-col min-h-0">

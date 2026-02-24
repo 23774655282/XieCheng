@@ -37,11 +37,17 @@ export async function regeoProxy(req, res) {
             ? (cityRaw[0] || province)
             : (cityRaw || province);
         const district = comp.district || '';
+        const formattedAddress = data.regeocode.formatted_address || null;
+        const township = comp.township || '';
+        const street = comp.street || '';
+        const streetNumber = (comp.streetNumber && comp.streetNumber.number) ? comp.streetNumber.number : '';
+        const place = formattedAddress || [province, district, township, street, streetNumber].filter(Boolean).join('') || district || city || null;
         return res.status(200).json({
             success: true,
             city: city || null,
             province: province || null,
             district: district || null,
+            place: place || null,
         });
     } catch (error) {
         console.error('[amap regeo proxy]', error);

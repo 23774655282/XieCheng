@@ -102,10 +102,16 @@ export async function regeoAmap(key, lng, lat) {
     const province = comp.province || '';
     const cityRaw = comp.city;
     const city = Array.isArray(cityRaw) ? (cityRaw[0] || province) : (cityRaw || province);
+    const formattedAddress = data.regeocode?.formatted_address || '';
+    const township = comp.township || '';
+    const street = comp.street || '';
+    const streetNumber = (comp.streetNumber && comp.streetNumber.number) ? comp.streetNumber.number : '';
+    const place = formattedAddress || [province, comp.district, township, street, streetNumber].filter(Boolean).join('') || comp.district || city || province;
     return {
       province,
       city: city || province,
       district: comp.district || '',
+      place: place || city || province,
     };
   } catch (e) {
     console.warn('[amap] regeo error', e);

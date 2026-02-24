@@ -1,37 +1,47 @@
-import { Route, Routes, useLocation, Navigate } from 'react-router-dom'
-import './App.css'
-import NavBar from './components/NavBar'
+import { lazy, Suspense } from 'react';
+import { Route, Routes, useLocation, Navigate } from 'react-router-dom';
+import './App.css';
+import NavBar from './components/NavBar';
 import Home from './pages/Home';
 import Footer from './components/Footer';
-import AllRooms from './pages/AllRooms';
-import SmartSearchResults from './pages/SmartSearchResults';
-import AiHotelChat from './pages/AiHotelChat';
-import TravelMap from './pages/TravelMap';
-import RoomDetail from './pages/RoomDetail';
-import HotelDetail from './pages/HotelDetail';
-import MyBooking from './pages/MyBooking';
-import PersonalCenter from './pages/PersonalCenter';
-import Login from './pages/Login';
-import Register from './pages/Register';
-import ForgotPassword from './pages/ForgotPassword';
 import HotelReg from './components/HotalReg';
-import Layout from './pages/hotelOwner/Layout';
-import AdminLayout from './pages/admin/AdminLayout';
-import AuditHotels from './pages/admin/AuditHotels';
-import MerchantApplications from './pages/admin/MerchantApplications';
-import PendingRoomAdds from './pages/admin/PendingRoomAdds';
-import ApplyMerchant from './pages/ApplyMerchant';
-import HotelInfo from './pages/hotelOwner/HotelInfo';
-import NotFound from './components/NotFound';
-import About from './pages/About';
-import AddRoom from './pages/hotelOwner/AddRoom';
-import EditRoom from './pages/hotelOwner/EditRoom';
-import Dashboard from './pages/hotelOwner/Dashboard';
-import ListRoom from './pages/hotelOwner/ListRoom';
-import HotelReauditDetail from './pages/hotelOwner/HotelReauditDetail';
+import { CarouselPerformanceMonitor } from './components/CarouselPerformanceMonitor';
+import { PerfActivator } from './components/PerfActivator';
 import { useAppContext } from './context/AppContext';
-import Loader from './components/Loader';
-import PaySuccess from './pages/PaySuccess';
+
+const AllRooms = lazy(() => import('./pages/AllRooms'));
+const SmartSearchResults = lazy(() => import('./pages/SmartSearchResults'));
+const AiHotelChat = lazy(() => import('./pages/AiHotelChat'));
+const TravelMap = lazy(() => import('./pages/TravelMap'));
+const RoomDetail = lazy(() => import('./pages/RoomDetail'));
+const HotelDetail = lazy(() => import('./pages/HotelDetail'));
+const MyBooking = lazy(() => import('./pages/MyBooking'));
+const PersonalCenter = lazy(() => import('./pages/PersonalCenter'));
+const Login = lazy(() => import('./pages/Login'));
+const Register = lazy(() => import('./pages/Register'));
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
+const Layout = lazy(() => import('./pages/hotelOwner/Layout'));
+const AdminLayout = lazy(() => import('./pages/admin/AdminLayout'));
+const AuditHotels = lazy(() => import('./pages/admin/AuditHotels'));
+const MerchantApplications = lazy(() => import('./pages/admin/MerchantApplications'));
+const PendingRoomAdds = lazy(() => import('./pages/admin/PendingRoomAdds'));
+const ApplyMerchant = lazy(() => import('./pages/ApplyMerchant'));
+const HotelInfo = lazy(() => import('./pages/hotelOwner/HotelInfo'));
+const NotFound = lazy(() => import('./components/NotFound'));
+const About = lazy(() => import('./pages/About'));
+const AddRoom = lazy(() => import('./pages/hotelOwner/AddRoom'));
+const EditRoom = lazy(() => import('./pages/hotelOwner/EditRoom'));
+const Dashboard = lazy(() => import('./pages/hotelOwner/Dashboard'));
+const ListRoom = lazy(() => import('./pages/hotelOwner/ListRoom'));
+const HotelReauditDetail = lazy(() => import('./pages/hotelOwner/HotelReauditDetail'));
+const Loader = lazy(() => import('./components/Loader'));
+const PaySuccess = lazy(() => import('./pages/PaySuccess'));
+
+const PageFallback = () => (
+  <div className="min-h-[50vh] flex items-center justify-center" aria-hidden>
+    <div className="w-8 h-8 border-2 border-gray-300 border-t-gray-800 rounded-full animate-spin" />
+  </div>
+);
 
 
 
@@ -44,10 +54,13 @@ function App() {
   const {showHotelReg} = useAppContext();
 
   return (
-      <div>
+      <div className="min-h-screen flex flex-col min-w-0">
+        <PerfActivator />
+        <CarouselPerformanceMonitor />
         {!isOwnerPath && !isAdminPath && <NavBar/>}
         {showHotelReg && <HotelReg/>}
-        <div className='w-full h-full'>
+        <div className='w-full flex-1 min-h-0 min-w-0'>
+          <Suspense fallback={<PageFallback />}>
           <Routes>
             <Route path='/' element={<Home/>}/>
             <Route path='/login' element={<Login/>}/>
@@ -83,6 +96,7 @@ function App() {
             <Route path='*' element={<NotFound/>}/>
 
           </Routes>
+          </Suspense>
         </div>
         {!isOwnerPath && !isAdminPath && <Footer/>}
       </div>

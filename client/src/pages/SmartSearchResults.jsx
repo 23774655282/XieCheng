@@ -70,6 +70,8 @@ function SmartSearchResults() {
                 src={room.images?.[0]}
                 alt="房间"
                 className="w-full h-40 object-cover cursor-pointer"
+                loading="lazy"
+                decoding="async"
               />
               <div className="p-4 flex flex-col flex-1">
                 <p className="text-base font-semibold text-gray-800 mb-2">{getRoomTypeLabel(room.roomType)}</p>
