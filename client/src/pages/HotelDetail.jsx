@@ -525,8 +525,15 @@ function HotelDetail() {
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                    <span className="text-xl font-bold">{room.pricePerNight} 元</span>
+                                    <span className="text-xl font-bold">
+                                        {(room.promoDiscount != null && room.promoDiscount > 0)
+                                            ? Math.round(room.pricePerNight * (1 - room.promoDiscount / 100))
+                                            : room.pricePerNight} 元
+                                    </span>
                                     <span className="text-gray-500 text-sm">/晚</span>
+                                    {(room.promoDiscount != null && room.promoDiscount > 0) && (
+                                        <span className="text-sm text-amber-600">已享{room.promoDiscount}%优惠</span>
+                                    )}
                                     <button
                                         type="button"
                                         onClick={(e) => { e.stopPropagation(); handleCardClick(); }}

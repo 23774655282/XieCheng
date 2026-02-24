@@ -127,13 +127,15 @@ async function createBooking(req,res,next) {
             });
         }
 
-        const roomPrice = roomData.pricePerNight
+        const discount = (roomData.promoDiscount != null && roomData.promoDiscount > 0) ? roomData.promoDiscount / 100 : 0;
+        const roomPrice = Math.round(roomData.pricePerNight * (1 - discount));
+        const roomPriceFinal = roomPrice > 0 ? roomPrice : roomData.pricePerNight;
 
         const checkIn = new Date(checkInDate);
         const checkOut = new Date(checkOutDate);
 
         const nights = Math.ceil((checkOut - checkIn) / (1000 * 60 * 60 * 24));
-        const totalPrice = nights * roomPrice * roomQuantity;
+        const totalPrice = nights * roomPriceFinal * roomQuantity;
 
         const booking = await Booking.create({
             user,
@@ -249,7 +251,9 @@ async function getHotelBooking(req,res) {
 
     const completedBookings = bookings.filter((b) => b.isCompleted === true);
     const totalBookings = completedBookings.length;
-    const totalRevenue = completedBookings.reduce((acc, b) => acc + (b.totalPrice || 0), 0);
+    const totalRevenue = completedBookings
+        .filter((b) => b.refundStatus !== 'approved')
+        .reduce((acc, b) => acc + (b.totalPrice || 0), 0);
 
     return res.status(200).json({
         success: true,

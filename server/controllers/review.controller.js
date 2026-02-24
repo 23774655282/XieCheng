@@ -205,6 +205,27 @@ export const getHotelReviews = async (req, res) => {
     }
 };
 
+/** 用户端：获取当前用户的历史评价列表（我的评价） */
+export const getMyReviews = async (req, res) => {
+    try {
+        const userId = req.user._id;
+        const reviews = await Review.find({ user: userId })
+            .populate("hotel", "name city")
+            .sort({ createdAt: -1 })
+            .lean();
+        return res.status(200).json({
+            success: true,
+            reviews,
+        });
+    } catch (error) {
+        console.error("Error fetching my reviews:", error);
+        return res.status(500).json({
+            success: false,
+            message: "获取我的评价失败",
+        });
+    }
+};
+
 /** 用户端：删除自己的评论 */
 export const deleteReview = async (req, res) => {
     try {

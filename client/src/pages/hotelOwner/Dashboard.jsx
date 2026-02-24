@@ -321,12 +321,14 @@ function Dashboard() {
                     <td className='p-2 sm:p-4 text-gray-600 whitespace-nowrap'>{formatDateStr(item.checkOutDate)}</td>
                     <td className='p-2 sm:p-4' onClick={(e) => e.stopPropagation()}>
                       {(() => {
-                        const payLabel = item.refundStatus === 'approved' ? '已退款'
+                        const payLabel = (item.refundStatus === 'rejected' && item.refundPlatformReviewRequested) ? '客服介入中'
+                          : item.refundStatus === 'approved' ? '已退款'
                           : item.refundStatus === 'pending' ? '退款中'
                           : item.status === 'cancelled' ? '已取消'
                           : item.isCompleted ? '已完成'
                           : item.isPaid ? '已支付' : '待支付';
-                        const payClass = payLabel === '已退款' ? 'bg-slate-100 text-slate-600'
+                        const payClass = payLabel === '客服介入中' ? 'bg-purple-100 text-purple-700'
+                          : payLabel === '已退款' ? 'bg-slate-100 text-slate-600'
                           : payLabel === '退款中' ? 'bg-amber-100 text-amber-700'
                           : payLabel === '已取消' ? 'bg-gray-100 text-gray-600'
                           : payLabel === '已完成' ? 'bg-emerald-100 text-emerald-700'
