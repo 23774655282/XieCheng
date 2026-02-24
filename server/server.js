@@ -12,6 +12,7 @@ import roomRouter from './routes/room.routes.js';
 import bookingRouter from './routes/booking.route.js';
 import { cancelExpiredUnpaidBookings } from './controllers/booking.controller.js';
 import reviewRouter from './routes/review.route.js';
+import amapRouter from './routes/amap.route.js';
 import stripeWebhook from './controllers/stripe.webhook.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -40,6 +41,7 @@ app.use("/api/hotels", hotelRouter);
 app.use("/api/rooms", roomRouter);
 app.use("/api/bookings", bookingRouter);
 app.use("/api/reviews", reviewRouter);
+app.use("/api/amap", amapRouter);
 
 // 生产环境：托管前端构建，访问根路径可打开网站（阿里云单机部署）
 const clientDist = path.join(__dirname, "../client/dist");

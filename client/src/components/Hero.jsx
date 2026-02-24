@@ -1,3 +1,4 @@
+import { useSearchParams } from 'react-router-dom'
 import { SlCalender } from 'react-icons/sl'
 import { useState, useEffect, useRef } from 'react'
 import DatePicker from 'react-datepicker'
@@ -10,14 +11,21 @@ import { useAppContext } from '../context/AppContext'
 import { heroCarouselImages, assets } from '../assets/assets'
 import DestinationDropdown from './DestinationDropdown'
 import { regeoAmap, wgs84ToGcj02 } from '../utils/amap'
+import { usePerf } from '../context/PerfContext'
+import { carouselPerf } from '../utils/carouselPerf'
+import toast from 'react-hot-toast'
 
 const HERO_SLIDE_INTERVAL_MS = 5000;
 
 const MY_LOCATION_LABEL = '我的位置';
 
 function Hero() {
+    const { isPerfMode: perfMode, isLegacyCarousel: isLegacyMode } = usePerf();
+    const prevSlideRef = useRef(0);
+
     const [destination, setDestination] = useState(MY_LOCATION_LABEL);
     const myLocationCityRef = useRef(null);
+    const myLocationPlaceRef = useRef(null);
     const [locationLoading, setLocationLoading] = useState(false);
     const [checkIn, setCheckIn] = useState(getTodayLocal);
     const [checkOut, setCheckOut] = useState(() => {
@@ -26,6 +34,8 @@ function Hero() {
     });
     const [cityOptions, setCityOptions] = useState([]);
     const [slideIndex, setSlideIndex] = useState(0);
+    const [transitionEnabled, setTransitionEnabled] = useState(true);
+    const slideIndexRef = useRef(0);
     const [destinationOpen, setDestinationOpen] = useState(false);
     const [destinationError, setDestinationError] = useState('');
     const destinationRef = useRef(null);
@@ -36,8 +46,18 @@ function Hero() {
     const [guestsOpen, setGuestsOpen] = useState(false);
     const [datePickerOpen, setDatePickerOpen] = useState(false);
     const guestsRef = useRef(null);
+    const carouselTrackRef = useRef(null);
 
     const { navigate, getToken, axios, addRecentSearch, recentSearchRecords, clearRecentSearch } = useAppContext();
+    const backendRegeo = async (lng, lat) => {
+        try {
+            const { data } = await axios.get('/api/amap/regeo', { params: { lng, lat }, timeout: 10000 });
+            if (data?.success && (data.city || data.province)) {
+                return { city: data.city || data.province || data.district || null, place: data.place || data.city || data.province || null };
+            }
+        } catch (_) {}
+        return null;
+    };
 
     useEffect(() => {
         if (!destinationOpen) return;
@@ -64,8 +84,8 @@ function Hero() {
     }, []);
 
     useEffect(() => {
-        resolveMyLocationCity().then((city) => {
-            if (city) myLocationCityRef.current = city;
+        resolveMyLocationCity().then((result) => {
+            if (result?.city) myLocationCityRef.current = result.city;
         });
     }, []);
 
@@ -75,13 +95,17 @@ function Hero() {
             navigator.geolocation.getCurrentPosition(
                 async (pos) => {
                     const [lat, lng] = wgs84ToGcj02(pos.coords.latitude, pos.coords.longitude);
-                    const key = import.meta.env.VITE_AMAP_KEY;
-                    const addr = await regeoAmap(key, lng, lat);
-                    const city = addr?.city || addr?.province || addr?.district || null;
-                    resolve(city || null);
+                    let result = await backendRegeo(lng, lat);
+                    if (!result?.city) {
+                        const key = import.meta.env.VITE_AMAP_KEY;
+                        const addr = await regeoAmap(key, lng, lat);
+                        const city = addr?.city || addr?.province || addr?.district || null;
+                        result = city ? { city, place: addr?.place || city } : null;
+                    }
+                    resolve(result || null);
                 },
                 () => resolve(null),
-                { timeout: 8000, maximumAge: 300000 }
+                { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
             );
         });
     }
@@ -90,36 +114,88 @@ function Hero() {
         setDestination(MY_LOCATION_LABEL);
         setDestinationError('');
         setLocationLoading(true);
-        resolveMyLocationCity().then((city) => {
-            myLocationCityRef.current = city;
+        resolveMyLocationCity().then((result) => {
+            if (result?.city) {
+                myLocationCityRef.current = result.city;
+                myLocationPlaceRef.current = result.place || result.city;
+            }
             setLocationLoading(false);
+            if (result?.city) {
+                const displayText = result.place || result.city;
+                setDestination(displayText);
+                toast.success(`已定位到 ${displayText}`);
+            } else {
+                const errMsg = '定位失败，请允许浏览器定位权限或手动输入城市名';
+                setDestinationError(errMsg);
+                toast.error(errMsg);
+            }
         });
     }
+
+    const carouselSlides = heroCarouselImages.length > 1 && !isLegacyMode
+        ? [...heroCarouselImages, heroCarouselImages[0]]
+        : heroCarouselImages;
+    const totalSlides = carouselSlides.length;
+
+    useEffect(() => {
+        slideIndexRef.current = slideIndex;
+    }, [slideIndex]);
 
     useEffect(() => {
         if (heroCarouselImages.length <= 1) return;
         const timer = setInterval(() => {
-            setSlideIndex((i) => (i + 1) % heroCarouselImages.length);
+            const current = slideIndexRef.current;
+            if (isLegacyMode) {
+                setSlideIndex((i) => (i + 1) % heroCarouselImages.length);
+            } else if (current === totalSlides - 1) {
+                setTransitionEnabled(false);
+                setSlideIndex(0);
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        setTransitionEnabled(true);
+                    });
+                });
+            } else {
+                setSlideIndex(current + 1);
+            }
         }, HERO_SLIDE_INTERVAL_MS);
         return () => clearInterval(timer);
-    }, []);
+    }, [heroCarouselImages.length, totalSlides, isLegacyMode]);
+
+    useEffect(() => {
+        if (perfMode) carouselPerf.reset();
+    }, [perfMode, isLegacyMode]);
+
+    useEffect(() => {
+        if (!perfMode) return;
+        const prev = prevSlideRef.current;
+        prevSlideRef.current = slideIndex;
+        if (prev === slideIndex) return;
+        const isInstantJump = !isLegacyMode && prev === totalSlides - 1 && slideIndex === 0;
+        if (isInstantJump) return;
+        const isLastToFirst = isLegacyMode && prev === heroCarouselImages.length - 1 && slideIndex === 0;
+        carouselPerf.recordTransitionStart(prev, slideIndex, isLastToFirst);
+    }, [slideIndex, perfMode, isLegacyMode, heroCarouselImages.length, totalSlides]);
 
     async function handleSumbit(e) {
         e.preventDefault();
         let searchDestination = destination?.trim() || '';
-        if (searchDestination === MY_LOCATION_LABEL) {
+        const isMyLocation = searchDestination === MY_LOCATION_LABEL || searchDestination === myLocationPlaceRef.current;
+        if (isMyLocation) {
             const cached = myLocationCityRef.current;
             if (cached) {
                 searchDestination = cached;
             } else {
                 setLocationLoading(true);
-                const city = await resolveMyLocationCity();
+                const result = await resolveMyLocationCity();
                 setLocationLoading(false);
-                if (city) {
-                    myLocationCityRef.current = city;
-                    searchDestination = city;
+                if (result?.city) {
+                    myLocationCityRef.current = result.city;
+                    myLocationPlaceRef.current = result.place || result.city;
+                    searchDestination = result.city;
                 } else {
-                    setDestinationError('请允许定位或输入目的地');
+                    setDestinationError('无法获取当前位置，请检查浏览器定位权限或直接输入城市名搜索');
+                    toast.error('定位失败，请允许定位权限或输入目的地');
                     return;
                 }
             }
@@ -153,19 +229,29 @@ function Hero() {
     <div className={`relative flex flex-col items-center justify-center h-screen min-h-[600px] ${destinationOpen ? 'z-50' : ''}`}>
       <div className="absolute inset-0 overflow-hidden">
         <div
-          className="h-full flex transition-transform duration-700 ease-in-out"
+          ref={carouselTrackRef}
+          className="h-full flex"
+          onTransitionEnd={(e) => {
+            if (e.target === carouselTrackRef.current && e.propertyName === 'transform' && perfMode) {
+              carouselPerf.recordTransitionEnd();
+            }
+          }}
           style={{
-            width: `${heroCarouselImages.length * 100}%`,
-            transform: `translateX(-${slideIndex * (100 / heroCarouselImages.length)}%)`,
+            width: `${totalSlides * 100}%`,
+            transform: `translate3d(-${slideIndex * (100 / totalSlides)}%, 0, 0)`,
+            transition: transitionEnabled ? 'transform 800ms cubic-bezier(0.25, 0.46, 0.45, 0.94)' : 'none',
+            willChange: 'transform',
+            backfaceVisibility: 'hidden',
           }}
         >
-          {heroCarouselImages.map((src, i) => (
+          {carouselSlides.map((src, i) => (
             <div
               key={i}
               className="flex-shrink-0 w-full h-full bg-cover bg-center bg-no-repeat bg-gray-900"
               style={{
-                width: `${100 / heroCarouselImages.length}%`,
+                width: `${100 / totalSlides}%`,
                 backgroundImage: `url(${typeof src === 'string' ? src : src})`,
+                backfaceVisibility: 'hidden',
               }}
             />
           ))}
@@ -174,15 +260,30 @@ function Hero() {
       <div className="absolute inset-0 bg-black/30 pointer-events-none" aria-hidden />
       {heroCarouselImages.length > 1 && (
         <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-2 z-10">
-          {heroCarouselImages.map((_, i) => (
-            <button
-              key={i}
-              type="button"
-              onClick={() => setSlideIndex(i)}
-              className={`w-2.5 h-2.5 rounded-full transition-colors ${i === slideIndex ? 'bg-white' : 'bg-white/50 hover:bg-white/70'}`}
-              aria-label={`切换到第 ${i + 1} 张`}
-            />
-          ))}
+          {heroCarouselImages.map((_, i) => {
+            const isActive = slideIndex === totalSlides - 1 ? i === 0 : i === slideIndex;
+            return (
+              <button
+                key={i}
+                type="button"
+                onClick={() => {
+                  const onClone = slideIndex === totalSlides - 1;
+                  if (onClone && i === 0) {
+                    setTransitionEnabled(false);
+                    setSlideIndex(0);
+                    requestAnimationFrame(() => {
+                      requestAnimationFrame(() => setTransitionEnabled(true));
+                    });
+                  } else {
+                    setTransitionEnabled(true);
+                    setSlideIndex(i);
+                  }
+                }}
+                className={`w-2.5 h-2.5 rounded-full transition-colors ${isActive ? 'bg-white' : 'bg-white/50 hover:bg-white/70'}`}
+                aria-label={`切换到第 ${i + 1} 张`}
+              />
+            );
+          })}
         </div>
       )}
       <div className='relative z-10 w-full flex flex-col items-center justify-center'>
@@ -202,10 +303,10 @@ function Hero() {
            }
          }}
         >
-        <form
-         onSubmit={handleSumbit}
-         className='search-bar-form bg-white/80 backdrop-blur-sm text-gray-500 rounded-lg px-6 py-5 flex flex-col md:flex-row md:items-end max-md:items-start gap-3 my-2 shadow-lg w-full min-w-0'>
-            <div className="relative w-full md:flex-shrink-0 md:w-[240px]" ref={destinationRef}>
+       <form
+        onSubmit={handleSumbit}
+        className='search-bar-form bg-white/80 backdrop-blur-sm text-gray-500 rounded-lg px-6 py-5 flex flex-col lg:flex-row lg:items-end max-lg:items-start gap-3 my-2 shadow-lg w-full min-w-0'>
+           <div className="relative w-full lg:flex-shrink-0 lg:w-[240px] flex flex-col" ref={destinationRef}>
                 <div className='flex items-center gap-2'>
                     <SlCalender/>
                     <label htmlFor="destinationInput">目的地</label>
@@ -253,14 +354,15 @@ function Hero() {
                     />
                 )}
                 {destinationError && (
-                    <div className="relative mt-2 w-fit">
-                        <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-b-[6px] border-b-rose-800" aria-hidden />
-                        <div className="bg-rose-800 text-white text-sm px-3 py-2 rounded-lg whitespace-nowrap">{destinationError}</div>
+                    <div className="mt-2 w-full" role="alert">
+                        <div className="w-full rounded-lg border border-rose-400 bg-rose-100 px-3 py-2.5 text-sm font-medium text-rose-800 shadow-sm">
+                            {destinationError}
+                        </div>
                     </div>
                 )}
             </div>
 
-            <div className="w-full md:flex-grow-0 md:flex-shrink-0 md:w-[300px] md:min-w-0">
+            <div className="w-full lg:flex-grow-0 lg:flex-shrink-0 lg:w-[300px] lg:min-w-0">
                 <div className="flex items-center justify-between w-full mb-2">
                     <div className="flex items-center gap-2">
                         <svg className="w-4 h-4 text-gray-800" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
@@ -323,7 +425,7 @@ function Hero() {
                 />
             </div>
 
-            <div className="relative flex md:flex-col max-md:gap-2 max-md:items-center w-full md:flex-shrink-0 md:w-[240px]" ref={guestsRef}>
+            <div className="relative flex lg:flex-col max-lg:gap-2 max-lg:items-center w-full lg:flex-shrink-0 lg:w-[240px]" ref={guestsRef}>
                 <div className="flex items-center gap-2 shrink-0">
                     <img src={assets.guestsIcon} alt="" className="w-4 h-4 flex-shrink-0 opacity-70" />
                     <label className="mb-1.5 md:mb-0 whitespace-nowrap">人数</label>
@@ -376,8 +478,8 @@ function Hero() {
                 </div>
             </div>
 
-            <div className="flex flex-row gap-2 w-full md:flex-shrink-0 md:w-[120px] max-md:flex-1">
-                <button type="submit" className="flex flex-1 md:w-full items-center justify-center gap-1 rounded-md bg-black py-2.5 px-4 text-white text-sm cursor-pointer min-w-0 min-h-[56px]">
+            <div className="flex flex-row gap-2 w-full lg:flex-shrink-0 lg:w-[120px] max-lg:flex-1">
+                <button type="submit" className="flex flex-1 lg:w-full items-center justify-center gap-1 rounded-md bg-black py-2.5 px-4 text-white text-sm cursor-pointer min-w-0 min-h-[56px]">
                     <svg className="w-4 h-4 text-white flex-shrink-0" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24" >
                         <path stroke="currentColor" strokeLinecap="round" strokeWidth="2" d="m21 21-3.5-3.5M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z" />
                     </svg>

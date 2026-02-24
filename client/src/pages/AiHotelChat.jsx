@@ -292,12 +292,16 @@ function AiHotelChat() {
                           onClick={() => { navigate(`/rooms/${room._id}`); window.scrollTo(0, 0); }}
                           className="flex flex-col bg-gray-50 rounded-xl border border-gray-100 overflow-hidden hover:shadow-md hover:border-blue-200 transition cursor-pointer"
                         >
-                          <img src={room.images?.[0]} alt="房间" className="w-full h-28 object-cover" />
+                          <img src={room.images?.[0]} alt="房间" className="w-full h-28 object-cover" loading="lazy" decoding="async" />
                           <div className="p-3">
                             <p className="font-semibold text-gray-800 text-sm">{getRoomTypeLabel(room.roomType)}</p>
                             {room.hotel && <p className="text-xs text-gray-500 truncate">{room.hotel.name} · {room.hotel.city}</p>}
                             <div className="flex items-center justify-between mt-2">
-                              <span className="text-sm font-bold text-gray-800">{room.pricePerNight} 元/晚</span>
+                              <span className="text-sm font-bold text-gray-800">
+                                {(room.promoDiscount != null && room.promoDiscount > 0)
+                                  ? Math.round(room.pricePerNight * (1 - room.promoDiscount / 100))
+                                  : room.pricePerNight} 元/晚
+                              </span>
                               <span className="text-xs text-blue-600">查看详情</span>
                             </div>
                           </div>

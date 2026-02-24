@@ -70,6 +70,8 @@ function SmartSearchResults() {
                 src={room.images?.[0]}
                 alt="房间"
                 className="w-full h-40 object-cover cursor-pointer"
+                loading="lazy"
+                decoding="async"
               />
               <div className="p-4 flex flex-col flex-1">
                 <p className="text-base font-semibold text-gray-800 mb-2">{getRoomTypeLabel(room.roomType)}</p>
@@ -86,10 +88,18 @@ function SmartSearchResults() {
                 </div>
                 <div className="mt-auto flex items-center justify-between">
                   <p>
-                    <span className="text-lg font-bold text-gray-800">{room.pricePerNight} 元</span>
+                    <span className="text-lg font-bold text-gray-800">
+                      {(room.promoDiscount != null && room.promoDiscount > 0)
+                        ? Math.round(room.pricePerNight * (1 - room.promoDiscount / 100))
+                        : room.pricePerNight} 元
+                    </span>
                     <span className="text-sm text-gray-500 ml-0.5">/晚</span>
                     {nights > 1 && (
-                      <span className="text-sm text-gray-500 ml-1">约 {room.pricePerNight * nights} 元 / {nights} 晚</span>
+                      <span className="text-sm text-gray-500 ml-1">
+                        约 {((room.promoDiscount != null && room.promoDiscount > 0)
+                          ? Math.round(room.pricePerNight * (1 - room.promoDiscount / 100))
+                          : room.pricePerNight) * nights} 元 / {nights} 晚
+                      </span>
                     )}
                   </p>
                   {(() => {

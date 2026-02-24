@@ -1,16 +1,65 @@
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&family=Playfair:ital,opsz,wght@0,5..1200,300..900;1,5..1200,300..900&display=swap');
- 
+
 @import "tailwindcss";
 
-*{
+* {
   font-family: Outfit;
 }
 
-@theme{
+html {
+  scroll-behavior: smooth;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  min-height: 100vh;
+  overflow-x: hidden;
+  min-width: 320px;
+}
+
+#root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+@theme {
   --color-primary: #1E1E2F;
   --color-secondary: #2A2A3D;
 }
 
 .font-playfair {
   font-family: Playfair !important;
+}
+
+/* 响应式布局过渡更平滑，避免窗口缩放时错位 */
+@media (prefers-reduced-motion: no-preference) {
+  .search-bar-form,
+  nav,
+  [class*="rounded-xl"],
+  [class*="rounded-2xl"] {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+}
+
+/* 弹性子项在缩小窗口时保持不溢出 */
+.w-full.min-w-0 {
+  min-width: 0;
+}
+
+/* 房间/酒店列表滚动区域 - 细滚动条 */
+[data-room-list-scroll]::-webkit-scrollbar {
+  width: 8px;
+}
+[data-room-list-scroll]::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 4px;
+}
+[data-room-list-scroll]::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+}
+[data-room-list-scroll]::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.25);
 }

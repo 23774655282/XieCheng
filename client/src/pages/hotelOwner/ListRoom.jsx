@@ -1,9 +1,14 @@
+import { useSearchParams } from 'react-router-dom'
 import Title from "../../components/Title"
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import toast from "react-hot-toast"
 import { useAppContext } from "../../context/AppContext"
 import { useNavigate, useParams } from "react-router-dom"
 import { IoAdd } from "react-icons/io5"
+import { usePerf } from "../../context/PerfContext"
+import { virtualListPerf } from "../../utils/virtualListPerf"
+import { VirtualListPerformanceMonitor } from "../../components/VirtualListPerformanceMonitor"
 
 function RoomCountStepper({ value, roomId, onUpdate, axios, getToken }) {
   const [count, setCount] = useState(value)
@@ -100,10 +105,13 @@ function PromoDiscountStepper({ value, roomId, onUpdate, axios, getToken }) {
 }
 
 function ListRoom() {
+  const { isPerfMode: perfMode, isLegacyList: isLegacyMode, toggleLegacyList } = usePerf();
+
   const [rooms, setRooms] = useState([]);
   const [hotel, setHotel] = useState(null);
   const [roomToDelete, setRoomToDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const listRenderStartRef = useRef(null);
 
   const { axios, getToken, user } = useAppContext();
   const navigate = useNavigate();
@@ -131,6 +139,7 @@ function ListRoom() {
         headers: { Authorization: `Bearer ${token}` }
       })
       if (data.success) {
+        if (perfMode) listRenderStartRef.current = performance.now();
         setRooms(data.rooms || [])
       } else {
         toast.error(data.message || "获取房间列表失败")
@@ -216,8 +225,71 @@ function ListRoom() {
     navigate("/owner/hotel-info")
   }
 
+  useEffect(() => {
+    if (!perfMode || rooms.length === 0) return;
+    const start = listRenderStartRef.current;
+    if (!start) return;
+    const measure = () => {
+      requestAnimationFrame(() => {
+        const rows = virtualListPerf.countRenderedRows('[data-room-list-tbody]');
+        virtualListPerf.isVirtual = !isLegacyMode;
+        virtualListPerf.recordFirstRender(rooms.length, rows, start);
+      });
+    };
+    measure();
+  }, [rooms, perfMode, isLegacyMode]);
+
+  useEffect(() => {
+    if (perfMode) virtualListPerf.reset();
+  }, [perfMode, isLegacyMode]);
+
+  const ROW_HEIGHT = 88
+  const parentRef = useRef(null)
+  const virtualizer = useVirtualizer({
+    count: rooms.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: 5,
+    getItemKey: (index) => rooms[index]?._id ?? index,
+  })
+
+  const renderRow = (room, extraProps = {}) => (
+    <tr
+      key={room._id}
+      className='border-b border-gray-200 hover:bg-gray-50'
+      {...extraProps}
+    >
+      <td className="p-2 sm:p-4">
+        {room.images && room.images[0] && (
+          <img src={room.images[0]} alt={room.roomType} className="w-12 h-10 sm:w-16 sm:h-12 object-cover rounded" />
+        )}
+      </td>
+      <td className="p-2 sm:p-4 font-medium text-gray-800 text-xs sm:text-sm w-24 sm:w-32">{getRoomTypeLabel(room.roomType)}</td>
+      <td className="p-2 sm:p-4 text-gray-600 text-xs sm:text-sm">{room.pricePerNight} 元/晚</td>
+      <td className="p-2 sm:p-4 text-gray-600 text-xs sm:text-sm min-w-[4rem]">
+        <PromoDiscountStepper value={room.promoDiscount ?? null} roomId={room._id} onUpdate={() => fetchRooms()} axios={axios} getToken={getToken} />
+      </td>
+      <td className="p-2 sm:p-4">
+        <RoomCountStepper value={room.roomCount ?? 1} roomId={room._id} onUpdate={() => fetchRooms()} axios={axios} getToken={getToken} />
+      </td>
+      <td className="p-2 sm:p-4">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+          <label className="inline-flex items-center cursor-pointer shrink-0">
+            <input type="checkbox" onChange={() => toggleRoomAvailability(room._id)} className="form-checkbox h-5 w-5 text-blue-600 transition duration-150 ease-in-out" checked={room.isAvailable} />
+            <span className="ml-2 text-gray-700 text-xs sm:text-sm">{room.isAvailable ? '在售' : '已下架'}</span>
+          </label>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button type="button" onClick={() => navigate(`/owner/edit-room/${room._id}`, { state: { hotelId: room.hotel?._id || room.hotel } })} className="px-2.5 py-1.5 text-xs sm:text-sm bg-blue-500 text-white rounded hover:bg-blue-600 transition">编辑</button>
+            <button type="button" onClick={() => openDeleteConfirm(room)} className="px-2.5 py-1.5 text-xs sm:text-sm bg-red-500 text-white rounded hover:bg-red-600 transition">删除</button>
+          </div>
+        </div>
+      </td>
+    </tr>
+  );
+
   return (
     <div>
+      {perfMode && <VirtualListPerformanceMonitor />}
       {/* 预审单信息（不可修改） - 仅预审通过的酒店展示 */}
       {hotelId && hasPreReview && (
         <div className="mb-6 p-4 bg-gray-50 rounded-xl border border-gray-200">
@@ -323,89 +395,39 @@ function ListRoom() {
           </button>
         </div>
       </div>
-      <div className='w-full overflow-x-auto -mx-1 px-1 border border-gray-300 rounded-lg max-h-[36rem] sm:max-h-[42rem] overflow-y-auto'>
-        <table className='w-full min-w-[480px] text-left'>
-              <thead className='bg-gray-100 sticky top-0 z-10'>
-                <tr>
-                  <th className='p-2 sm:p-4 text-left text-gray-600 font-medium text-xs sm:text-sm'>图片</th>
-                  <th className='p-2 sm:p-4 text-left text-gray-600 font-medium text-xs sm:text-sm w-24 sm:w-32'>房型</th>
-                  <th className='p-2 sm:p-4 text-left text-gray-600 font-medium text-xs sm:text-sm'>预定价格/晚</th>
-                  <th className='p-2 sm:p-4 text-left text-gray-600 font-medium text-xs sm:text-sm min-w-[4rem] whitespace-nowrap'>优惠</th>
-                  <th className='p-2 sm:p-4 text-left text-gray-600 font-medium text-xs sm:text-sm'>数量</th>
-                  <th className='p-2 sm:p-4 text-left text-gray-600 font-medium text-xs sm:text-sm'>状态</th>
-                </tr>
+      <div
+        ref={parentRef}
+        data-room-list-scroll
+        className='w-full overflow-x-auto -mx-1 px-1 border border-gray-300 rounded-lg max-h-[36rem] sm:max-h-[42rem] overflow-y-auto overflow-x-auto'
+      >
+        <div style={isLegacyMode ? {} : { height: `${virtualizer.getTotalSize()}px`, position: 'relative' }}>
+          <table className='w-full min-w-[480px] text-left'>
+            <thead className='bg-gray-100 sticky top-0 z-10'>
+              <tr>
+                <th className='p-2 sm:p-4 text-left text-gray-600 font-medium text-xs sm:text-sm'>图片</th>
+                <th className='p-2 sm:p-4 text-left text-gray-600 font-medium text-xs sm:text-sm w-24 sm:w-32'>房型</th>
+                <th className='p-2 sm:p-4 text-left text-gray-600 font-medium text-xs sm:text-sm'>预定价格/晚</th>
+                <th className='p-2 sm:p-4 text-left text-gray-600 font-medium text-xs sm:text-sm min-w-[4rem] whitespace-nowrap'>优惠</th>
+                <th className='p-2 sm:p-4 text-left text-gray-600 font-medium text-xs sm:text-sm'>数量</th>
+                <th className='p-2 sm:p-4 text-left text-gray-600 font-medium text-xs sm:text-sm'>状态</th>
+              </tr>
             </thead>
-            <tbody className="text-sm">
-              {rooms.map((room, idx) => (
-                  <tr key={idx} className='border-b border-gray-200 hover:bg-gray-50'>
-                    <td className="p-2 sm:p-4">
-                      {room.images && room.images[0] && (
-                        <img
-                          src={room.images[0]}
-                          alt={room.roomType}
-                          className="w-12 h-10 sm:w-16 sm:h-12 object-cover rounded"
-                        />
-                      )}
-                    </td>
-                    <td className="p-2 sm:p-4 font-medium text-gray-800 text-xs sm:text-sm w-24 sm:w-32">
-                      {getRoomTypeLabel(room.roomType)}
-                    </td>
-                    <td className="p-2 sm:p-4 text-gray-600 text-xs sm:text-sm">
-                      {room.pricePerNight} 元/晚
-                    </td>
-                    <td className="p-2 sm:p-4 text-gray-600 text-xs sm:text-sm min-w-[4rem]">
-                      <PromoDiscountStepper
-                        value={room.promoDiscount ?? null}
-                        roomId={room._id}
-                        onUpdate={() => fetchRooms()}
-                        axios={axios}
-                        getToken={getToken}
-                      />
-                    </td>
-                    <td className="p-2 sm:p-4">
-                      <RoomCountStepper
-                        value={room.roomCount ?? 1}
-                        roomId={room._id}
-                        onUpdate={() => fetchRooms()}
-                        axios={axios}
-                        getToken={getToken}
-                      />
-                    </td>
-                    <td className="p-2 sm:p-4">
-                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-                        <label className="inline-flex items-center cursor-pointer shrink-0">
-                          <input type="checkbox"
-                            onChange={() => toggleRoomAvailability(room._id)}
-                            className="form-checkbox h-5 w-5 text-blue-600 transition duration-150 ease-in-out"
-                            checked={room.isAvailable}
-                          />
-                          <span className="ml-2 text-gray-700 text-xs sm:text-sm">
-                            {room.isAvailable ? '在售' : '已下架'}
-                          </span>
-                        </label>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => navigate(`/owner/edit-room/${room._id}`, { state: { hotelId: room.hotel?._id || room.hotel } })}
-                            className="px-2.5 py-1.5 text-xs sm:text-sm bg-blue-500 text-white rounded hover:bg-blue-600 transition"
-                          >
-                            编辑
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => openDeleteConfirm(room)}
-                            className="px-2.5 py-1.5 text-xs sm:text-sm bg-red-500 text-white rounded hover:bg-red-600 transition"
-                          >
-                            删除
-                          </button>
-                        </div>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              }
+            <tbody className="text-sm" data-room-list-tbody>
+              {isLegacyMode
+                ? rooms.map((room) => renderRow(room))
+                : virtualizer.getVirtualItems().map((virtualRow, index) => {
+                    const room = rooms[virtualRow.index];
+                    if (!room) return null;
+                    return renderRow(room, {
+                      style: {
+                        height: `${virtualRow.size}px`,
+                        transform: `translateY(${virtualRow.start - index * virtualRow.size}px)`,
+                      },
+                    });
+                  })}
             </tbody>
           </table>
+        </div>
       </div>
 
       {/* 删除确认弹窗 */}
