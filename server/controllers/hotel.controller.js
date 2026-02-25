@@ -278,11 +278,12 @@ export const submitHotelSupplement = async (req, res) => {
         if (!allowedStatuses.includes(hotel.status)) return res.status(400).json({ success: false, message: "当前状态不可编辑补充信息" });
 
         const { latitude, longitude, doorNumber, totalRoomCount, nameEn } = req.body;
-        if (latitude !== undefined) hotel.latitude = latitude === "" || latitude == null ? null : Number(latitude);
-        if (longitude !== undefined) hotel.longitude = longitude === "" || longitude == null ? null : Number(longitude);
-        if (doorNumber !== undefined) hotel.doorNumber = String(doorNumber || "").trim();
-        if (totalRoomCount !== undefined) hotel.totalRoomCount = totalRoomCount === "" || totalRoomCount == null ? null : Math.max(0, parseInt(totalRoomCount, 10));
-        if (nameEn !== undefined) hotel.nameEn = String(nameEn || "").trim();
+        const safeParseNumber = (val, allowNull = true) => {
+            if (val === "" || val == null) return allowNull ? null : 0;
+            const n = Number(val);
+            if (!Number.isFinite(n)) return allowNull ? null : 0;
+            return n;
+        };
 
         const baseUrl = process.env.PUBLIC_URL || `${req.protocol}://${req.get("host")}`;
         const files = req.files || {};
@@ -294,23 +295,50 @@ export const submitHotelSupplement = async (req, res) => {
             if (req.body.exteriorUrls) parsedExterior = JSON.parse(req.body.exteriorUrls);
             if (req.body.interiorUrls) parsedInterior = JSON.parse(req.body.interiorUrls);
         } catch (_) {}
-        if (Array.isArray(parsedExterior)) {
-            hotel.hotelExteriorImages = [...parsedExterior, ...exteriorFiles.map((f) => `${baseUrl}/uploads/hotels/${f.filename}`)];
-        } else if (exteriorFiles.length > 0) {
-            hotel.hotelExteriorImages = [...(hotel.hotelExteriorImages || []), ...exteriorFiles.map((f) => `${baseUrl}/uploads/hotels/${f.filename}`)];
-        }
-        if (Array.isArray(parsedInterior)) {
-            hotel.hotelInteriorImages = [...parsedInterior, ...interiorFiles.map((f) => `${baseUrl}/uploads/hotels/${f.filename}`)];
-        } else if (interiorFiles.length > 0) {
-            hotel.hotelInteriorImages = [...(hotel.hotelInteriorImages || []), ...interiorFiles.map((f) => `${baseUrl}/uploads/hotels/${f.filename}`)];
+
+        // 1）待审核状态：直接写回 Hotel 本身
+        if (hotel.status === "pending_audit") {
+            if (latitude !== undefined) hotel.latitude = safeParseNumber(latitude);
+            if (longitude !== undefined) hotel.longitude = safeParseNumber(longitude);
+            if (doorNumber !== undefined) hotel.doorNumber = String(doorNumber || "").trim();
+            if (totalRoomCount !== undefined) {
+                hotel.totalRoomCount =
+                    totalRoomCount === "" || totalRoomCount == null ? null : Math.max(0, safeParseNumber(totalRoomCount, false));
+            }
+            if (nameEn !== undefined) hotel.nameEn = String(nameEn || "").trim();
+
+            if (Array.isArray(parsedExterior)) {
+                hotel.hotelExteriorImages = [
+                    ...parsedExterior,
+                    ...exteriorFiles.map((f) => `${baseUrl}/uploads/hotels/${f.filename}`),
+                ];
+            } else if (exteriorFiles.length > 0) {
+                hotel.hotelExteriorImages = [
+                    ...(hotel.hotelExteriorImages || []),
+                    ...exteriorFiles.map((f) => `${baseUrl}/uploads/hotels/${f.filename}`),
+                ];
+            }
+            if (Array.isArray(parsedInterior)) {
+                hotel.hotelInteriorImages = [
+                    ...parsedInterior,
+                    ...interiorFiles.map((f) => `${baseUrl}/uploads/hotels/${f.filename}`),
+                ];
+            } else if (interiorFiles.length > 0) {
+                hotel.hotelInteriorImages = [
+                    ...(hotel.hotelInteriorImages || []),
+                    ...interiorFiles.map((f) => `${baseUrl}/uploads/hotels/${f.filename}`),
+                ];
+            }
+
+            const firstSubmit = !hotel.supplementSubmitted;
+            if (firstSubmit) hotel.supplementSubmitted = true;
+            await hotel.save();
+            return res
+                .status(200)
+                .json({ success: true, message: firstSubmit ? "已提交，等待管理员审核" : "已保存" });
         }
 
-        const isSubmit = hotel.status === "pending_audit" && !hotel.supplementSubmitted;
-        if (isSubmit) {
-            hotel.supplementSubmitted = true;
-            await hotel.save();
-            return res.status(200).json({ success: true, message: "已提交，等待管理员审核" });
-        }
+        // 2）已上架/待上架：写入 HotelSupplementEdit，管理员再审核
         if (hotel.status === "approved" || hotel.status === "pending_list") {
             const existingPending = await HotelSupplementEdit.findOne({ hotel: hotel._id, status: "pending" });
             const baseHotel = existingPending || hotel;
@@ -322,10 +350,14 @@ export const submitHotelSupplement = async (req, res) => {
             const curExterior = baseHotel.hotelExteriorImages || [];
             const curInterior = baseHotel.hotelInteriorImages || [];
 
-            const newLat = latitude !== undefined ? (latitude === "" || latitude == null ? null : Number(latitude)) : curLat;
-            const newLng = longitude !== undefined ? (longitude === "" || longitude == null ? null : Number(longitude)) : curLng;
+            const newLat = latitude !== undefined ? safeParseNumber(latitude) : curLat;
+            const newLng = longitude !== undefined ? safeParseNumber(longitude) : curLng;
             const newDoor = doorNumber !== undefined ? String(doorNumber || "").trim() : curDoor;
-            const newTotal = totalRoomCount !== undefined ? (totalRoomCount === "" || totalRoomCount == null ? null : Math.max(0, parseInt(totalRoomCount, 10))) : curTotal;
+            const newTotal = totalRoomCount !== undefined
+                ? (totalRoomCount === "" || totalRoomCount == null
+                    ? null
+                    : Math.max(0, safeParseNumber(totalRoomCount, false)))
+                : curTotal;
             const newNameEn = nameEn !== undefined ? String(nameEn || "").trim() : curNameEn;
             let newExterior = Array.isArray(parsedExterior) ? parsedExterior : [...curExterior];
             let newInterior = Array.isArray(parsedInterior) ? parsedInterior : [...curInterior];
@@ -354,7 +386,7 @@ export const submitHotelSupplement = async (req, res) => {
             }
             return res.status(200).json({ success: true, message: "修改已提交，等待再审核（管理员以最后一次提交为准）", needsApproval: true });
         }
-        await hotel.save();
+        // 理论上不会走到这里，兜底返回
         return res.status(200).json({ success: true, message: "已保存" });
     } catch (error) {
         console.error("Error submitHotelSupplement:", error);

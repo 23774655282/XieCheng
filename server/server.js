@@ -16,8 +16,10 @@ import amapRouter from './routes/amap.route.js';
 import stripeWebhook from './controllers/stripe.webhook.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import compression from 'compression';
 
 const app = express();
+app.use(compression());
 app.use(cors());
 
 // Stripe webhook 需要在全局 json 解析前使用 raw
@@ -27,10 +29,10 @@ app.post("/api/stripe", express.raw({ type: 'application/json' }), stripeWebhook
 app.use(express.json());
 app.use(morgan('dev'));
 
-// 静态服务本地上传的图片
+// 静态服务本地上传的图片（带缓存，二次打开从浏览器缓存加载）
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+app.use("/uploads", express.static(path.join(__dirname, "uploads"), { maxAge: "30d" }));
 
 app.get('/favicon.ico', (req, res) => res.status(204).end());
 
@@ -47,10 +49,19 @@ app.use("/api/amap", amapRouter);
 const clientDist = path.join(__dirname, "../client/dist");
 const { existsSync } = await import("fs");
 if (existsSync(clientDist)) {
-  app.use(express.static(clientDist));
+  app.use(express.static(clientDist, {
+    setHeaders: (res, filePath) => {
+      if (filePath && String(filePath).endsWith("index.html")) {
+        res.setHeader("Cache-Control", "no-cache");
+      } else {
+        res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+      }
+    },
+  }));
   // 用中间件做 SPA 回退，避免 Express 5 通配符路由 path-to-regexp 报错
   app.use((req, res, next) => {
     if (req.path.startsWith("/api") || req.path.startsWith("/uploads")) return next();
+    res.setHeader("Cache-Control", "no-cache");
     res.sendFile(path.join(clientDist, "index.html"));
   });
 } else {
