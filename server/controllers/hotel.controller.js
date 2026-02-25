@@ -865,3 +865,38 @@ export const rejectHotelSupplementEdit = async (req, res) => {
         res.status(500).json({ success: false, message: "操作失败" });
     }
 };
+
+/** 商户：管理酒店展示区图片（仅可从已上传的内/外部照片中选择），实时生效 */
+export const updateHotelDisplayImages = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { images } = req.body || {};
+        const hotel = await Hotel.findOne({ _id: id, owner: req.user._id });
+        if (!hotel) return res.status(404).json({ success: false, message: "酒店不存在" });
+
+        const allowedStatuses = ["pending_audit", "pending_list", "approved"];
+        if (!allowedStatuses.includes(hotel.status)) {
+            return res.status(400).json({ success: false, message: "当前状态不可编辑展示图片" });
+        }
+
+        const candidates = new Set([
+            ...((hotel.hotelExteriorImages || []).map(String)),
+            ...((hotel.hotelInteriorImages || []).map(String)),
+        ]);
+
+        let nextImages = Array.isArray(images) ? images.map(String).filter(Boolean) : [];
+        nextImages = nextImages.filter((url) => candidates.has(url));
+
+        hotel.images = nextImages;
+        await hotel.save();
+
+        return res.status(200).json({
+            success: true,
+            message: "展示图片已保存",
+            images: hotel.images,
+        });
+    } catch (error) {
+        console.error("Error updating hotel display images:", error);
+        return res.status(500).json({ success: false, message: "保存失败" });
+    }
+};

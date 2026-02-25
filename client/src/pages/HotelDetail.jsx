@@ -312,13 +312,23 @@ function HotelDetail() {
 
             {/* 顶部轮播：商户中心酒店展示图，点击打开查看 */}
             <div className="relative rounded-xl overflow-hidden mb-6" style={{ boxShadow: '0 0 20px rgba(0,0,0,0.12)' }}>
+                {(() => {
+                    const displayImages =
+                        (hotel?.images?.length
+                            ? hotel.images
+                            : (hotel?.hotelExteriorImages?.length
+                                ? hotel.hotelExteriorImages
+                                : (hotel?.hotelInteriorImages || []))) || [];
+                    return (
                 <HotelImageCarousel
-                    images={hotel?.images}
+                    images={displayImages}
                     fallbackImage={rooms?.[0]?.images?.[0]}
                     className="w-full h-64 md:h-96"
                     imageClassName="min-h-[16rem] md:min-h-[24rem]"
                     onImageClick={(url) => { setLightboxImage(url); setLightboxOpen(true); }}
                 />
+                    );
+                })()}
             </div>
             {lightboxOpen && lightboxImage && (
                 <div
