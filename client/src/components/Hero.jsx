@@ -23,7 +23,7 @@ function Hero() {
     const { isPerfMode: perfMode, isLegacyCarousel: isLegacyMode } = usePerf();
     const prevSlideRef = useRef(0);
 
-    const [destination, setDestination] = useState(MY_LOCATION_LABEL);
+    const [destination, setDestination] = useState('');
     const myLocationCityRef = useRef(null);
     const myLocationPlaceRef = useRef(null);
     const [locationLoading, setLocationLoading] = useState(false);
@@ -318,29 +318,10 @@ function Hero() {
                         value={destination}
                         id="destinationInput"
                         type="text"
-                        className={`rounded-lg border pl-3 pr-10 py-2 text-sm font-semibold text-gray-900 placeholder:font-normal placeholder:text-gray-400 outline-none w-full min-w-0 min-h-[56px] ${destinationOpen ? 'border-gray-700 bg-gray-100/50' : 'border-gray-200'}`}
-                        placeholder="输入或选择目的地"
+                        className={`rounded-lg border pl-3 pr-3 py-2 text-sm font-semibold text-gray-900 placeholder:font-normal placeholder:text-gray-400 outline-none w-full min-w-0 min-h-[56px] ${destinationOpen ? 'border-gray-700 bg-gray-100/50' : 'border-gray-200'}`}
+                        placeholder="请输入目的地"
                         autoComplete="off"
                     />
-                    <button
-                        type="button"
-                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleLocationIconClick(); }}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-md text-gray-600 hover:bg-gray-200/80 hover:text-gray-900 transition-colors"
-                        title="定位到我的位置"
-                        aria-label="定位到我的位置"
-                    >
-                        {locationLoading ? (
-                            <svg className="animate-spin w-5 h-5 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden>
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                            </svg>
-                        ) : (
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                            </svg>
-                        )}
-                    </button>
                 </div>
                 {destinationOpen && (
                     <DestinationDropdown
