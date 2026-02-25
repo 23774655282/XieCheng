@@ -16,10 +16,8 @@ http://120.55.126.95/
 | 前端 | React 19、Vite、React Router、Tailwind CSS、Axios |
 | 后端 | Node.js、Express 5、MongoDB、Mongoose |
 | 认证 | Clerk / JWT |
-| 支付 | Stripe |
-| 云存储 | Cloudinary |
-| 地图 | 高德地图、Leaflet |
-| AI | DeepSeek API（智能搜索、AI 客服） |
+| 地图 | 高德地图|
+| AI | DeepSeek API（智能搜索） |
 
 ## 功能概览
 
