@@ -37,6 +37,7 @@ const facilityLabelMap = {
 };
 
 const ROOM_CARD_HEIGHT = 220; // 卡片高度 + 间距
+const ROOMS_PER_PAGE = 10;
 
 /** 酒店详情页 - 房型列表使用虚拟列表优化 */
 function HotelDetail() {
@@ -70,7 +71,6 @@ function HotelDetail() {
     const [guestsOpen, setGuestsOpen] = useState(false);
     const [datePickerOpen, setDatePickerOpen] = useState(false);
     const guestsRef = useRef(null);
-                    setDisplayedCount(ROOMS_PER_PAGE);
 
     useEffect(() => {
         (async () => {
@@ -119,7 +119,6 @@ function HotelDetail() {
         }
     }, [perfMode, isLegacyList]);
 
-        setDisplayedCount(ROOMS_PER_PAGE);
     // 从 URL 同步搜索条件
     useEffect(() => {
         const cIn = searchParams.get("checkIn") || getTodayLocal();
