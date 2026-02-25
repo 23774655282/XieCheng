@@ -2,6 +2,10 @@
 
 一个全栈酒店预订 Web 应用，支持用户搜索、预订酒店，商户管理酒店与房型，管理员审核与平台管理。
 
+
+#线上预览地址
+线上预览地址：http://120.55.126.95/
+
 ## 技术栈
 
 | 层级 | 技术 |
@@ -90,7 +94,7 @@ Hotel-Booking-main/
 ### 1. 克隆项目
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/23774655282/-test.git
 cd Hotel-Booking-main
 ```
 
@@ -117,10 +121,6 @@ cd server && npm start
 # 终端 2：启动前端
 cd client && npm run dev
 ```
-
-### 5. 访问
-
-线上预览地址：http://120.55.126.95/
 
 ## 生产部署
 
