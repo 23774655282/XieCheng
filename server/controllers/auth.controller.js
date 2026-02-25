@@ -125,19 +125,23 @@ export const login = async (req, res) => {
     const p = phone != null ? String(phone).trim() : "";
     const pw = password != null ? String(password) : "";
     if (!p || !pw) {
-      return res.status(400).json({ success: false, message: "缺少手机号或密码" });
+      return res.status(400).json({ success: false, message: "请输入账号和密码" });
     }
 
     const user = await User.findOne({ phone: p });
-    if (!user || !user.passwordHash) {
-      console.log("[login] 用户不存在或无密码", { phone: p, userFound: !!user, hasPasswordHash: !!(user && user.passwordHash) });
-      return res.status(400).json({ success: false, message: "手机号或密码错误" });
+    if (!user) {
+      console.log("[login] 用户不存在", { phone: p });
+      return res.status(404).json({ success: false, message: "账号不存在" });
+    }
+    if (!user.passwordHash) {
+      console.log("[login] 用户无密码记录，无法使用密码登录", { phone: p });
+      return res.status(400).json({ success: false, message: "账号或密码错误" });
     }
 
     const match = await bcrypt.compare(pw, user.passwordHash);
     if (!match) {
       console.log("[login] 密码不匹配", { phone: p });
-      return res.status(400).json({ success: false, message: "手机号或密码错误" });
+      return res.status(400).json({ success: false, message: "账号或密码错误" });
     }
 
     const token = signToken(user);

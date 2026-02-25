@@ -16,6 +16,7 @@ function Login() {
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
   const [codeCountdown, setCodeCountdown] = useState(0);
   const [devCode, setDevCode] = useState("");
 
@@ -27,10 +28,13 @@ function Login() {
 
   async function handleSubmitPassword(e) {
     e.preventDefault();
+    setErrorMsg("");
     const p = String(phone ?? "").trim();
     const pw = String(password ?? "").trim();
     if (!p || !pw) {
-      toast.error("请输入手机号和密码");
+      const msg = "请输入手机号和密码";
+      setErrorMsg(msg);
+      toast.error(msg);
       return;
     }
     setLoading(true);
@@ -45,10 +49,14 @@ function Login() {
         } else if (role === "admin") navigate("/admin", { replace: true });
         else navigate("/", { replace: true });
       } else {
-        toast.error(data.message || "登录失败");
+        const msg = data.message || "登录失败";
+        setErrorMsg(msg);
+        toast.error(msg);
       }
     } catch (e) {
-      toast.error(e.response?.data?.message || "登录失败");
+      const msg = e.response?.data?.message || "登录失败";
+      setErrorMsg(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -166,6 +174,9 @@ function Login() {
                   忘记密码
                 </button>
               </div>
+            </div>
+            <div className="min-h-[1.25rem] flex items-center">
+              {errorMsg && <p className="text-sm text-red-600">{errorMsg}</p>}
             </div>
             <button
               type="submit"
