@@ -1,15 +1,23 @@
 import axios from 'axios';
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
 axios.defaults.baseURL = import.meta.env.VITE_BACKEND_URL;
+
+/** 请求拦截：统一从 localStorage 注入 token，避免每个请求都手动带认证 */
+axios.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
 
 const AppContext = createContext();
 
 export function AppProvider({ children }) {
   const currency = import.meta.env.VITE_CURRENCY || '元';
   const navigate = useNavigate();
+  const fetchUserPromiseRef = useRef(null);
 
   const [userInfo, setUserInfo] = useState({ _id: null, username: '', avatar: '', birthday: null, favoriteHotels: [] });
   const getToken = async () => localStorage.getItem("token");
@@ -91,33 +99,33 @@ export function AppProvider({ children }) {
   }
 
   async function fetchUser() {
-    try {
-      const token = await getToken();
-      if (!token) {
-        setIsAuthenticated(false);
-        setRoleState(null);
-        setMerchantApplicationStatus(null);
-        setIsOwner(false);
-        setIsPlatformAdmin(false);
-        setUserInfo({ _id: null, username: '', avatar: '', birthday: null, favoriteHotels: [] });
-        setAuthChecked(true);
-        return;
-      }
-      if (isTokenExpired(token)) {
-        localStorage.removeItem("token");
-        setIsAuthenticated(false);
-        setRoleState(null);
-        setMerchantApplicationStatus(null);
-        setIsOwner(false);
-        setIsPlatformAdmin(false);
-        setUserInfo({ _id: null, username: '', avatar: '', birthday: null, favoriteHotels: [] });
-        setAuthChecked(true);
-        return;
-      }
+    if (fetchUserPromiseRef.current) return fetchUserPromiseRef.current;
+    const run = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        if (!token) {
+          setIsAuthenticated(false);
+          setRoleState(null);
+          setMerchantApplicationStatus(null);
+          setIsOwner(false);
+          setIsPlatformAdmin(false);
+          setUserInfo({ _id: null, username: '', avatar: '', birthday: null, favoriteHotels: [] });
+          setAuthChecked(true);
+          return;
+        }
+        if (isTokenExpired(token)) {
+          localStorage.removeItem("token");
+          setIsAuthenticated(false);
+          setRoleState(null);
+          setMerchantApplicationStatus(null);
+          setIsOwner(false);
+          setIsPlatformAdmin(false);
+          setUserInfo({ _id: null, username: '', avatar: '', birthday: null, favoriteHotels: [] });
+          setAuthChecked(true);
+          return;
+        }
 
-      const res = await axios.get("/api/users", {
-        headers: { Authorization: `Bearer ${token}` },
-      }).catch((err) => {
+        const res = await axios.get("/api/users").catch((err) => {
         if (err.response?.status === 401) return { data: { success: false } };
         throw err;
       });
@@ -167,7 +175,11 @@ export function AppProvider({ children }) {
       }
     } finally {
       setAuthChecked(true);
+      fetchUserPromiseRef.current = null;
     }
+    };
+    fetchUserPromiseRef.current = run();
+    return fetchUserPromiseRef.current;
   }
 
   useEffect(() => {

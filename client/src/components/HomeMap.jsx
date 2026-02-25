@@ -1,78 +1,28 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet';
-import L from 'leaflet';
+import { loadAMap } from '../utils/loadAmap';
+import { geocodeAmap, wgs84ToGcj02 } from '../utils/amap';
+import { clusterHotels } from '../utils/mapCluster';
 import { useAppContext } from '../context/AppContext';
-import { geocodeAmap, wgs84ToGcj02, AMAP_TILE_URL } from '../utils/amap';
-import 'leaflet/dist/leaflet.css';
 
-// 修复 Leaflet 默认 marker 图标在打包后路径问题
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
-});
-
-const DEFAULT_CENTER = [39.9042, 116.4074]; // 北京，GCJ-02
+const DEFAULT_CENTER = [39.9042, 116.4074];
 const DEFAULT_ZOOM = 4;
 
-/** 去掉右下角版权里的 "Leaflet" 前缀 */
-function AttributionNoLeafletPrefix() {
-  const map = useMap();
-  useEffect(() => {
-    if (map.attributionControl) map.attributionControl.setPrefix('');
-  }, [map]);
-  return null;
+function boundsToParams(bounds) {
+  if (!bounds) return null;
+  const sw = bounds.getSouthWest && bounds.getSouthWest();
+  const ne = bounds.getNorthEast && bounds.getNorthEast();
+  if (!sw || !ne) return null;
+  const lng1 = typeof sw.getLng === 'function' ? sw.getLng() : sw.lng;
+  const lat1 = typeof sw.getLat === 'function' ? sw.getLat() : sw.lat;
+  const lng2 = typeof ne.getLng === 'function' ? ne.getLng() : ne.lng;
+  const lat2 = typeof ne.getLat === 'function' ? ne.getLat() : ne.lat;
+  return {
+    minLat: Math.min(lat1, lat2),
+    maxLat: Math.max(lat1, lat2),
+    minLng: Math.min(lng1, lng2),
+    maxLng: Math.max(lng1, lng2),
+  };
 }
-
-/** 地图内飞行到指定位置 */
-function MapFlyTo({ center, zoom }) {
-  const map = useMap();
-  useEffect(() => {
-    if (center && center.length >= 2) map.flyTo(center, typeof zoom === 'number' ? zoom : 12, { duration: 1.2 });
-  }, [map, center, zoom]);
-  return null;
-}
-
-/** 监听地图视野变化，防抖后回调 bounds */
-function MapBoundsListener({ onBoundsChange }) {
-  const map = useMap();
-  const debounceRef = useRef(null);
-  const onBoundsChangeRef = useRef(onBoundsChange);
-  onBoundsChangeRef.current = onBoundsChange;
-
-  useEffect(() => {
-    function updateBounds() {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      debounceRef.current = setTimeout(() => {
-        const b = map.getBounds();
-        const sw = b.getSouthWest();
-        const ne = b.getNorthEast();
-        onBoundsChangeRef.current({
-          minLat: sw.lat,
-          maxLat: ne.lat,
-          minLng: sw.lng,
-          maxLng: ne.lng,
-        });
-      }, 350);
-    }
-    updateBounds();
-    map.on('moveend', updateBounds);
-    return () => {
-      map.off('moveend', updateBounds);
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
-  }, [map]);
-  return null;
-}
-
-/** 酒店小图标 */
-const hotelIcon = new L.DivIcon({
-  className: 'hotel-marker',
-  html: `<span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-600 text-white shadow-lg border-2 border-white" style="font-size:18px">📍</span>`,
-  iconSize: [32, 32],
-  iconAnchor: [16, 16],
-});
 
 function HomeMap() {
   const { axios, navigate } = useAppContext();
@@ -84,6 +34,14 @@ function HomeMap() {
   const [selectedHotel, setSelectedHotel] = useState(null);
   const [loadingGeo, setLoadingGeo] = useState(false);
   const [loadingHotels, setLoadingHotels] = useState(false);
+  const [smallMapReady, setSmallMapReady] = useState(false);
+  const [bigMapReady, setBigMapReady] = useState(false);
+  const [bigMapZoomVersion, setBigMapZoomVersion] = useState(0);
+  const smallContainerRef = useRef(null);
+  const bigContainerRef = useRef(null);
+  const smallMapRef = useRef(null);
+  const bigMapRef = useRef(null);
+  const bigMarkersRef = useRef([]);
   const searchInputRef = useRef(null);
 
   const fetchHotelsByBounds = useCallback(async (bounds) => {
@@ -140,9 +98,127 @@ function HomeMap() {
     setSelectedHotel(null);
   };
 
+  // 首页右下角小地图（固定视野、不可拖拽缩放）
+  useEffect(() => {
+    const el = smallContainerRef.current;
+    if (!el) return;
+    loadAMap()
+      .then((AMap) => {
+        const map = new AMap.Map(el, {
+          center: [DEFAULT_CENTER[1], DEFAULT_CENTER[0]],
+          zoom: DEFAULT_ZOOM,
+          viewMode: '2D',
+          dragEnable: false,
+          zoomEnable: false,
+          scrollWheel: false,
+          doubleClickZoom: false,
+        });
+        smallMapRef.current = map;
+        setSmallMapReady(true);
+      })
+      .catch((err) => console.error('[HomeMap] small loadAMap failed', err));
+    return () => {
+      if (smallMapRef.current) {
+        smallMapRef.current.destroy();
+        smallMapRef.current = null;
+      }
+      setSmallMapReady(false);
+    };
+  }, []);
+
+  // 放大后的全屏地图
+  useEffect(() => {
+    if (!expanded) return;
+    const el = bigContainerRef.current;
+    if (!el) return;
+    let map = null;
+    let debounceTimer = null;
+    const fetchRef = { current: fetchHotelsByBounds };
+    fetchRef.current = fetchHotelsByBounds;
+
+    loadAMap()
+      .then((AMap) => {
+        map = new AMap.Map(el, {
+          center: [mapCenter[1], mapCenter[0]],
+          zoom: mapZoom,
+          viewMode: '2D',
+        });
+        bigMapRef.current = map;
+
+        function emitBounds() {
+          if (debounceTimer) clearTimeout(debounceTimer);
+          debounceTimer = setTimeout(() => {
+            const b = map.getBounds();
+            const params = boundsToParams(b);
+            if (params) fetchRef.current(params);
+          }, 350);
+        }
+        map.on('moveend', () => {
+          emitBounds();
+          setBigMapZoomVersion((v) => v + 1);
+        });
+        emitBounds();
+        setBigMapReady(true);
+      })
+      .catch((err) => console.error('[HomeMap] big loadAMap failed', err));
+
+    return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      bigMarkersRef.current.forEach((m) => m.setMap(null));
+      bigMarkersRef.current = [];
+      if (map) {
+        map.destroy();
+        bigMapRef.current = null;
+      }
+      setBigMapReady(false);
+    };
+  }, [expanded]);
+
+  useEffect(() => {
+    const map = bigMapRef.current;
+    if (!map || !bigMapReady) return;
+    map.setCenter([mapCenter[1], mapCenter[0]]);
+    map.setZoom(Math.max(4, Math.min(18, mapZoom)));
+  }, [bigMapReady, mapCenter[0], mapCenter[1], mapZoom]);
+
+  useEffect(() => {
+    const map = bigMapRef.current;
+    if (!map || !bigMapReady) return;
+    const AMap = window.AMap;
+    const zoom = typeof map.getZoom === 'function' ? map.getZoom() : mapZoom;
+    bigMarkersRef.current.forEach((m) => m.setMap(null));
+    bigMarkersRef.current = [];
+    const { clusters, singles } = clusterHotels(hotels, zoom, wgs84ToGcj02);
+    clusters.forEach((c) => {
+      const div = document.createElement('div');
+      div.className = 'amap-cluster-marker';
+      div.innerHTML = `<span style="display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;background:#2563eb;color:#fff;font-weight:700;font-size:14px;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.3);">${c.count}</span>`;
+      const markerOpt = {
+        position: [c.centerLng, c.centerLat],
+        content: div,
+        map,
+      };
+      if (typeof AMap.Pixel === 'function') markerOpt.offset = new AMap.Pixel(-18, -18);
+      const marker = new AMap.Marker(markerOpt);
+      marker.on('click', () => {
+        setMapCenter([c.centerLat, c.centerLng]);
+        setMapZoom(Math.min(18, zoom + 2));
+      });
+      bigMarkersRef.current.push(marker);
+    });
+    singles.forEach(({ hotel: h, lat, lng }) => {
+      const marker = new AMap.Marker({ position: [lng, lat], map });
+      marker.on('click', () => {
+        setSelectedHotel(h);
+        setMapCenter([lat, lng]);
+        setMapZoom(16);
+      });
+      bigMarkersRef.current.push(marker);
+    });
+  }, [bigMapReady, hotels, bigMapZoomVersion, mapZoom]);
+
   return (
     <>
-      {/* 首页右下角小地图：点击放大 */}
       <div
         className="fixed bottom-4 right-4 z-[900] w-[280px] h-[180px] sm:w-[320px] sm:h-[200px] rounded-xl overflow-hidden border border-gray-200 shadow-lg bg-gray-100 cursor-pointer group"
         role="button"
@@ -151,29 +227,18 @@ function HomeMap() {
         onKeyDown={(e) => e.key === 'Enter' && openExpanded()}
       >
         <div className="relative w-full h-full">
-          <MapContainer
-            center={DEFAULT_CENTER}
-            zoom={DEFAULT_ZOOM}
-            className="w-full h-full rounded-xl"
-            zoomControl={false}
-            dragging={false}
-            scrollWheelZoom={false}
-            doubleClickZoom={false}
-          >
-            <TileLayer
-              attribution='&copy; 高德地图'
-              url={AMAP_TILE_URL}
-              subdomains="1234"
-            />
-            <AttributionNoLeafletPrefix />
-          </MapContainer>
+          <div ref={smallContainerRef} className="w-full h-full rounded-xl" />
+          {!smallMapReady && (
+            <div className="absolute inset-0 flex items-center justify-center bg-gray-200 text-gray-500 text-sm">
+              加载中…
+            </div>
+          )}
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/25 group-hover:bg-black/35 transition rounded-xl">
             <span className="text-white text-sm font-medium drop-shadow text-center px-2">点击查看酒店位置</span>
           </div>
         </div>
       </div>
 
-      {/* 放大后的全屏地图层 */}
       {expanded && (
         <div className="fixed inset-0 z-[9999] flex flex-col bg-white">
           <div className="flex-shrink-0 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 px-3 sm:px-4 py-3 border-b border-gray-200 bg-white">
@@ -209,38 +274,16 @@ function HomeMap() {
           </div>
           <div className="flex-1 flex flex-col sm:flex-row min-h-0 overflow-hidden">
             <div className="flex-1 min-h-0 min-w-0 relative">
-              <MapContainer
-                center={mapCenter}
-                zoom={mapZoom}
-                className="w-full h-full"
-              >
-                <TileLayer
-                  attribution='&copy; 高德地图'
-                  url={AMAP_TILE_URL}
-                  subdomains="1234"
-                />
-                <AttributionNoLeafletPrefix />
-                <MapFlyTo center={mapCenter} zoom={mapZoom} />
-                <MapBoundsListener onBoundsChange={fetchHotelsByBounds} />
-                {hotels.map((h) => {
-                  const [lat, lng] = wgs84ToGcj02(h._lat, h._lng);
-                  return (
-                    <Marker
-                      key={h._id}
-                      position={[lat, lng]}
-                      icon={hotelIcon}
-                      eventHandlers={{
-                        click: () => setSelectedHotel(h),
-                      }}
-                    />
-                  );
-                })}
-              </MapContainer>
+              <div ref={bigContainerRef} className="w-full h-full" />
+              {!bigMapReady && (
+                <div className="absolute inset-0 flex items-center justify-center bg-gray-100 text-gray-500">
+                  地图加载中…
+                </div>
+              )}
               <div className="absolute bottom-3 left-3 right-3 sm:right-auto sm:left-4 sm:max-w-[280px] rounded-lg bg-white/95 shadow px-3 py-2 text-sm text-gray-600 z-[1000]">
                 {loadingHotels ? '加载酒店中…' : `当前范围共 ${hotels.length} 家酒店`}
               </div>
             </div>
-            {/* 右侧/底部弹窗：酒店信息；移动端底部滑出，桌面端右侧 */}
             {selectedHotel && (
               <div className="w-full sm:w-96 flex-shrink-0 border-t sm:border-t-0 sm:border-l border-gray-200 bg-white shadow-xl flex flex-col overflow-hidden max-h-[70vh] sm:max-h-none">
                 <div className="flex items-center justify-between p-3 border-b border-gray-100">

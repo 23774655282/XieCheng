@@ -14,8 +14,6 @@
     "@tailwindcss/vite": "^4.1.7",
     "@tanstack/react-virtual": "^3.13.19",
     "axios": "^1.10.0",
-    "leaflet": "^1.9.4",
-    "leaflet.chinatmsproviders": "^3.0.6",
     "pinyin-pro": "^3.28.0",
     "qrcode.react": "^4.2.0",
     "react": "^19.1.0",
@@ -23,7 +21,6 @@
     "react-dom": "^19.1.0",
     "react-hot-toast": "^2.5.2",
     "react-icons": "^5.5.0",
-    "react-leaflet": "^5.0.0",
     "react-router-dom": "^7.6.0",
     "tailwindcss": "^4.1.7"
   },
