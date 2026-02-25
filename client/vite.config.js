@@ -6,10 +6,12 @@ import { join } from 'path'
 
 // 构建后写入 JS bundle 大小，供 ?perf=1 时读取
 function bundleSizePlugin() {
+  let outDir = join(process.cwd(), 'dist')
   return {
     name: 'bundle-size',
     configResolved(config) {
-      this.outDir = join(config.build.outDir || 'dist')
+      const build = config && config.build
+      outDir = join(process.cwd(), (build && build.outDir) ? build.outDir : 'dist')
     },
     writeBundle(_, bundle) {
       const sizes = {}
@@ -23,7 +25,7 @@ function bundleSizePlugin() {
       }
       const out = { sizes, total, timestamp: Date.now() }
       try {
-        const dir = this.outDir || join(process.cwd(), 'dist')
+        const dir = outDir || join(process.cwd(), 'dist')
         writeFileSync(join(dir, 'bundle-size.json'), JSON.stringify(out, null, 2))
         writeFileSync(join(process.cwd(), 'public', 'bundle-size.json'), JSON.stringify(out, null, 2))
       } catch {}
