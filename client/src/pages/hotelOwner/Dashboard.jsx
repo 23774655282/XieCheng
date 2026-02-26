@@ -301,6 +301,7 @@ function Dashboard() {
                       </div>
                     )}
                   </th>
+                  <th className='p-2 sm:p-4 text-left text-gray-600 font-medium text-xs sm:text-sm'>订单金额</th>
                   <th className='p-2 sm:p-4 text-left text-gray-600 font-medium text-xs sm:text-sm'>支付</th>
                   <th className='p-2 sm:p-4 text-left text-gray-600 font-medium text-xs sm:text-sm'>状态</th>
                   <th className='p-2 sm:p-4 text-left text-gray-600 font-medium text-xs sm:text-sm'>操作</th>
@@ -319,6 +320,7 @@ function Dashboard() {
                     <td className='p-2 sm:p-4 text-gray-600'>{typeof item.availableDuringStay === 'number' ? item.availableDuringStay : (item.room?.roomCount ?? '-')}</td>
                     <td className='p-2 sm:p-4 text-gray-600 whitespace-nowrap'>{formatDateStr(item.checkInDate)}</td>
                     <td className='p-2 sm:p-4 text-gray-600 whitespace-nowrap'>{formatDateStr(item.checkOutDate)}</td>
+                    <td className='p-2 sm:p-4 text-gray-800 font-medium whitespace-nowrap'>{item.totalPrice != null ? `${item.totalPrice} ${currency}` : '—'}</td>
                     <td className='p-2 sm:p-4' onClick={(e) => e.stopPropagation()}>
                       {(() => {
                         const payLabel = (item.refundStatus === 'rejected' && item.refundPlatformReviewRequested) ? '客服介入中'
