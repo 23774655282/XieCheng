@@ -156,7 +156,7 @@ export const registerHotelPreReview = async (req, res) => {
             return res.status(403).json({ success: false, message: "仅商户可提交酒店预审单" });
         }
 
-        const { applicantName, applicantPhone, hotelName, hotelAddress, hotelCity, hotelContact } = req.body;
+        const { applicantName, applicantPhone, hotelName, hotelAddress, hotelCity, hotelDistrict, hotelContact } = req.body;
         const files = req.files || {};
         const licenseFiles = files.license || [];
         const starRatingFiles = files.starRating || [];
@@ -193,6 +193,7 @@ export const registerHotelPreReview = async (req, res) => {
             hotelName: String(hotelName).trim(),
             hotelAddress: String(hotelAddress).trim(),
             hotelCity: String(hotelCity).trim(),
+            hotelDistrict: String(hotelDistrict || '').trim(),
             hotelContact: String(hotelContact).trim(),
             licenseUrl,
             starRatingCertificateUrl,
@@ -212,25 +213,29 @@ export const registerHotelPreReview = async (req, res) => {
     }
 };
 
-/** 商户：获取名下酒店列表（含待再审核/上架中/已驳回/已下架；返回 hasPendingMods） */
+/** 商户：获取名下酒店列表（含待再审核/上架中/已驳回/已下架；返回 hasPendingMods），分页：每页 10 或 20 条 */
 export const getOwnerHotels = async (req, res) => {
     try {
-        const { status } = req.query;
+        const { status, page: pageStr, limit: limitStr } = req.query;
+        const page = Math.max(1, parseInt(pageStr, 10) || 1);
+        const rawLimit = parseInt(limitStr, 10);
+        const limit = rawLimit === 20 ? 20 : 10;
         const statusFilter = status
             ? { status }
             : { status: { $in: ["pending_audit", "pending_list", "approved", "rejected"] } };
-        const hotels = await Hotel.find({
-            owner: req.user._id,
-            ...statusFilter,
-        })
+        const baseFilter = { owner: req.user._id, ...statusFilter };
+        const totalCount = await Hotel.countDocuments(baseFilter);
+        const hotels = await Hotel.find(baseFilter)
             .select("name nameEn address city starRating images hotelIntro status rejectReason")
             .sort({ updatedAt: -1 })
+            .skip((page - 1) * limit)
+            .limit(limit)
             .lean();
         const hotelIds = hotels.map((h) => h._id);
         const suppHotelIds = new Set((await HotelSupplementEdit.distinct("hotel", { hotel: { $in: hotelIds }, status: "pending" })).map(String));
         const roomHotelIds = new Set((await RoomEditApplication.distinct("hotel", { hotel: { $in: hotelIds }, status: "pending" })).map(String));
         const withMods = hotels.map((h) => ({ ...h, hasPendingMods: suppHotelIds.has(String(h._id)) || roomHotelIds.has(String(h._id)) }));
-        return res.status(200).json({ success: true, hotels: withMods });
+        return res.status(200).json({ success: true, hotels: withMods, totalCount, page, limit });
     } catch (error) {
         console.error("Error fetching owner hotels:", error);
         res.status(500).json({ success: false, message: "error in fetching hotels" });
@@ -246,9 +251,14 @@ export const reapplyHotel = async (req, res) => {
         if (hotel.status !== "rejected") {
             return res.status(400).json({ success: false, message: "仅已驳回的酒店可重新申请" });
         }
-        const { hotelIntro, nearbyAttractions, promotions, openTime } = req.body;
+        const { name, city, district, address, contact, hotelIntro, nearbyAttractions, promotions, openTime } = req.body;
         const nearArr = parseBodyArray(nearbyAttractions);
         const promArr = parseBodyArray(promotions);
+        if (name !== undefined && String(name).trim()) hotel.name = String(name).trim();
+        if (city !== undefined && String(city).trim()) hotel.city = String(city).trim();
+        if (district !== undefined) hotel.district = String(district || "").trim();
+        if (address !== undefined && String(address).trim()) hotel.address = String(address).trim();
+        if (contact !== undefined && String(contact).trim()) hotel.contact = String(contact).trim();
         if (hotelIntro !== undefined) hotel.hotelIntro = hotelIntro || "";
         if (nearbyAttractions !== undefined) hotel.nearbyAttractions = nearArr;
         if (promotions !== undefined) hotel.promotions = promArr;
@@ -277,7 +287,7 @@ export const submitHotelSupplement = async (req, res) => {
         const allowedStatuses = ["pending_audit", "pending_list", "approved"];
         if (!allowedStatuses.includes(hotel.status)) return res.status(400).json({ success: false, message: "当前状态不可编辑补充信息" });
 
-        const { latitude, longitude, doorNumber, totalRoomCount, nameEn } = req.body;
+        const { name, city, district, address, contact, latitude, longitude, doorNumber, totalRoomCount, nameEn } = req.body;
         const safeParseNumber = (val, allowNull = true) => {
             if (val === "" || val == null) return allowNull ? null : 0;
             const n = Number(val);
@@ -298,6 +308,11 @@ export const submitHotelSupplement = async (req, res) => {
 
         // 1）待审核状态：直接写回 Hotel 本身
         if (hotel.status === "pending_audit") {
+            if (name !== undefined && String(name).trim()) hotel.name = String(name).trim();
+            if (city !== undefined && String(city).trim()) hotel.city = String(city).trim();
+            if (district !== undefined) hotel.district = String(district || '').trim();
+            if (address !== undefined && String(address).trim()) hotel.address = String(address).trim();
+            if (contact !== undefined && String(contact).trim()) hotel.contact = String(contact).trim();
             if (latitude !== undefined) hotel.latitude = safeParseNumber(latitude);
             if (longitude !== undefined) hotel.longitude = safeParseNumber(longitude);
             if (doorNumber !== undefined) hotel.doorNumber = String(doorNumber || "").trim();
@@ -342,6 +357,11 @@ export const submitHotelSupplement = async (req, res) => {
         if (hotel.status === "approved" || hotel.status === "pending_list") {
             const existingPending = await HotelSupplementEdit.findOne({ hotel: hotel._id, status: "pending" });
             const baseHotel = existingPending || hotel;
+            const curName = baseHotel.name || "";
+            const curCity = baseHotel.city || "";
+            const curDistrict = baseHotel.district || "";
+            const curAddress = baseHotel.address || "";
+            const curContact = baseHotel.contact || "";
             const curLat = baseHotel.latitude;
             const curLng = baseHotel.longitude;
             const curDoor = baseHotel.doorNumber || "";
@@ -350,6 +370,11 @@ export const submitHotelSupplement = async (req, res) => {
             const curExterior = baseHotel.hotelExteriorImages || [];
             const curInterior = baseHotel.hotelInteriorImages || [];
 
+            const newName = name !== undefined ? String(name || "").trim() : curName;
+            const newCity = city !== undefined ? String(city || "").trim() : curCity;
+            const newDistrict = district !== undefined ? String(district || "").trim() : curDistrict;
+            const newAddress = address !== undefined ? String(address || "").trim() : curAddress;
+            const newContact = contact !== undefined ? String(contact || "").trim() : curContact;
             const newLat = latitude !== undefined ? safeParseNumber(latitude) : curLat;
             const newLng = longitude !== undefined ? safeParseNumber(longitude) : curLng;
             const newDoor = doorNumber !== undefined ? String(doorNumber || "").trim() : curDoor;
@@ -364,6 +389,11 @@ export const submitHotelSupplement = async (req, res) => {
             if (exteriorFiles.length > 0) newExterior = [...newExterior, ...exteriorFiles.map((f) => `${baseUrl}/uploads/hotels/${f.filename}`)];
             if (interiorFiles.length > 0) newInterior = [...newInterior, ...interiorFiles.map((f) => `${baseUrl}/uploads/hotels/${f.filename}`)];
 
+            const sameName = String(curName) === String(newName);
+            const sameCity = String(curCity) === String(newCity);
+            const sameDistrict = String(curDistrict) === String(newDistrict);
+            const sameAddress = String(curAddress) === String(newAddress);
+            const sameContact = String(curContact) === String(newContact);
             const sameLat = (curLat == null && newLat == null) || (curLat != null && newLat != null && Number(curLat) === Number(newLat));
             const sameLng = (curLng == null && newLng == null) || (curLng != null && newLng != null && Number(curLng) === Number(newLng));
             const sameDoor = String(curDoor) === String(newDoor);
@@ -373,12 +403,13 @@ export const submitHotelSupplement = async (req, res) => {
             const sameInterior = curInterior.length === newInterior.length && curInterior.every((u, i) => u === newInterior[i]);
 
             const hasChanges = exteriorFiles.length > 0 || interiorFiles.length > 0 ||
+                !sameName || !sameCity || !sameDistrict || !sameAddress || !sameContact ||
                 !sameLat || !sameLng || !sameDoor || !sameTotal || !sameNameEn || !sameExterior || !sameInterior;
 
             if (!hasChanges) {
                 return res.status(200).json({ success: true, message: "未作修改，无需提交审核" });
             }
-            const payload = { latitude: newLat, longitude: newLng, doorNumber: newDoor, totalRoomCount: newTotal, nameEn: newNameEn, hotelExteriorImages: newExterior, hotelInteriorImages: newInterior };
+            const payload = { name: newName, city: newCity, district: newDistrict, address: newAddress, contact: newContact, latitude: newLat, longitude: newLng, doorNumber: newDoor, totalRoomCount: newTotal, nameEn: newNameEn, hotelExteriorImages: newExterior, hotelInteriorImages: newInterior };
             if (existingPending) {
                 await HotelSupplementEdit.findByIdAndUpdate(existingPending._id, { $set: payload });
             } else {
@@ -407,6 +438,11 @@ export const getOwnerHotelById = async (req, res) => {
         let hotelData = { ...hotel, hasPendingMods };
         const suppEdit = await HotelSupplementEdit.findOne({ hotel: id, status: "pending" }).lean();
         if (suppEdit) {
+            if (suppEdit.name !== undefined) hotelData.name = suppEdit.name;
+            if (suppEdit.city !== undefined) hotelData.city = suppEdit.city;
+            if (suppEdit.district !== undefined) hotelData.district = suppEdit.district;
+            if (suppEdit.address !== undefined) hotelData.address = suppEdit.address;
+            if (suppEdit.contact !== undefined) hotelData.contact = suppEdit.contact;
             if (suppEdit.latitude !== undefined) hotelData.latitude = suppEdit.latitude;
             if (suppEdit.longitude !== undefined) hotelData.longitude = suppEdit.longitude;
             if (suppEdit.doorNumber !== undefined) hotelData.doorNumber = suppEdit.doorNumber;
@@ -534,13 +570,15 @@ export const updateHotel = async (req, res) => {
     }
 };
 
-/** 管理员：获取所有酒店（用于审核/发布/下线列表；待审核 = 初次再审核 + 有修改待审核的酒店） */
+/** 管理员：获取所有酒店（用于审核/发布/下线列表；待审核 = 初次再审核 + 有修改待审核的酒店），分页：每页 10 或 20 条 */
 export const listHotelsForAudit = async (req, res) => {
     try {
-        const { status } = req.query; // 可选筛选 pending_audit | pending_list | approved | rejected
+        const { status, page: pageStr, limit: limitStr } = req.query; // 可选筛选 pending_audit | pending_list | approved | rejected
+        const page = Math.max(1, parseInt(pageStr, 10) || 1);
+        const rawLimit = parseInt(limitStr, 10);
+        const limit = rawLimit === 20 ? 20 : 10;
         let filter;
         if (status === "pending_audit") {
-            // 待审核：初次再审核(pending_audit+supplementSubmitted) 或 有修改待审核(pending_list/approved+RoomEditApplication/HotelSupplementEdit)
             const pendingRoomHotelIds = await RoomEditApplication.distinct("hotel", { status: "pending" });
             const pendingSuppHotelIds = await HotelSupplementEdit.distinct("hotel", { status: "pending" });
             const modHotelIds = [...new Set([...pendingRoomHotelIds.map(String), ...pendingSuppHotelIds.map(String)])];
@@ -555,11 +593,13 @@ export const listHotelsForAudit = async (req, res) => {
         } else {
             filter = { $or: [{ status: { $ne: "pending_audit" } }, { status: "pending_audit", supplementSubmitted: true }] };
         }
+        const totalCount = await Hotel.countDocuments(filter);
         let hotels = await Hotel.find(filter)
             .populate("owner", "username phone email")
             .sort({ updatedAt: -1 })
+            .skip((page - 1) * limit)
+            .limit(limit)
             .lean();
-        // 标记有修改待审核的酒店
         const pendingRoomHotels = await RoomEditApplication.distinct("hotel", { status: "pending" });
         const pendingSuppHotels = await HotelSupplementEdit.distinct("hotel", { status: "pending" });
         const modHotelIdSet = new Set([...pendingRoomHotels.map(String), ...pendingSuppHotels.map(String)]);
@@ -568,7 +608,7 @@ export const listHotelsForAudit = async (req, res) => {
             const statusOrder = { pending_audit: 0, pending_list: 1, approved: 2, rejected: 3 };
             hotels.sort((a, b) => (statusOrder[a.status] ?? 99) - (statusOrder[b.status] ?? 99) || new Date(b.updatedAt) - new Date(a.updatedAt));
         }
-        return res.status(200).json({ success: true, hotels });
+        return res.status(200).json({ success: true, hotels, totalCount, page, limit });
     } catch (error) {
         console.error("Error listing hotels for audit:", error);
         res.status(500).json({ success: false, message: "error in listing hotels" });
@@ -636,6 +676,11 @@ export const approveHotel = async (req, res) => {
             // 修改待审核：应用所有 pending 修改
             const suppEdits = await HotelSupplementEdit.find({ hotel: hotelId, status: "pending" });
             for (const app of suppEdits) {
+                if (app.name !== undefined) hotel.name = app.name;
+                if (app.city !== undefined) hotel.city = app.city;
+                if (app.district !== undefined) hotel.district = app.district;
+                if (app.address !== undefined) hotel.address = app.address;
+                if (app.contact !== undefined) hotel.contact = app.contact;
                 if (app.latitude !== undefined) hotel.latitude = app.latitude;
                 if (app.longitude !== undefined) hotel.longitude = app.longitude;
                 if (app.doorNumber !== undefined) hotel.doorNumber = app.doorNumber;
@@ -828,6 +873,11 @@ export const approveHotelSupplementEdit = async (req, res) => {
         if (!app || app.status !== "pending") return res.status(404).json({ success: false, message: "申请不存在或已处理" });
         const hotel = await Hotel.findById(app.hotel);
         if (!hotel) return res.status(404).json({ success: false, message: "酒店不存在" });
+        if (app.name !== undefined) hotel.name = app.name;
+        if (app.city !== undefined) hotel.city = app.city;
+        if (app.district !== undefined) hotel.district = app.district;
+        if (app.address !== undefined) hotel.address = app.address;
+        if (app.contact !== undefined) hotel.contact = app.contact;
         if (app.latitude !== undefined) hotel.latitude = app.latitude;
         if (app.longitude !== undefined) hotel.longitude = app.longitude;
         if (app.doorNumber !== undefined) hotel.doorNumber = app.doorNumber;
@@ -863,5 +913,40 @@ export const rejectHotelSupplementEdit = async (req, res) => {
     } catch (error) {
         console.error("Error rejecting hotel supplement edit:", error);
         res.status(500).json({ success: false, message: "操作失败" });
+    }
+};
+
+/** 商户：管理酒店展示区图片（仅可从已上传的内/外部照片中选择），实时生效 */
+export const updateHotelDisplayImages = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { images } = req.body || {};
+        const hotel = await Hotel.findOne({ _id: id, owner: req.user._id });
+        if (!hotel) return res.status(404).json({ success: false, message: "酒店不存在" });
+
+        const allowedStatuses = ["pending_audit", "pending_list", "approved"];
+        if (!allowedStatuses.includes(hotel.status)) {
+            return res.status(400).json({ success: false, message: "当前状态不可编辑展示图片" });
+        }
+
+        const candidates = new Set([
+            ...((hotel.hotelExteriorImages || []).map(String)),
+            ...((hotel.hotelInteriorImages || []).map(String)),
+        ]);
+
+        let nextImages = Array.isArray(images) ? images.map(String).filter(Boolean) : [];
+        nextImages = nextImages.filter((url) => candidates.has(url));
+
+        hotel.images = nextImages;
+        await hotel.save();
+
+        return res.status(200).json({
+            success: true,
+            message: "展示图片已保存",
+            images: hotel.images,
+        });
+    } catch (error) {
+        console.error("Error updating hotel display images:", error);
+        return res.status(500).json({ success: false, message: "保存失败" });
     }
 };

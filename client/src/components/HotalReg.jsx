@@ -3,6 +3,7 @@ import { IoIosCloseCircleOutline } from "react-icons/io";
 import { useAppContext } from "../context/AppContext";
 import { useState } from "react";
 import toast from "react-hot-toast";
+import AddressInput from "./AddressInput";
 
 function HotelReg() {
   const { setShowHotelReg, axios, getToken, setIsOwner, role, navigate } = useAppContext();
@@ -157,14 +158,13 @@ function HotelReg() {
             >
               地址
             </label>
-            <input
+            <AddressInput
               id="address"
-              type="text"
               value={address}
-              onChange={(e) => setAddress(e.target.value)}
-              placeholder="地址"
-              className="w-full p-2 border border-gray-300 rounded-md"
+              onChange={setAddress}
+              placeholder="输入地址后选择联想结果"
               required
+              className="w-full p-2 border border-gray-300 rounded-md"
             />
           </div>
 

@@ -49,7 +49,7 @@ export function AppProvider({ children }) {
       const raw = localStorage.getItem("recentSearchRecords");
       if (raw) {
         const arr = JSON.parse(raw);
-        return Array.isArray(arr) ? arr.slice(0, 5) : [];
+        return Array.isArray(arr) ? arr.slice(0, 2) : [];
       }
     } catch (_) {}
     return [];
@@ -63,11 +63,14 @@ export function AppProvider({ children }) {
       checkOut: record.checkOut || "",
       rooms: record.rooms ?? 1,
       adults: record.adults ?? 2,
+      children: record.children ?? 0,
+      lat: record.lat != null && Number.isFinite(record.lat) ? record.lat : undefined,
+      lng: record.lng != null && Number.isFinite(record.lng) ? record.lng : undefined,
     };
     if (!r.destination) return;
     setRecentSearchRecords((prev) => {
       const filtered = prev.filter((x) => x.destination !== r.destination);
-      const next = [r, ...filtered].slice(0, 5);
+      const next = [r, ...filtered].slice(0, 2);
       try { localStorage.setItem("recentSearchRecords", JSON.stringify(next)); } catch (_) {}
       return next;
     });
@@ -98,6 +101,7 @@ export function AppProvider({ children }) {
     }
   }
 
+  /** 拉取当前用户信息并更新认证状态。返回 true 表示已登录，false 表示未登录/失败。 */
   async function fetchUser() {
     if (fetchUserPromiseRef.current) return fetchUserPromiseRef.current;
     const run = async () => {
@@ -111,7 +115,8 @@ export function AppProvider({ children }) {
           setIsPlatformAdmin(false);
           setUserInfo({ _id: null, username: '', avatar: '', birthday: null, favoriteHotels: [] });
           setAuthChecked(true);
-          return;
+          fetchUserPromiseRef.current = null;
+          return false;
         }
         if (isTokenExpired(token)) {
           localStorage.removeItem("token");
@@ -122,61 +127,68 @@ export function AppProvider({ children }) {
           setIsPlatformAdmin(false);
           setUserInfo({ _id: null, username: '', avatar: '', birthday: null, favoriteHotels: [] });
           setAuthChecked(true);
-          return;
+          fetchUserPromiseRef.current = null;
+          return false;
         }
 
         const res = await axios.get("/api/users").catch((err) => {
-        if (err.response?.status === 401) return { data: { success: false } };
-        throw err;
-      });
-      const data = res?.data;
-      if (data?.success) {
-        const r = data.role || "user";
-        setRoleState(r);
-        setMerchantApplicationStatus(data.merchantApplicationStatus || "none");
-        setIsOwner(r === "merchant" || r === "admin");
-        setIsPlatformAdmin(r === "admin");
-        setUserInfo({
-          _id: data._id || null,
-          username: data.username || '',
-          avatar: data.avatar || '',
-          birthday: data.birthday || null,
-          favoriteHotels: data.favoriteHotels || [],
+          if (err.response?.status === 401) return { data: { success: false } };
+          throw err;
         });
-        const apiCities = data.recentSerachCities || [];
-        setSearchCity(apiCities);
-        setRecentSearchRecords((prev) => {
-          const known = new Set(prev.map((x) => x.destination));
-          const fromApi = apiCities.filter((c) => !known.has(c)).map((c) => ({ destination: c }));
-          const merged = [...prev, ...fromApi].slice(0, 5);
-          try { localStorage.setItem('recentSearchRecords', JSON.stringify(merged)); } catch (_) {}
-          return merged;
-        });
-        setIsAuthenticated(true);
-      } else {
-        localStorage.removeItem("token");
+        const data = res?.data;
+        if (data?.success) {
+          const r = data.role || "user";
+          setRoleState(r);
+          setMerchantApplicationStatus(data.merchantApplicationStatus || "none");
+          setIsOwner(r === "merchant" || r === "admin");
+          setIsPlatformAdmin(r === "admin");
+          setUserInfo({
+            _id: data._id || null,
+            username: data.username || '',
+            avatar: data.avatar || '',
+            birthday: data.birthday || null,
+            favoriteHotels: data.favoriteHotels || [],
+          });
+          const apiCities = data.recentSerachCities || [];
+          setSearchCity(apiCities);
+          setRecentSearchRecords((prev) => {
+            const known = new Set(prev.map((x) => x.destination));
+            const fromApi = apiCities.filter((c) => !known.has(c)).map((c) => ({ destination: c }));
+            const merged = [...prev, ...fromApi].slice(0, 2);
+            try { localStorage.setItem('recentSearchRecords', JSON.stringify(merged)); } catch (_) {}
+            return merged;
+          });
+          setIsAuthenticated(true);
+          setAuthChecked(true);
+          fetchUserPromiseRef.current = null;
+          return true;
+        } else {
+          localStorage.removeItem("token");
+          setIsAuthenticated(false);
+          setRoleState(null);
+          setMerchantApplicationStatus(null);
+          setIsOwner(false);
+          setIsPlatformAdmin(false);
+          setUserInfo({ _id: null, username: '', avatar: '', birthday: null, favoriteHotels: [] });
+          setAuthChecked(true);
+          fetchUserPromiseRef.current = null;
+          return false;
+        }
+      } catch (error) {
+        if (error.response?.status === 401) localStorage.removeItem("token");
         setIsAuthenticated(false);
         setRoleState(null);
         setMerchantApplicationStatus(null);
         setIsOwner(false);
         setIsPlatformAdmin(false);
         setUserInfo({ _id: null, username: '', avatar: '', birthday: null, favoriteHotels: [] });
+        setAuthChecked(true);
+        fetchUserPromiseRef.current = null;
+        if (error.response?.status !== 401) {
+          toast.error("获取用户信息失败，请稍后重试。");
+        }
+        return false;
       }
-    } catch (error) {
-      if (error.response?.status === 401) localStorage.removeItem("token");
-      setIsAuthenticated(false);
-      setRoleState(null);
-      setMerchantApplicationStatus(null);
-      setIsOwner(false);
-      setIsPlatformAdmin(false);
-      setUserInfo({ _id: null, username: '', avatar: '', birthday: null, favoriteHotels: [] });
-      if (error.response?.status !== 401) {
-        toast.error("获取用户信息失败，请稍后重试。");
-      }
-    } finally {
-      setAuthChecked(true);
-      fetchUserPromiseRef.current = null;
-    }
     };
     fetchUserPromiseRef.current = run();
     return fetchUserPromiseRef.current;
@@ -203,6 +215,26 @@ export function AppProvider({ children }) {
     } catch {
       return false;
     }
+  }
+
+  /** 用登录接口返回的 token + user 直接更新认证状态，不依赖 GET /api/users，避免登录后仍显示未登录 */
+  function setAuthFromLogin({ token, user }) {
+    if (!token) return;
+    localStorage.setItem("token", token);
+    const r = (user && user.role) || "user";
+    setRoleState(r);
+    setMerchantApplicationStatus("none");
+    setIsOwner(r === "merchant" || r === "admin");
+    setIsPlatformAdmin(r === "admin");
+    setUserInfo({
+      _id: user?.id || null,
+      username: (user && user.username) || "",
+      avatar: (user && user.avatar) || "",
+      birthday: (user && user.birthday) || null,
+      favoriteHotels: (user && user.favoriteHotels) || [],
+    });
+    setIsAuthenticated(true);
+    setAuthChecked(true);
   }
 
   function logout() {
@@ -235,6 +267,7 @@ export function AppProvider({ children }) {
     authChecked,
     applyMerchant,
     logout,
+    setAuthFromLogin,
     fetchUser,
     fetchRooms,
     axios,

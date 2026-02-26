@@ -3,6 +3,8 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useAppContext } from "../../context/AppContext";
 import toast from "react-hot-toast";
 import { IoAdd, IoCloudUploadOutline, IoCreateOutline, IoClose } from "react-icons/io5";
+import AddressInput from "../../components/AddressInput";
+import CityInput, { parseCityFromDistrict, parseDistrictFromDistrict } from "../../components/CityInput";
 
 function RoomCountStepper({ value, roomId, onUpdate, axios, getToken }) {
     const [count, setCount] = useState(value);
@@ -73,11 +75,19 @@ function HotelReauditDetail() {
     const { axios, getToken } = useAppContext();
     const [hotel, setHotel] = useState(null);
     const [rooms, setRooms] = useState([]);
+    const [roomPage, setRoomPage] = useState(1);
+    const [roomTotalCount, setRoomTotalCount] = useState(0);
+    const ROOM_PAGE_SIZE = 10;
     const [roomToDelete, setRoomToDelete] = useState(null);
     const [deleting, setDeleting] = useState(false);
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const [form, setForm] = useState({
+        name: "",
+        city: "",
+        district: "",
+        address: "",
+        contact: "",
         latitude: "",
         longitude: "",
         doorNumber: "",
@@ -86,7 +96,25 @@ function HotelReauditDetail() {
     });
     const [exteriorItems, setExteriorItems] = useState([]); // [{type:'url',url}|{type:'file',file}]
     const [interiorItems, setInteriorItems] = useState([]);
+    const [displayImages, setDisplayImages] = useState([]);
+    const [savingDisplay, setSavingDisplay] = useState(false);
     const fetchVersionRef = useRef(0);
+
+    const draftKey = hotelId ? `hotelSupplementDraft_${hotelId}` : null;
+
+    const updateForm = (patch) => {
+        setForm((prev) => {
+            const next = { ...prev, ...patch };
+            try {
+                if (draftKey) {
+                    localStorage.setItem(draftKey, JSON.stringify(next));
+                }
+            } catch {
+                // ignore storage errors
+            }
+            return next;
+        });
+    };
 
     useEffect(() => {
         if (hotel) {
@@ -113,23 +141,37 @@ function HotelReauditDetail() {
         if (showLoading) setLoading(true);
         try {
             const token = await getToken();
-            const [hotelRes, roomsRes] = await Promise.all([
-                axios.get(`/api/hotels/owner/${hotelId}`, { headers: { Authorization: `Bearer ${token}` } }),
-                axios.get(`/api/rooms/owner?hotelId=${hotelId}`, { headers: { Authorization: `Bearer ${token}` } }),
-            ]);
+            const hotelRes = await axios.get(`/api/hotels/owner/${hotelId}`, { headers: { Authorization: `Bearer ${token}` } });
             if (myVersion !== fetchVersionRef.current) return;
             if (hotelRes.data?.success) {
                 const h = hotelRes.data.hotel;
                 setHotel(h);
-                setForm({
+                const baseForm = {
+                    name: h.name || "",
+                    city: h.city || "",
+                    district: h.district || "",
+                    address: h.address || "",
+                    contact: h.contact || "",
                     latitude: h.latitude != null ? String(h.latitude) : "",
                     longitude: h.longitude != null ? String(h.longitude) : "",
                     doorNumber: h.doorNumber || "",
                     totalRoomCount: h.totalRoomCount != null ? String(h.totalRoomCount) : "",
                     nameEn: h.nameEn || "",
-                });
+                };
+                setForm(baseForm);
+                if (draftKey) {
+                    try {
+                        const stored = localStorage.getItem(draftKey);
+                        if (stored) {
+                            const parsed = JSON.parse(stored);
+                            setForm((prev) => ({ ...prev, ...parsed }));
+                        }
+                    } catch {
+                        // ignore parse/storage errors
+                    }
+                }
+                setDisplayImages(Array.isArray(h.images) ? h.images.map(String) : []);
             }
-            if (roomsRes.data?.success) setRooms(roomsRes.data.rooms || []);
         } catch {
             if (myVersion === fetchVersionRef.current) { toast.error("获取数据失败"); navigate("/owner/hotel-info"); }
         } finally {
@@ -137,12 +179,35 @@ function HotelReauditDetail() {
         }
     };
 
+    const fetchRoomsList = async (page) => {
+        if (!hotelId) return;
+        try {
+            const token = await getToken();
+            const params = new URLSearchParams({ hotelId, page: String(page), limit: String(ROOM_PAGE_SIZE) });
+            const { data } = await axios.get(`/api/rooms/owner?${params}`, { headers: { Authorization: `Bearer ${token}` } });
+            if (data?.success) {
+                setRooms(data.rooms || []);
+                setRoomTotalCount(data.totalCount ?? 0);
+            }
+        } catch {
+            setRooms([]);
+            setRoomTotalCount(0);
+        }
+    };
+
     useEffect(() => {
+        if (!hotelId) return;
+        setRoomPage(1);
         fetchData();
+        fetchRoomsList(1);
     }, [hotelId]);
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
+    useEffect(() => {
+        if (!hotelId || roomPage <= 1) return;
+        fetchRoomsList(roomPage);
+    }, [roomPage]);
+
+    const saveSupplement = async () => {
         if (!hotel) return;
         if (hotel.status === "pending_audit" && hotel.supplementSubmitted && !hotel.hasPendingMods) {
             toast.error("已提交，不可重复提交");
@@ -152,6 +217,11 @@ function HotelReauditDetail() {
         try {
             const token = await getToken();
             const fd = new FormData();
+            fd.append("name", form.name);
+            fd.append("city", form.city);
+            fd.append("district", form.district);
+            fd.append("address", form.address);
+            fd.append("contact", form.contact);
             fd.append("latitude", form.latitude);
             fd.append("longitude", form.longitude);
             fd.append("doorNumber", form.doorNumber);
@@ -169,8 +239,16 @@ function HotelReauditDetail() {
                 headers: { Authorization: `Bearer ${token}` },
             });
             if (data.success) {
+                if (draftKey) {
+                    try {
+                        localStorage.removeItem(draftKey);
+                    } catch {
+                        // ignore storage errors
+                    }
+                }
                 toast.success(data.needsApproval ? "修改已提交，等待管理员审核" : (data.message || "已保存"));
                 fetchData();
+                fetchRoomsList(roomPage);
             } else toast.error(data.message || "保存失败");
         } catch (e) {
             toast.error(e?.response?.data?.message || "提交失败");
@@ -179,7 +257,13 @@ function HotelReauditDetail() {
         }
     };
 
-    const goToAddRoom = () => {
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        await saveSupplement();
+    };
+
+    const goToAddRoom = async () => {
+        await saveSupplement();
         navigate(`/owner/hotels/${hotelId}/add-room`, { state: { returnTo: "supplement" } });
     };
 
@@ -189,7 +273,7 @@ function HotelReauditDetail() {
             const { data } = await axios.post("/api/rooms/toogle-avalibility", { roomId }, { headers: { Authorization: `Bearer ${token}` } });
             if (data.success) {
                 toast.success(data.needsApproval ? "上架申请已提交，等待管理员审核" : (data.room?.isAvailable ? "已上架" : "已下架"));
-                fetchData(false);
+                fetchRoomsList(roomPage);
             } else {
                 toast.error(data.message || "操作失败");
             }
@@ -209,7 +293,7 @@ function HotelReauditDetail() {
             if (data.success) {
                 toast.success("房间已删除");
                 setRoomToDelete(null);
-                fetchData(false);
+                fetchRoomsList(roomPage);
             } else {
                 toast.error(data.message || "删除失败");
             }
@@ -219,6 +303,14 @@ function HotelReauditDetail() {
             setDeleting(false);
         }
     };
+
+    const allDisplayCandidates = [
+        ...((hotel?.hotelExteriorImages || []).map((url) => ({ url, source: "exterior" }))),
+        ...((hotel?.hotelInteriorImages || []).map((url) => ({ url, source: "interior" }))),
+    ].reduce((acc, item) => {
+        if (!acc.some((x) => x.url === item.url)) acc.push(item);
+        return acc;
+    }, []);
 
     if (loading || !hotel) return <p className="text-gray-600 p-4">加载中...</p>;
     const allowedStatuses = ["pending_audit", "pending_list", "approved"];
@@ -246,20 +338,16 @@ function HotelReauditDetail() {
                 </button>
             </div>
 
-            {/* 预审单信息（只读） */}
+            {/* 预审单信息（仅申请人、执照、星级为只读） */}
             {hasPreReview && (
                 <section className="mb-8 p-4 sm:p-6 bg-gray-50 rounded-xl border border-gray-200">
                     <h2 className="text-base font-semibold text-gray-800 mb-4 flex items-center gap-2">
                         <span>预审单信息</span>
-                        <span className="text-xs font-normal text-amber-600">（不可修改）</span>
+                        <span className="text-xs font-normal text-amber-600">（不可修改：申请人、执照、星级评定）</span>
                     </h2>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                         {hotel.applicantName && <div><span className="text-gray-500 block">申请人</span><p className="font-medium text-gray-800">{hotel.applicantName}</p></div>}
                         {hotel.applicantPhone && <div><span className="text-gray-500 block">申请人手机</span><p className="font-medium text-gray-800">{hotel.applicantPhone}</p></div>}
-                        {hotel.name && <div><span className="text-gray-500 block">酒店名称</span><p className="font-medium text-gray-800">{hotel.name}</p></div>}
-                        {hotel.city && <div><span className="text-gray-500 block">城市</span><p className="font-medium text-gray-800">{hotel.city}</p></div>}
-                        {hotel.address && <div className="sm:col-span-2"><span className="text-gray-500 block">地址</span><p className="font-medium text-gray-800">{hotel.address}</p></div>}
-                        {hotel.contact && <div><span className="text-gray-500 block">联系电话</span><p className="font-medium text-gray-800">{hotel.contact}</p></div>}
                     </div>
                     <div className="mt-4 flex flex-wrap gap-4">
                         {hotel.licenseUrl && (
@@ -288,29 +376,75 @@ function HotelReauditDetail() {
                 </section>
             )}
 
-            {/* 补充信息（可编辑，与再审核时完全一致） */}
+            {/* 补充信息（可编辑，含酒店名/城市/地址/联系电话） */}
             <form onSubmit={handleSubmit} className="mb-8 p-4 sm:p-6 bg-white rounded-xl border border-gray-200 shadow-sm">
-                    <h2 className="text-base font-semibold text-gray-800 mb-4">补充信息</h2>
+                    <h2 className="text-base font-semibold text-gray-800 mb-4">补充信息（可编辑）</h2>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                         <div>
-                            <label className="block text-gray-600 mb-1">纬度（地图定位）</label>
-                            <input type="text" value={form.latitude} onChange={(e) => setForm((f) => ({ ...f, latitude: e.target.value }))} placeholder="如 31.23" className="w-full border border-gray-300 rounded-lg px-3 py-2" />
+                            <label className="block text-gray-600 mb-1">酒店名称 *</label>
+                            <input type="text" value={form.name} onChange={(e) => updateForm({ name: e.target.value })} placeholder="酒店名称" required className="w-full border border-gray-300 rounded-lg px-3 py-2" />
                         </div>
                         <div>
-                            <label className="block text-gray-600 mb-1">经度（地图定位）</label>
-                            <input type="text" value={form.longitude} onChange={(e) => setForm((f) => ({ ...f, longitude: e.target.value }))} placeholder="如 121.47" className="w-full border border-gray-300 rounded-lg px-3 py-2" />
+                            <label className="block text-gray-600 mb-1">行政区（由选中地址解析）</label>
+                            <input type="text" value={form.district} readOnly placeholder="请从地址联想中选择" className="w-full border border-gray-200 rounded-lg px-3 py-2 bg-gray-50 text-gray-600" />
                         </div>
                         <div>
-                            <label className="block text-gray-600 mb-1">门牌号</label>
-                            <input type="text" value={form.doorNumber} onChange={(e) => setForm((f) => ({ ...f, doorNumber: e.target.value }))} placeholder="如 88号" className="w-full border border-gray-300 rounded-lg px-3 py-2" />
+                            <label className="block text-gray-600 mb-1">城市 *</label>
+                            <CityInput
+                                value={form.city}
+                                onChange={(v) => updateForm({ city: v })}
+                                placeholder="输入城市后选择"
+                                required
+                                className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                            />
+                        </div>
+                        <div className="sm:col-span-2">
+                            <label className="block text-gray-600 mb-1">地址 *</label>
+                            <AddressInput
+                                value={form.address}
+                                onChange={(v) => updateForm({ address: v })}
+                                city={form.city}
+                                onSelect={(tip) => {
+                                    const patch = {};
+                                    if (tip?.district) {
+                                        patch.city = parseCityFromDistrict(tip.district) || form.city;
+                                        patch.district = parseDistrictFromDistrict(tip.district) || form.district;
+                                    }
+                                    if (tip?.address) patch.doorNumber = tip.address;
+                                    if (tip?.location) {
+                                        const [lng, lat] = String(tip.location).split(',').map(Number);
+                                        patch.longitude = Number.isFinite(lng) ? String(lng) : form.longitude;
+                                        patch.latitude = Number.isFinite(lat) ? String(lat) : form.latitude;
+                                    }
+                                    if (Object.keys(patch).length) updateForm(patch);
+                                }}
+                                placeholder="输入地址后选择（已选城市则限定在该城市内）"
+                                className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-gray-600 mb-1">联系电话 *</label>
+                            <input type="text" value={form.contact} onChange={(e) => updateForm({ contact: e.target.value })} placeholder="酒店联系电话" required className="w-full border border-gray-300 rounded-lg px-3 py-2" />
+                        </div>
+                        <div>
+                            <label className="block text-gray-600 mb-1">纬度（由选中地址解析）</label>
+                            <input type="text" value={form.latitude} readOnly placeholder="请从地址联想中选择" className="w-full border border-gray-200 rounded-lg px-3 py-2 bg-gray-50 text-gray-600" />
+                        </div>
+                        <div>
+                            <label className="block text-gray-600 mb-1">经度（由选中地址解析）</label>
+                            <input type="text" value={form.longitude} readOnly placeholder="请从地址联想中选择" className="w-full border border-gray-200 rounded-lg px-3 py-2 bg-gray-50 text-gray-600" />
+                        </div>
+                        <div>
+                            <label className="block text-gray-600 mb-1">门牌号（由选中地址解析）</label>
+                            <input type="text" value={form.doorNumber} readOnly placeholder="请从地址联想中选择" className="w-full border border-gray-200 rounded-lg px-3 py-2 bg-gray-50 text-gray-600" />
                         </div>
                         <div>
                             <label className="block text-gray-600 mb-1">客房总数</label>
-                            <input type="number" min="0" value={form.totalRoomCount} onChange={(e) => setForm((f) => ({ ...f, totalRoomCount: e.target.value }))} placeholder="如 50" className="w-full border border-gray-300 rounded-lg px-3 py-2" />
+                            <input type="number" min="0" value={form.totalRoomCount} onChange={(e) => updateForm({ totalRoomCount: e.target.value })} placeholder="如 50" className="w-full border border-gray-300 rounded-lg px-3 py-2" />
                         </div>
                         <div className="sm:col-span-2">
                             <label className="block text-gray-600 mb-1">酒店英文名</label>
-                            <input type="text" value={form.nameEn} onChange={(e) => setForm((f) => ({ ...f, nameEn: e.target.value }))} placeholder="如 Grand Hotel" className="w-full border border-gray-300 rounded-lg px-3 py-2" />
+                            <input type="text" value={form.nameEn} onChange={(e) => updateForm({ nameEn: e.target.value })} placeholder="如 Grand Hotel" className="w-full border border-gray-300 rounded-lg px-3 py-2" />
                         </div>
                         <div className="sm:col-span-2">
                             <label className="block text-gray-600 mb-2">酒店外部更多照片</label>
@@ -377,6 +511,78 @@ function HotelReauditDetail() {
                     </div>
                 </form>
 
+            {/* 酒店展示区管理：选择在前台展示的轮播图片 */}
+            <section className="mb-8 p-4 sm:p-6 bg-white rounded-xl border border-gray-200 shadow-sm">
+                <h2 className="text-base font-semibold text-gray-800 mb-2">酒店展示区管理</h2>
+                <p className="text-xs text-gray-500 mb-4">
+                    这些图片将用于用户端「酒店列表卡片主图」和「酒店详情页顶部轮播」。只能从已上传的
+                    「酒店外部更多照片」和「酒店内部更多照片」中勾选。
+                </p>
+                {allDisplayCandidates.length === 0 ? (
+                    <p className="text-gray-500 text-sm">请先在上方上传酒店内外部照片，再来选择展示图片。</p>
+                ) : (
+                    <>
+                        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3 mb-4">
+                            {allDisplayCandidates.map(({ url, source }) => {
+                                const selected = displayImages.includes(url);
+                                return (
+                                    <button
+                                        key={url}
+                                        type="button"
+                                        onClick={() => {
+                                            setDisplayImages((prev) =>
+                                                prev.includes(url) ? prev.filter((u) => u !== url) : [...prev, url]
+                                            );
+                                        }}
+                                        className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-all ${
+                                            selected ? "border-blue-500 ring-2 ring-blue-300" : "border-gray-200 hover:border-blue-300"
+                                        }`}
+                                    >
+                                        <img src={url} alt="" className="w-full h-full object-cover" />
+                                        <span className="absolute left-1.5 top-1.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-black/60 text-white">
+                                            {source === "exterior" ? "外部" : "内部"}
+                                        </span>
+                                        {selected && (
+                                            <span className="absolute right-1.5 top-1.5 w-5 h-5 rounded-full bg-blue-500 text-white text-xs flex items-center justify-center">
+                                                ✓
+                                            </span>
+                                        )}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                        <button
+                            type="button"
+                            onClick={async () => {
+                                if (!hotel) return;
+                                setSavingDisplay(true);
+                                try {
+                                    const token = await getToken();
+                                    const { data } = await axios.put(
+                                        `/api/hotels/owner/${hotelId}/display-images`,
+                                        { images: displayImages },
+                                        { headers: { Authorization: `Bearer ${token}` } }
+                                    );
+                                    if (data.success) {
+                                        toast.success(data.message || "展示图片已保存");
+                                    } else {
+                                        toast.error(data.message || "保存失败");
+                                    }
+                                } catch (e) {
+                                    toast.error(e?.response?.data?.message || "保存失败");
+                                } finally {
+                                    setSavingDisplay(false);
+                                }
+                            }}
+                            disabled={savingDisplay}
+                            className="inline-flex items-center px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium disabled:opacity-50"
+                        >
+                            {savingDisplay ? "保存中..." : "保存展示图片"}
+                        </button>
+                    </>
+                )}
+            </section>
+
             {/* 新增房间模块 */}
             <section className="mb-8 p-4 sm:p-6 bg-white rounded-xl border border-gray-200 shadow-sm">
                 <div className="flex items-center justify-between mb-4">
@@ -418,10 +624,10 @@ function HotelReauditDetail() {
                                         <td className="p-2 sm:p-3 font-medium">{roomTypeToCn[r.roomType] || r.roomType}</td>
                                         <td className="p-2 sm:p-3">{r.pricePerNight} 元</td>
                                         <td className="p-2 sm:p-3">
-                                            <PromoDiscountStepper value={r.promoDiscount} roomId={r._id} onUpdate={() => fetchData(false)} axios={axios} getToken={getToken} />
+                                            <PromoDiscountStepper value={r.promoDiscount} roomId={r._id} onUpdate={() => fetchRoomsList(roomPage)} axios={axios} getToken={getToken} />
                                         </td>
                                         <td className="p-2 sm:p-3">
-                                            <RoomCountStepper value={r.roomCount ?? 1} roomId={r._id} onUpdate={() => fetchData(false)} axios={axios} getToken={getToken} />
+                                            <RoomCountStepper value={r.roomCount ?? 1} roomId={r._id} onUpdate={() => fetchRoomsList(roomPage)} axios={axios} getToken={getToken} />
                                         </td>
                                         <td className="p-2 sm:p-3">
                                             <label className="inline-flex items-center cursor-pointer">
@@ -458,6 +664,30 @@ function HotelReauditDetail() {
                                 ))}
                             </tbody>
                         </table>
+                    </div>
+                )}
+                {roomTotalCount > 0 && (
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                        <span className="text-gray-600 text-sm">共 {roomTotalCount} 条，每页 {ROOM_PAGE_SIZE} 条</span>
+                        <div className="flex items-center gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setRoomPage((p) => Math.max(1, p - 1))}
+                                disabled={roomPage <= 1}
+                                className="px-3 py-1.5 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                            >
+                                上一页
+                            </button>
+                            <span className="text-gray-600 text-sm">第 {roomPage} / {Math.max(1, Math.ceil(roomTotalCount / ROOM_PAGE_SIZE))} 页</span>
+                            <button
+                                type="button"
+                                onClick={() => setRoomPage((p) => p + 1)}
+                                disabled={roomPage >= Math.ceil(roomTotalCount / ROOM_PAGE_SIZE)}
+                                className="px-3 py-1.5 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                            >
+                                下一页
+                            </button>
+                        </div>
                     </div>
                 )}
             </section>

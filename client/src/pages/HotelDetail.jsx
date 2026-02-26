@@ -289,36 +289,46 @@ function HotelDetail() {
                         </span>
                     )}
                 </h1>
-                {hotel.address && (
+                {(hotel.address || hotel.doorNumber) && (
                     <a
                         href={hotel.latitude != null && hotel.longitude != null
                             ? `/travel-map?lat=${hotel.latitude}&lng=${hotel.longitude}`
-                            : `/travel-map?q=${encodeURIComponent(hotel.address)}`}
+                            : `/travel-map?q=${encodeURIComponent([hotel.address, hotel.doorNumber].filter(Boolean).join(' '))}`}
                         onClick={(e) => {
                             e.preventDefault();
                             if (hotel.latitude != null && hotel.longitude != null) {
                                 navigate(`/travel-map?lat=${hotel.latitude}&lng=${hotel.longitude}`);
                             } else {
-                                navigate(`/travel-map?q=${encodeURIComponent(hotel.address)}`);
+                                navigate(`/travel-map?q=${encodeURIComponent([hotel.address, hotel.doorNumber].filter(Boolean).join(' '))}`);
                             }
                         }}
                         className="inline-flex items-center gap-1.5 text-gray-400 hover:text-gray-600 text-sm transition-colors mt-2"
                     >
                         <IoLocationOutline className="w-4 h-4 flex-shrink-0" />
-                        <span>{hotel.address}</span>
+                        <span>{[hotel.address, hotel.doorNumber].filter(Boolean).join(' ')}</span>
                     </a>
                 )}
             </div>
 
             {/* 顶部轮播：商户中心酒店展示图，点击打开查看 */}
             <div className="relative rounded-xl overflow-hidden mb-6" style={{ boxShadow: '0 0 20px rgba(0,0,0,0.12)' }}>
+                {(() => {
+                    const displayImages =
+                        (hotel?.images?.length
+                            ? hotel.images
+                            : (hotel?.hotelExteriorImages?.length
+                                ? hotel.hotelExteriorImages
+                                : (hotel?.hotelInteriorImages || []))) || [];
+                    return (
                 <HotelImageCarousel
-                    images={hotel?.images}
+                    images={displayImages}
                     fallbackImage={rooms?.[0]?.images?.[0]}
                     className="w-full h-64 md:h-96"
                     imageClassName="min-h-[16rem] md:min-h-[24rem]"
                     onImageClick={(url) => { setLightboxImage(url); setLightboxOpen(true); }}
                 />
+                    );
+                })()}
             </div>
             {lightboxOpen && lightboxImage && (
                 <div
@@ -409,7 +419,7 @@ function HotelDetail() {
                             }
                             popperClassName="hero-datepicker-popper"
                             popperPlacement="bottom-start"
-                            popperProps={{ middleware: [flip({ padding: 15 }), offset(10)] }}
+                            popperProps={{ middleware: [flip({ padding: 15 }), offset(0)] }}
                             locale={zhCN}
                             calendarStartDay={0}
                         />

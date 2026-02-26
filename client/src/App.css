@@ -3,6 +3,11 @@
   z-index: 100 !important;
 }
 
+/* 紧贴日期栏下边缘，无缝隙；隐藏左侧箭头 */
+.hero-datepicker-popper .react-datepicker__triangle {
+  display: none !important;
+}
+
 /* 首页日期选择器弹层：圆角 + 95% 透明，与目的地下拉一致 */
 .hero-datepicker-popper .react-datepicker {
   background: rgba(255, 255, 255, 0.95) !important;

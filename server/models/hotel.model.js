@@ -7,6 +7,8 @@ const hotelSchema = new Schema({
     contact: { type: String, required: true },
     owner: { type: String, ref: "User", required: true },
     city: { type: String, required: true },
+    /** 行政区（如徐汇区、睢宁县），由地址解析填充，酒店卡片展示用 */
+    district: { type: String, default: "" },
     /** 地图展示用：纬度、经度（可选，无则按城市中心展示） */
     latitude: { type: Number, default: null },
     longitude: { type: Number, default: null },

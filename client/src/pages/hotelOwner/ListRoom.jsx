@@ -111,6 +111,9 @@ function ListRoom() {
   const [hotel, setHotel] = useState(null);
   const [roomToDelete, setRoomToDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [totalCount, setTotalCount] = useState(0);
   const listRenderStartRef = useRef(null);
 
   const { axios, getToken, user } = useAppContext();
@@ -134,13 +137,15 @@ function ListRoom() {
   async function fetchRooms() {
     try {
       const token = await getToken()
-      const url = hotelId ? `/api/rooms/owner?hotelId=${hotelId}` : "/api/rooms/owner"
-      const { data } = await axios.get(url, {
+      const params = new URLSearchParams({ page: String(page), limit: String(pageSize) })
+      if (hotelId) params.set("hotelId", hotelId)
+      const { data } = await axios.get(`/api/rooms/owner?${params}`, {
         headers: { Authorization: `Bearer ${token}` }
       })
       if (data.success) {
         if (perfMode) listRenderStartRef.current = performance.now();
         setRooms(data.rooms || [])
+        setTotalCount(data.totalCount ?? 0)
       } else {
         toast.error(data.message || "获取房间列表失败")
       }
@@ -210,11 +215,15 @@ function ListRoom() {
 
 
   useEffect(() => {
+    setPage(1);
+  }, [hotelId]);
+
+  useEffect(() => {
     if (user) {
       fetchRooms();
       if (hotelId) fetchHotel();
     }
-  }, [user, hotelId])
+  }, [user, hotelId, page, pageSize])
 
   const goToAddRoom = () => {
     const target = hotelId ? `/owner/hotels/${hotelId}/add-room` : "/owner/add-room"
@@ -429,6 +438,43 @@ function ListRoom() {
           </table>
         </div>
       </div>
+      {totalCount > 0 && (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <span className="text-gray-600 text-sm">共 {totalCount} 条</span>
+            <label className="flex items-center gap-2 text-sm">
+              <span className="text-gray-600">每页</span>
+              <select
+                value={pageSize}
+                onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+                className="border border-gray-300 rounded px-2 py-1 text-gray-800"
+              >
+                <option value={10}>10 条</option>
+                <option value={20}>20 条</option>
+              </select>
+            </label>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              className="px-3 py-1.5 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+            >
+              上一页
+            </button>
+            <span className="text-gray-600 text-sm">第 {page} / {Math.max(1, Math.ceil(totalCount / pageSize))} 页</span>
+            <button
+              type="button"
+              onClick={() => setPage((p) => p + 1)}
+              disabled={page >= Math.ceil(totalCount / pageSize)}
+              className="px-3 py-1.5 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+            >
+              下一页
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 删除确认弹窗 */}
       {roomToDelete && (

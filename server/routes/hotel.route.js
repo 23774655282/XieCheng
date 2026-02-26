@@ -29,6 +29,7 @@ import {
     listHotelSupplementEdits,
     approveHotelSupplementEdit,
     rejectHotelSupplementEdit,
+    updateHotelDisplayImages,
 } from "../controllers/hotel.controller.js";
 
 const hotelRouter = express.Router();
@@ -47,6 +48,7 @@ hotelRouter.get("/owner/list", authMiddleware, getOwnerHotels);
 hotelRouter.get("/owner/:id", authMiddleware, getOwnerHotelById);
 hotelRouter.put("/owner/:id/reapply", authMiddleware, uploadHotel.array("images", 6), reapplyHotel);
 hotelRouter.put("/owner/:id/supplement", authMiddleware, uploadHotel.fields([{ name: "exterior", maxCount: 6 }, { name: "interior", maxCount: 6 }]), submitHotelSupplement);
+hotelRouter.put("/owner/:id/display-images", authMiddleware, updateHotelDisplayImages);
 hotelRouter.get("/my", authMiddleware, getMyHotel);
 hotelRouter.put("/my", authMiddleware, uploadHotel.array("images", 6), updateHotel);
 hotelRouter.delete("/owner/:id", authMiddleware, deleteHotel);

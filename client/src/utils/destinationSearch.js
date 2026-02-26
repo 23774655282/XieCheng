@@ -1,5 +1,17 @@
 import { pinyin } from 'pinyin-pro';
 import { parseLocalDate } from './dateUtils';
+import { domesticHotCities, overseasHotCities } from '../assets/assets';
+
+/**
+ * 判断目的地是否为城市名（城市可手打或选择后直接提交；具体地点须从联想选择）
+ */
+export function isCity(destination, cityOptions = []) {
+  const d = String(destination || '').trim();
+  if (!d) return false;
+  const cities = [...domesticHotCities, ...overseasHotCities, ...(cityOptions || [])];
+  const normalized = d.replace(/[市区县省]$/, '');
+  return cities.some((c) => c === d || c === normalized || normalized === c);
+}
 
 /**
  * 判断文本是否匹配关键字（支持中文、拼音全拼、拼音首字母）
@@ -28,8 +40,9 @@ export function formatRecentSubtitle(record) {
       parts.push(`${d1.getMonth() + 1}月${d1.getDate()}日-${d2.getMonth() + 1}月${d2.getDate()}日`);
     }
   }
-  if (record.rooms != null) parts.push(`${record.rooms}间`);
-  const adults = record.adults ?? 0;
-  if (adults != null) parts.push(`${adults}位`);
+  const roomsNum = record.rooms != null ? Number(record.rooms) : null;
+  if (roomsNum != null && roomsNum >= 1) parts.push(`${roomsNum}间`);
+  const adultsNum = record.adults != null ? Number(record.adults) : null;
+  if (adultsNum != null && adultsNum >= 1) parts.push(`${adultsNum}位`);
   return parts.join(',');
 }

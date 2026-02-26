@@ -9,6 +9,7 @@ const schema = new Schema(
         hotelName: { type: String, required: true, trim: true },
         hotelAddress: { type: String, required: true, trim: true },
         hotelCity: { type: String, required: true, trim: true },
+        hotelDistrict: { type: String, default: "", trim: true },
         hotelContact: { type: String, required: true, trim: true },
         licenseUrl: { type: String, required: true },
         starRatingCertificateUrl: { type: String, default: "" },
