@@ -10,7 +10,7 @@ const MODE_CODE = "code";
 function Login() {
   const [searchParams] = useSearchParams();
   const redirectTo = searchParams.get("redirect");
-  const { navigate, axios, fetchUser } = useAppContext();
+  const { navigate, axios, setAuthFromLogin, fetchUser } = useAppContext();
   const [mode, setMode] = useState(MODE_PASSWORD);
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
@@ -41,13 +41,15 @@ function Login() {
     try {
       const { data } = await axios.post("/api/auth/login", { phone: p, password: pw });
       if (data.success) {
-        localStorage.setItem("token", data.token);
-        await fetchUser();
+        setAuthFromLogin({ token: data.token, user: data.user });
+        fetchUser(); // 后台拉取完整资料（收藏、商户申请状态等），不阻塞跳转
         const role = data.user?.role || "user";
-        if (redirectTo && redirectTo.startsWith("/") && !redirectTo.startsWith("//")) {
-          navigate(redirectTo, { replace: true });
-        } else if (role === "admin") navigate("/admin", { replace: true });
-        else navigate("/", { replace: true });
+        setTimeout(() => {
+          if (redirectTo && redirectTo.startsWith("/") && !redirectTo.startsWith("//")) {
+            navigate(redirectTo, { replace: true });
+          } else if (role === "admin") navigate("/admin", { replace: true });
+          else navigate("/", { replace: true });
+        }, 0);
       } else {
         const msg = data.message || "登录失败";
         setErrorMsg(msg);
@@ -91,13 +93,15 @@ function Login() {
     try {
       const { data } = await axios.post("/api/auth/login/by-code", { phone: phone.trim(), code: code.trim() });
       if (data.success) {
-        localStorage.setItem("token", data.token);
-        await fetchUser();
+        setAuthFromLogin({ token: data.token, user: data.user });
+        fetchUser();
         const role = data.user?.role || "user";
-        if (redirectTo && redirectTo.startsWith("/") && !redirectTo.startsWith("//")) {
-          navigate(redirectTo, { replace: true });
-        } else if (role === "admin") navigate("/admin", { replace: true });
-        else navigate("/", { replace: true });
+        setTimeout(() => {
+          if (redirectTo && redirectTo.startsWith("/") && !redirectTo.startsWith("//")) {
+            navigate(redirectTo, { replace: true });
+          } else if (role === "admin") navigate("/admin", { replace: true });
+          else navigate("/", { replace: true });
+        }, 0);
       } else {
         toast.error(data.message || "登录失败");
       }

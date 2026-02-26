@@ -213,25 +213,29 @@ export const registerHotelPreReview = async (req, res) => {
     }
 };
 
-/** 商户：获取名下酒店列表（含待再审核/上架中/已驳回/已下架；返回 hasPendingMods） */
+/** 商户：获取名下酒店列表（含待再审核/上架中/已驳回/已下架；返回 hasPendingMods），分页：每页 10 或 20 条 */
 export const getOwnerHotels = async (req, res) => {
     try {
-        const { status } = req.query;
+        const { status, page: pageStr, limit: limitStr } = req.query;
+        const page = Math.max(1, parseInt(pageStr, 10) || 1);
+        const rawLimit = parseInt(limitStr, 10);
+        const limit = rawLimit === 20 ? 20 : 10;
         const statusFilter = status
             ? { status }
             : { status: { $in: ["pending_audit", "pending_list", "approved", "rejected"] } };
-        const hotels = await Hotel.find({
-            owner: req.user._id,
-            ...statusFilter,
-        })
+        const baseFilter = { owner: req.user._id, ...statusFilter };
+        const totalCount = await Hotel.countDocuments(baseFilter);
+        const hotels = await Hotel.find(baseFilter)
             .select("name nameEn address city starRating images hotelIntro status rejectReason")
             .sort({ updatedAt: -1 })
+            .skip((page - 1) * limit)
+            .limit(limit)
             .lean();
         const hotelIds = hotels.map((h) => h._id);
         const suppHotelIds = new Set((await HotelSupplementEdit.distinct("hotel", { hotel: { $in: hotelIds }, status: "pending" })).map(String));
         const roomHotelIds = new Set((await RoomEditApplication.distinct("hotel", { hotel: { $in: hotelIds }, status: "pending" })).map(String));
         const withMods = hotels.map((h) => ({ ...h, hasPendingMods: suppHotelIds.has(String(h._id)) || roomHotelIds.has(String(h._id)) }));
-        return res.status(200).json({ success: true, hotels: withMods });
+        return res.status(200).json({ success: true, hotels: withMods, totalCount, page, limit });
     } catch (error) {
         console.error("Error fetching owner hotels:", error);
         res.status(500).json({ success: false, message: "error in fetching hotels" });
@@ -566,13 +570,15 @@ export const updateHotel = async (req, res) => {
     }
 };
 
-/** 管理员：获取所有酒店（用于审核/发布/下线列表；待审核 = 初次再审核 + 有修改待审核的酒店） */
+/** 管理员：获取所有酒店（用于审核/发布/下线列表；待审核 = 初次再审核 + 有修改待审核的酒店），分页：每页 10 或 20 条 */
 export const listHotelsForAudit = async (req, res) => {
     try {
-        const { status } = req.query; // 可选筛选 pending_audit | pending_list | approved | rejected
+        const { status, page: pageStr, limit: limitStr } = req.query; // 可选筛选 pending_audit | pending_list | approved | rejected
+        const page = Math.max(1, parseInt(pageStr, 10) || 1);
+        const rawLimit = parseInt(limitStr, 10);
+        const limit = rawLimit === 20 ? 20 : 10;
         let filter;
         if (status === "pending_audit") {
-            // 待审核：初次再审核(pending_audit+supplementSubmitted) 或 有修改待审核(pending_list/approved+RoomEditApplication/HotelSupplementEdit)
             const pendingRoomHotelIds = await RoomEditApplication.distinct("hotel", { status: "pending" });
             const pendingSuppHotelIds = await HotelSupplementEdit.distinct("hotel", { status: "pending" });
             const modHotelIds = [...new Set([...pendingRoomHotelIds.map(String), ...pendingSuppHotelIds.map(String)])];
@@ -587,11 +593,13 @@ export const listHotelsForAudit = async (req, res) => {
         } else {
             filter = { $or: [{ status: { $ne: "pending_audit" } }, { status: "pending_audit", supplementSubmitted: true }] };
         }
+        const totalCount = await Hotel.countDocuments(filter);
         let hotels = await Hotel.find(filter)
             .populate("owner", "username phone email")
             .sort({ updatedAt: -1 })
+            .skip((page - 1) * limit)
+            .limit(limit)
             .lean();
-        // 标记有修改待审核的酒店
         const pendingRoomHotels = await RoomEditApplication.distinct("hotel", { status: "pending" });
         const pendingSuppHotels = await HotelSupplementEdit.distinct("hotel", { status: "pending" });
         const modHotelIdSet = new Set([...pendingRoomHotels.map(String), ...pendingSuppHotels.map(String)]);
@@ -600,7 +608,7 @@ export const listHotelsForAudit = async (req, res) => {
             const statusOrder = { pending_audit: 0, pending_list: 1, approved: 2, rejected: 3 };
             hotels.sort((a, b) => (statusOrder[a.status] ?? 99) - (statusOrder[b.status] ?? 99) || new Date(b.updatedAt) - new Date(a.updatedAt));
         }
-        return res.status(200).json({ success: true, hotels });
+        return res.status(200).json({ success: true, hotels, totalCount, page, limit });
     } catch (error) {
         console.error("Error listing hotels for audit:", error);
         res.status(500).json({ success: false, message: "error in listing hotels" });

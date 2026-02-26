@@ -226,12 +226,16 @@ export const getRoomById = async (req, res) => {
     }
 };
 
+/** 商户：获取名下房间列表，分页：每页 10 或 20 条 */
 export const getOwnerRooms = async (req, res) => {
     try {
-        const hotelId = req.query.hotelId;
+        const { hotelId: queryHotelId, page: pageStr, limit: limitStr } = req.query;
+        const page = Math.max(1, parseInt(pageStr, 10) || 1);
+        const rawLimit = parseInt(limitStr, 10);
+        const limit = rawLimit === 20 ? 20 : 10;
         let hotel;
-        if (hotelId) {
-            hotel = await Hotel.findOne({ _id: hotelId, owner: req.user._id });
+        if (queryHotelId) {
+            hotel = await Hotel.findOne({ _id: queryHotelId, owner: req.user._id });
         } else {
             hotel = await Hotel.findOne({ owner: req.user._id });
         }
@@ -243,9 +247,14 @@ export const getOwnerRooms = async (req, res) => {
             });
         }
 
-        let rooms = await Room.find({
-            hotel: hotel._id.toString()
-        }).populate("hotel").lean();
+        const roomFilter = { hotel: hotel._id.toString() };
+        const totalCount = await Room.countDocuments(roomFilter);
+        let rooms = await Room.find(roomFilter)
+            .populate("hotel")
+            .sort({ pricePerNight: 1, createdAt: -1 })
+            .skip((page - 1) * limit)
+            .limit(limit)
+            .lean();
 
         const roomEdits = await RoomEditApplication.find({ hotel: hotel._id, status: "pending" })
             .sort({ updatedAt: -1 })
@@ -272,7 +281,10 @@ export const getOwnerRooms = async (req, res) => {
         return res.status(200).json({
             success: true,
             message: "Owner's rooms fetched successfully",
-            rooms
+            rooms,
+            totalCount,
+            page,
+            limit
         });
     } catch (error) {
         console.error("Error fetching owner's rooms:", error);
