@@ -4,12 +4,37 @@ import shanghaiImg from '../assets/shanghai.jpg';
 import tianjinImg from '../assets/tianjin.jpg';
 import chongqingImg from '../assets/chongqing.jpg';
 import xiamenImg from '../assets/xiamen.jpg';
+import { geocodeAmap } from '../utils/amap';
 
 const CITIES = ['北京', '上海', '天津', '重庆', '厦门'];
 const CITY_IMGS = [beijingImg, shanghaiImg, tianjinImg, chongqingImg, xiamenImg];
 
 function HotCities() {
   const navigate = useNavigate();
+
+  const handleCityClick = async (city) => {
+    const key = import.meta.env.VITE_AMAP_KEY;
+    let lat = null;
+    let lng = null;
+    try {
+      const coords = await geocodeAmap(key, city);
+      if (coords && Number.isFinite(coords.lat) && Number.isFinite(coords.lng)) {
+        lat = coords.lat;
+        lng = coords.lng;
+      }
+    } catch {
+      // 地理编码失败时退化为仅按城市名搜索
+    }
+    const params = new URLSearchParams();
+    params.set('destination', city);
+    if (lat != null && lng != null) {
+      params.set('lat', String(lat));
+      params.set('lng', String(lng));
+    }
+    navigate(`/rooms?${params.toString()}`);
+    scrollTo(0, 0);
+  };
+
   const cities = CITIES;
   const row1 = cities.slice(0, 2);
   const row2 = cities.slice(2, 5);
@@ -28,7 +53,7 @@ function HotCities() {
             <button
               key={city}
               type="button"
-              onClick={() => { navigate(`/rooms?destination=${encodeURIComponent(city)}`); scrollTo(0, 0); }}
+              onClick={() => { handleCityClick(city); }}
               className="relative min-h-[260px] md:min-h-[320px] rounded-lg md:rounded-xl overflow-hidden cursor-pointer group"
             >
               <div className="absolute inset-0 bg-cover bg-center transition-transform duration-500 ease-out group-hover:scale-110" style={{ backgroundImage: `url(${CITY_IMGS[i]})` }} />
@@ -44,7 +69,7 @@ function HotCities() {
             <button
               key={city}
               type="button"
-              onClick={() => { navigate(`/rooms?destination=${encodeURIComponent(city)}`); scrollTo(0, 0); }}
+              onClick={() => { handleCityClick(city); }}
               className="relative min-h-[220px] md:min-h-[280px] rounded-lg md:rounded-xl overflow-hidden cursor-pointer group"
             >
               <div className="absolute inset-0 bg-cover bg-center transition-transform duration-500 ease-out group-hover:scale-110" style={{ backgroundImage: `url(${CITY_IMGS[i + 2]})` }} />
