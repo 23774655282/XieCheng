@@ -1130,7 +1130,7 @@ function AllRooms() {
                                 title={!canBookRoom(room) ? (role === 'admin' ? '管理员不能预订酒店' : '不能预订自己的酒店') : undefined}
                                 className={`px-3 py-1.5 text-white text-sm rounded-lg transition-colors cursor-pointer ${isUnavailable || !canBookRoom(room) ? 'bg-gray-400 cursor-not-allowed' : 'bg-black hover:bg-gray-800'}`}
                               >
-                                {isAuthenticated ? '预订' : '显示价格'}
+                                预订
                               </button>
                             </div>
                           </div>
@@ -1215,7 +1215,7 @@ function AllRooms() {
                             title={!canBookRoom(room) ? (role === 'admin' ? '管理员不能预订酒店' : '不能预订自己的酒店') : undefined}
                             className={`px-3 py-1.5 text-white text-sm rounded-lg transition-colors cursor-pointer ${isUnavailable || !canBookRoom(room) ? 'bg-gray-400 cursor-not-allowed' : 'bg-black hover:bg-gray-800'}`}
                           >
-                            {isAuthenticated ? '预订' : '显示价格'}
+                            预订
                           </button>
                         </div>
                       </div>
@@ -1302,7 +1302,7 @@ function AllRooms() {
                                       title={!canBookRoom(hotel) ? (role === 'admin' ? '管理员不能预订酒店' : '不能预订自己的酒店') : undefined}
                                       className={`shrink-0 px-3 py-2 rounded-md text-sm font-medium transition-colors cursor-pointer ${canBookRoom(hotel) ? 'bg-black text-white hover:bg-gray-800' : 'bg-gray-400 text-gray-200 cursor-not-allowed'}`}
                                     >
-                                      {isAuthenticated ? '预订' : '查看优惠价'}
+                                      预订
                                     </button>
                                   </div>
                                 );
@@ -1362,7 +1362,7 @@ function AllRooms() {
                                             title={!canBookRoom(room) ? (role === 'admin' ? '管理员不能预订酒店' : '不能预订自己的酒店') : undefined}
                                             className={`shrink-0 px-2.5 py-1 text-xs font-medium rounded-md transition-colors cursor-pointer ${isUnavailable || !canBookRoom(room) ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-black text-white hover:bg-gray-800'}`}
                                           >
-                                            {isAuthenticated ? '预订' : '显示价格'}
+                                            预订
                                           </button>
                                         </div>
                                       </div>
