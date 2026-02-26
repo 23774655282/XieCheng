@@ -8,6 +8,7 @@ import { HotelImageCarousel } from '../components/HotelImageCarousel';
 import SearchBar from '../components/SearchBar';
 import toast from 'react-hot-toast';
 import { formatDateShort, parseLocalDate } from '../utils/dateUtils';
+import { isCity } from '../utils/destinationSearch';
 import { usePerf } from '../context/PerfContext';
 import { VirtualListPerformanceMonitor } from '../components/VirtualListPerformanceMonitor';
 import { virtualListPerf } from '../utils/virtualListPerf';
@@ -106,6 +107,8 @@ function AllRooms() {
   const navigate = useNavigate();
   const destination = searchParams.get('destination') || '';
   const promo = searchParams.get('promo') || '';
+  const lat = searchParams.get('lat') || '';
+  const lng = searchParams.get('lng') || '';
   const { rooms: contextRooms, fetchRooms, axios, isAuthenticated, user: userInfo, role } = useAppContext();
 
   const [localRooms, setLocalRooms] = useState([]);
@@ -130,6 +133,7 @@ function AllRooms() {
   const priceBtnRef = useRef(null);
   const filterBtnRef = useRef(null);
   const [hotelReviewStats, setHotelReviewStats] = useState({}); // { hotelId: { avgRating, total } }
+  const [cityOptions, setCityOptions] = useState([]);
 
   const roomsSource = promo ? promoRooms : (destination ? localRooms : contextRooms);
   const hasMoreSource = promo ? promoHasMore : (destination ? localHasMore : hasMore);
@@ -138,11 +142,23 @@ function AllRooms() {
   const checkIn = searchParams.get('checkIn') || '';
   const checkOut = searchParams.get('checkOut') || '';
 
+  const roomsQueryParams = useMemo(() => {
+    const p = new URLSearchParams();
+    p.set('destination', destination);
+    if (lat) p.set('lat', lat);
+    if (lng) p.set('lng', lng);
+    return p.toString();
+  }, [destination, lat, lng]);
+
+  useEffect(() => {
+    axios.get('/api/hotels/public/cities').then(({ data }) => data.success && data.cities && setCityOptions(data.cities || [])).catch(() => {});
+  }, [axios]);
+
   useEffect(() => {
     if (!destination) return;
     if (perfMode && !isLegacyList) listRenderStartRef.current = performance.now();
     setLoadingSearch(true);
-    axios.get(`/api/rooms/?page=1&limit=12&destination=${encodeURIComponent(destination)}`)
+    axios.get(`/api/rooms/?page=1&limit=12&${roomsQueryParams}`)
       .then(({ data }) => {
         if (data.success) {
           setLocalRooms(data.rooms || []);
@@ -151,7 +167,7 @@ function AllRooms() {
         }
       })
       .finally(() => setLoadingSearch(false));
-  }, [destination, perfMode, isLegacyList]);
+  }, [roomsQueryParams, destination, perfMode, isLegacyList]);
 
   useEffect(() => {
     if (!promo) return;
@@ -186,7 +202,7 @@ function AllRooms() {
     if (destination) {
       setLoadingSearch(true);
       try {
-        const { data } = await axios.get(`/api/rooms/?page=${localNextPage}&limit=12&destination=${encodeURIComponent(destination)}`);
+        const { data } = await axios.get(`/api/rooms/?page=${localNextPage}&limit=12&${roomsQueryParams}`);
         if (data.success) {
           setLocalRooms((prev) => [...prev, ...(data.rooms || [])]);
           setLocalHasMore(data.hasMore || false);
@@ -202,7 +218,7 @@ function AllRooms() {
     setHasMore(r.hasMore || false);
     setNextPage((p) => p + 1);
     setLoadingMore(false);
-  }, [promo, promoNextPage, destination, localNextPage, hasMoreSource, loadingMoreSource, nextPage, fetchRooms, axios]);
+  }, [promo, promoNextPage, destination, localNextPage, hasMoreSource, loadingMoreSource, nextPage, fetchRooms, axios, roomsQueryParams]);
 
   // 检查房间可用性（当有日期选择时）
   useEffect(() => {
@@ -530,6 +546,9 @@ function AllRooms() {
   const filterDestination = (room) => {
     const dest = searchParams.get('destination');
     if (!dest) return true;
+    // 有 lat/lng 时后端已按附近 12km 筛选，不再做文本过滤
+    const hasLatLng = searchParams.get('lat') && searchParams.get('lng');
+    if (hasLatLng) return true;
     const city = (room.hotel?.city || '').toLowerCase();
     const name = (room.hotel?.name || '').toLowerCase();
     const kw = dest.toLowerCase();
@@ -574,7 +593,7 @@ function AllRooms() {
     }
     
     return filtered.sort(sortRooms);
-  }, [roomsSource, selectedFilters, selectSort, searchParams, promo, checkIn, checkOut, roomAvailability, hotelReviewStats]);
+  }, [roomsSource, selectedFilters, selectSort, searchParams, promo, checkIn, checkOut, roomAvailability, hotelReviewStats, lat, lng]);
 
   /** 按酒店分组：{ hotelId: { hotel, rooms } }（非 promo 时使用） */
   const roomsByHotel = useMemo(() => {
@@ -672,7 +691,7 @@ function AllRooms() {
         let page = 1;
         let hasMore = true;
         while (hasMore && !cancelled) {
-          const { data } = await axios.get(`/api/rooms/?page=${page}&limit=12&destination=${encodeURIComponent(destination)}`);
+          const { data } = await axios.get(`/api/rooms/?page=${page}&limit=12&${roomsQueryParams}`);
           if (!data?.success) break;
           if (page === 1) setLocalRooms(data.rooms || []);
           else setLocalRooms((prev) => [...prev, ...(data.rooms || [])]);
@@ -696,7 +715,7 @@ function AllRooms() {
       })();
     }
     return () => { cancelled = true; };
-  }, [isLegacyList, promo, destination, perfMode, fetchRooms, axios]);
+  }, [isLegacyList, promo, destination, roomsQueryParams, perfMode, fetchRooms, axios]);
 
   const prevLegacyRef = useRef(isLegacyList);
   useEffect(() => {
@@ -707,7 +726,7 @@ function AllRooms() {
       if (perfMode) listRenderStartRef.current = performance.now();
       if (destination) {
         setLoadingSearch(true);
-        axios.get(`/api/rooms/?page=1&limit=12&destination=${encodeURIComponent(destination)}`)
+        axios.get(`/api/rooms/?page=1&limit=12&${roomsQueryParams}`)
           .then(({ data }) => {
             if (data.success) {
               setLocalRooms(data.rooms || []);
@@ -943,8 +962,14 @@ function AllRooms() {
       )}
 
       <div className={`mt-8 md:mt-10 ${isPromoMode ? 'mb-4' : 'mb-10'}`}>
-        <h1 className="font-playfair text-2xl md:text-3xl lg:text-4xl font-bold">
-          {isPromoMode ? `限时优惠 · ${promo}% 优惠` : (destination ? `帮你找到「${destination}」的全部酒店` : '全部酒店')}
+        <h1 className="font-playfair text-2xl md:text-3xl lg:text-4xl font-bold min-w-0">
+          {isPromoMode ? `限时优惠 · ${promo}% 优惠` : (destination ? (
+            <span className="flex items-baseline min-w-0 gap-0.5">
+              <span className="shrink-0">{isCity(destination, cityOptions) ? '帮你推荐「' : '帮你找到「'}</span>
+              <span className="truncate min-w-0 max-w-full" title={destination}>{destination}</span>
+              <span className="shrink-0">{isCity(destination, cityOptions) ? '」的酒店' : '」附近的全部酒店'}</span>
+            </span>
+          ) : '全部酒店')}
         </h1>
       </div>
 
@@ -1283,7 +1308,12 @@ function AllRooms() {
                                 );
                               })()}
                               <div className="text-gray-700 text-xs mb-1.5 md:mb-2.5">
-                                <span className="line-clamp-2 font-medium">{hotel?.address} · {hotel?.city}</span>
+                                <span className="line-clamp-2 font-medium">{hotel?.district ? `${hotel.district} · ${hotel?.city}` : `${hotel?.address} · ${hotel?.city}`}</span>
+                                {rooms[0]?.distanceKm != null && (
+                                  <span className="block text-gray-500 mt-0.5">
+                                    {isCity(destination, cityOptions) ? '距中心' : '距离您'} {rooms[0].distanceKm} km
+                                  </span>
+                                )}
                               </div>
                               {hotel?.hotelIntro && (
                                 <p className="text-xs text-gray-500 leading-relaxed line-clamp-2 md:line-clamp-3 flex-1">
@@ -1344,7 +1374,8 @@ function AllRooms() {
                           </div>
                         </div>
                       </div>
-                    ))}
+                    );
+                  })}
                 <div ref={bottomRef} className="h-16 flex items-center justify-center flex-shrink-0 border-t border-gray-100 bg-white/50">
                   {loadingMoreSource && <span className="text-gray-500 text-sm">加载中...</span>}
                   {!hasMoreSource && filteredRooms.length > 0 && <span className="text-gray-400 text-sm">已加载全部酒店</span>}

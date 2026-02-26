@@ -77,29 +77,56 @@ export const createRoom = async (req, res) => {
 
 
 const DEFAULT_PAGE_SIZE = 12;
+const NEARBY_KM = 12; // 12km，略大于 10km 以应对坐标系偏差和边界误差
 
 /** 转义正则特殊字符，避免用户输入导致正则异常 */
 function escapeRegex(str) {
     return String(str || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+/** Haversine 球面距离（km） */
+function haversineKm(lat1, lng1, lat2, lng2) {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+}
+
 /** 首页优惠档位：仅支持 20、25、30，按房间的 promoDiscount 字段匹配 */
 const PROMO_VALUES = [20, 25, 30];
 
-/** 用户端：仅返回已审核通过且未下线的酒店的房间，支持分页、按目的地筛选、按优惠档位（promo=20|25|30，按房间优惠百分比筛选） */
+/** 用户端：仅返回已审核通过且未下线的酒店的房间，支持分页、按目的地筛选、按优惠档位（promo=20|25|30，按房间优惠百分比筛选）、按中心点 10km 内筛选 */
 export const getRooms = async (req, res) => {
     try {
         const page = Math.max(1, parseInt(req.query.page) || 1);
         const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || DEFAULT_PAGE_SIZE));
         const destination = (req.query.destination || req.query.city || "").trim();
         const promo = req.query.promo ? parseInt(req.query.promo, 10) : null;
+        const searchLat = req.query.lat != null ? parseFloat(req.query.lat) : null;
+        const searchLng = req.query.lng != null ? parseFloat(req.query.lng) : null;
+        const useNearby = Number.isFinite(searchLat) && Number.isFinite(searchLng);
 
-        const hotelFilter = { status: "approved" };
-        if (destination) {
-            const re = new RegExp(escapeRegex(destination), "i");
-            hotelFilter.$or = [{ city: re }, { name: re }, { address: re }];
+        let approvedHotelIds;
+        let hotelIdToDistance = {};
+
+        if (useNearby) {
+            const hotels = await Hotel.find({ status: "approved", latitude: { $exists: true, $ne: null }, longitude: { $exists: true, $ne: null } }).lean();
+            const withDist = hotels
+                .map((h) => ({ id: h._id.toString(), lat: h.latitude, lng: h.longitude, dist: haversineKm(searchLat, searchLng, h.latitude, h.longitude) }))
+                .filter((x) => x.dist <= NEARBY_KM)
+                .sort((a, b) => a.dist - b.dist);
+            approvedHotelIds = withDist.map((x) => x.id);
+            withDist.forEach((x) => { hotelIdToDistance[x.id] = x.dist; });
+        } else {
+            const hotelFilter = { status: "approved" };
+            if (destination) {
+                const re = new RegExp(escapeRegex(destination), "i");
+                hotelFilter.$or = [{ city: re }, { name: re }, { address: re }];
+            }
+            approvedHotelIds = await Hotel.find(hotelFilter).distinct("_id").then(ids => ids.map(id => id.toString()));
         }
-        const approvedHotelIds = await Hotel.find(hotelFilter).distinct("_id").then(ids => ids.map(id => id.toString()));
         // 只排除待审核房间，兼容旧数据：无 status 或 status 非 pending_audit 的房型均可展示
         const filter = {
             isAvailable: true,
@@ -108,8 +135,32 @@ export const getRooms = async (req, res) => {
         };
 
         let rooms, total, hasMore;
+        const sortByPrice = { pricePerNight: 1, createdAt: -1 };
 
-        if (promo !== null && PROMO_VALUES.includes(promo)) {
+        if (useNearby && approvedHotelIds.length > 0) {
+            const allRooms = await Room.find(filter)
+                .populate({
+                    path: "hotel",
+                    populate: { path: "owner", select: "avatar" },
+                })
+                .lean();
+            allRooms.sort((a, b) => {
+                const hidA = (a.hotel?._id || a.hotel)?.toString?.() || "";
+                const hidB = (b.hotel?._id || b.hotel)?.toString?.() || "";
+                const dA = hotelIdToDistance[hidA] ?? 999999;
+                const dB = hotelIdToDistance[hidB] ?? 999999;
+                if (dA !== dB) return dA - dB;
+                return (a.pricePerNight ?? 0) - (b.pricePerNight ?? 0);
+            });
+            total = allRooms.length;
+            const skip = (page - 1) * limit;
+            rooms = allRooms.slice(skip, skip + limit).map((r) => {
+                const hid = (r.hotel?._id || r.hotel)?.toString?.() || "";
+                const dist = hotelIdToDistance[hid];
+                return { ...r, distanceKm: dist != null ? Math.round(dist * 10) / 10 : undefined };
+            });
+            hasMore = skip + rooms.length < total;
+        } else if (promo !== null && PROMO_VALUES.includes(promo)) {
             filter.promoDiscount = promo;
             const skip = (page - 1) * limit;
             [rooms, total] = await Promise.all([
@@ -118,7 +169,7 @@ export const getRooms = async (req, res) => {
                         path: "hotel",
                         populate: { path: "owner", select: "avatar" },
                     })
-                    .sort({ pricePerNight: 1, createdAt: -1 })
+                    .sort(sortByPrice)
                     .skip(skip)
                     .limit(limit)
                     .lean(),
@@ -133,7 +184,7 @@ export const getRooms = async (req, res) => {
                         path: "hotel",
                         populate: { path: "owner", select: "avatar" },
                     })
-                    .sort({ pricePerNight: 1, createdAt: -1 })
+                    .sort(sortByPrice)
                     .skip(skip)
                     .limit(limit)
                     .lean(),
