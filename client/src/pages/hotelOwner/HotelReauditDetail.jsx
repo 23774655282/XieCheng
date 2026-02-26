@@ -75,6 +75,9 @@ function HotelReauditDetail() {
     const { axios, getToken } = useAppContext();
     const [hotel, setHotel] = useState(null);
     const [rooms, setRooms] = useState([]);
+    const [roomPage, setRoomPage] = useState(1);
+    const [roomTotalCount, setRoomTotalCount] = useState(0);
+    const ROOM_PAGE_SIZE = 10;
     const [roomToDelete, setRoomToDelete] = useState(null);
     const [deleting, setDeleting] = useState(false);
     const [loading, setLoading] = useState(true);
@@ -138,10 +141,7 @@ function HotelReauditDetail() {
         if (showLoading) setLoading(true);
         try {
             const token = await getToken();
-            const [hotelRes, roomsRes] = await Promise.all([
-                axios.get(`/api/hotels/owner/${hotelId}`, { headers: { Authorization: `Bearer ${token}` } }),
-                axios.get(`/api/rooms/owner?hotelId=${hotelId}`, { headers: { Authorization: `Bearer ${token}` } }),
-            ]);
+            const hotelRes = await axios.get(`/api/hotels/owner/${hotelId}`, { headers: { Authorization: `Bearer ${token}` } });
             if (myVersion !== fetchVersionRef.current) return;
             if (hotelRes.data?.success) {
                 const h = hotelRes.data.hotel;
@@ -172,7 +172,6 @@ function HotelReauditDetail() {
                 }
                 setDisplayImages(Array.isArray(h.images) ? h.images.map(String) : []);
             }
-            if (roomsRes.data?.success) setRooms(roomsRes.data.rooms || []);
         } catch {
             if (myVersion === fetchVersionRef.current) { toast.error("获取数据失败"); navigate("/owner/hotel-info"); }
         } finally {
@@ -180,9 +179,33 @@ function HotelReauditDetail() {
         }
     };
 
+    const fetchRoomsList = async (page) => {
+        if (!hotelId) return;
+        try {
+            const token = await getToken();
+            const params = new URLSearchParams({ hotelId, page: String(page), limit: String(ROOM_PAGE_SIZE) });
+            const { data } = await axios.get(`/api/rooms/owner?${params}`, { headers: { Authorization: `Bearer ${token}` } });
+            if (data?.success) {
+                setRooms(data.rooms || []);
+                setRoomTotalCount(data.totalCount ?? 0);
+            }
+        } catch {
+            setRooms([]);
+            setRoomTotalCount(0);
+        }
+    };
+
     useEffect(() => {
+        if (!hotelId) return;
+        setRoomPage(1);
         fetchData();
+        fetchRoomsList(1);
     }, [hotelId]);
+
+    useEffect(() => {
+        if (!hotelId || roomPage <= 1) return;
+        fetchRoomsList(roomPage);
+    }, [roomPage]);
 
     const saveSupplement = async () => {
         if (!hotel) return;
@@ -225,6 +248,7 @@ function HotelReauditDetail() {
                 }
                 toast.success(data.needsApproval ? "修改已提交，等待管理员审核" : (data.message || "已保存"));
                 fetchData();
+                fetchRoomsList(roomPage);
             } else toast.error(data.message || "保存失败");
         } catch (e) {
             toast.error(e?.response?.data?.message || "提交失败");
@@ -249,7 +273,7 @@ function HotelReauditDetail() {
             const { data } = await axios.post("/api/rooms/toogle-avalibility", { roomId }, { headers: { Authorization: `Bearer ${token}` } });
             if (data.success) {
                 toast.success(data.needsApproval ? "上架申请已提交，等待管理员审核" : (data.room?.isAvailable ? "已上架" : "已下架"));
-                fetchData(false);
+                fetchRoomsList(roomPage);
             } else {
                 toast.error(data.message || "操作失败");
             }
@@ -269,7 +293,7 @@ function HotelReauditDetail() {
             if (data.success) {
                 toast.success("房间已删除");
                 setRoomToDelete(null);
-                fetchData(false);
+                fetchRoomsList(roomPage);
             } else {
                 toast.error(data.message || "删除失败");
             }
@@ -600,10 +624,10 @@ function HotelReauditDetail() {
                                         <td className="p-2 sm:p-3 font-medium">{roomTypeToCn[r.roomType] || r.roomType}</td>
                                         <td className="p-2 sm:p-3">{r.pricePerNight} 元</td>
                                         <td className="p-2 sm:p-3">
-                                            <PromoDiscountStepper value={r.promoDiscount} roomId={r._id} onUpdate={() => fetchData(false)} axios={axios} getToken={getToken} />
+                                            <PromoDiscountStepper value={r.promoDiscount} roomId={r._id} onUpdate={() => fetchRoomsList(roomPage)} axios={axios} getToken={getToken} />
                                         </td>
                                         <td className="p-2 sm:p-3">
-                                            <RoomCountStepper value={r.roomCount ?? 1} roomId={r._id} onUpdate={() => fetchData(false)} axios={axios} getToken={getToken} />
+                                            <RoomCountStepper value={r.roomCount ?? 1} roomId={r._id} onUpdate={() => fetchRoomsList(roomPage)} axios={axios} getToken={getToken} />
                                         </td>
                                         <td className="p-2 sm:p-3">
                                             <label className="inline-flex items-center cursor-pointer">
@@ -640,6 +664,30 @@ function HotelReauditDetail() {
                                 ))}
                             </tbody>
                         </table>
+                    </div>
+                )}
+                {roomTotalCount > 0 && (
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                        <span className="text-gray-600 text-sm">共 {roomTotalCount} 条，每页 {ROOM_PAGE_SIZE} 条</span>
+                        <div className="flex items-center gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setRoomPage((p) => Math.max(1, p - 1))}
+                                disabled={roomPage <= 1}
+                                className="px-3 py-1.5 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                            >
+                                上一页
+                            </button>
+                            <span className="text-gray-600 text-sm">第 {roomPage} / {Math.max(1, Math.ceil(roomTotalCount / ROOM_PAGE_SIZE))} 页</span>
+                            <button
+                                type="button"
+                                onClick={() => setRoomPage((p) => p + 1)}
+                                disabled={roomPage >= Math.ceil(roomTotalCount / ROOM_PAGE_SIZE)}
+                                className="px-3 py-1.5 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                            >
+                                下一页
+                            </button>
+                        </div>
                     </div>
                 )}
             </section>

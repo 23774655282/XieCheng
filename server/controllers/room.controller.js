@@ -553,20 +553,26 @@ export const approveRoomEdit = async (req, res) => {
     }
 };
 
-/** 管理员：列出房间上架申请（支持 status 筛选：''|pending_audit|approved） */
+/** 管理员：列出房间上架申请（仅新增房型 Room.status=pending_audit/approved；已有房间的上架走 RoomEditApplication，在「再审核（酒店信息）」处理）。支持 status 筛选与分页 */
 export const listPendingRoomAdds = async (req, res) => {
     try {
-        const { status } = req.query;
+        const { status, page: pageStr, limit: limitStr } = req.query;
+        const page = Math.max(1, parseInt(pageStr, 10) || 1);
+        const rawLimit = parseInt(limitStr, 10);
+        const limit = rawLimit === 20 ? 20 : 10;
         const statusFilter = status ? { status } : { status: { $in: ["pending_audit", "approved"] } };
+        const totalCount = await Room.countDocuments(statusFilter);
         let rooms = await Room.find(statusFilter)
             .populate({ path: "hotel", select: "name city owner", populate: { path: "owner", select: "username phone" } })
             .sort({ createdAt: -1 })
+            .skip((page - 1) * limit)
+            .limit(limit)
             .lean();
         if (!status) {
             const statusOrder = { pending_audit: 0, approved: 1 };
             rooms.sort((a, b) => (statusOrder[a.status] ?? 99) - (statusOrder[b.status] ?? 99) || new Date(b.createdAt) - new Date(a.createdAt));
         }
-        return res.status(200).json({ success: true, rooms });
+        return res.status(200).json({ success: true, rooms, totalCount, page, limit });
     } catch (error) {
         console.error("Error listing pending room adds:", error);
         return res.status(500).json({ success: false, message: "获取列表失败" });
