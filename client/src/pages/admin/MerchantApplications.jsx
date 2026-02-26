@@ -9,6 +9,9 @@ function MerchantApplications() {
   const [applications, setApplications] = useState([]);
   const [filter, setFilter] = useState(""); // '' | pending | approved | rejected
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [totalCount, setTotalCount] = useState(0);
   const [expandedId, setExpandedId] = useState(null);
   const [rejectModal, setRejectModal] = useState(null);
   const [rejectReason, setRejectReason] = useState("");
@@ -18,11 +21,15 @@ function MerchantApplications() {
     setLoading(true);
     try {
       const token = await getToken();
-      const url = filter ? `/api/merchant/applications?status=${filter}` : "/api/merchant/applications";
-      const { data } = await axios.get(url, {
+      const params = new URLSearchParams({ page: String(page), limit: String(pageSize) });
+      if (filter) params.set("status", filter);
+      const { data } = await axios.get(`/api/merchant/applications?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (data.success) setApplications(data.applications || []);
+      if (data.success) {
+        setApplications(data.applications || []);
+        setTotalCount(data.totalCount ?? 0);
+      }
     } catch (e) {
       toast.error("获取列表失败");
     } finally {
@@ -31,8 +38,12 @@ function MerchantApplications() {
   }
 
   useEffect(() => {
-    fetchList();
+    setPage(1);
   }, [filter]);
+
+  useEffect(() => {
+    fetchList();
+  }, [filter, page, pageSize]);
 
   async function handleApprove(app) {
     try {
@@ -116,9 +127,10 @@ function MerchantApplications() {
       </div>
       {loading ? (
         <p className="text-gray-500">加载中...</p>
-      ) : applications.length === 0 ? (
+      ) : applications.length === 0 && !loading ? (
         <p className="text-gray-500">暂无预审核记录</p>
       ) : (
+        <>
         <div className="bg-white rounded-lg shadow overflow-x-auto -mx-1 px-1">
           <table className="min-w-[520px] w-full divide-y divide-gray-200">
             <thead className="bg-gray-50 sticky top-0 z-10">
@@ -279,6 +291,44 @@ function MerchantApplications() {
             </tbody>
           </table>
         </div>
+        {totalCount > 0 && (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <span className="text-gray-600 text-sm">共 {totalCount} 条</span>
+              <label className="flex items-center gap-2 text-sm">
+                <span className="text-gray-600">每页</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+                  className="border border-gray-300 rounded px-2 py-1 text-gray-800"
+                >
+                  <option value={10}>10 条</option>
+                  <option value={20}>20 条</option>
+                </select>
+              </label>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page <= 1}
+                className="px-3 py-1.5 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+              >
+                上一页
+              </button>
+              <span className="text-gray-600 text-sm">第 {page} / {Math.max(1, Math.ceil(totalCount / pageSize))} 页</span>
+              <button
+                type="button"
+                onClick={() => setPage((p) => p + 1)}
+                disabled={page >= Math.ceil(totalCount / pageSize)}
+                className="px-3 py-1.5 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+              >
+                下一页
+              </button>
+            </div>
+          </div>
+        )}
+        </>
       )}
 
       {rejectModal && (
