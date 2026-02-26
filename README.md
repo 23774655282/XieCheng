@@ -33,7 +33,7 @@ http://120.55.126.95/
 |------|------|
 | 前端 | React 19、Vite、React Router、Tailwind CSS、Axios |
 | 后端 | Node.js、Express 5、MongoDB、Mongoose |
-| 认证 | Clerk / JWT |
+| 认证 | JWT |
 | 地图 | 高德地图|
 | AI | DeepSeek API（智能搜索） |
 
