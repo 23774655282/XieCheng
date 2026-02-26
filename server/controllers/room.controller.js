@@ -94,16 +94,18 @@ function haversineKm(lat1, lng1, lat2, lng2) {
     return R * c;
 }
 
-/** 首页优惠档位：仅支持 20、25、30，按房间的 promoDiscount 字段匹配 */
-const PROMO_VALUES = [20, 25, 30];
+/** 限时优惠筛选：promo 为 1–100 的整数，表示「优惠力度 ≥ promo%」的房间（即 promoDiscount >= promo 且 promoDiscount 有效） */
+const PROMO_MIN = 1;
+const PROMO_MAX = 100;
 
-/** 用户端：仅返回已审核通过且未下线的酒店的房间，支持分页、按目的地筛选、按优惠档位（promo=20|25|30，按房间优惠百分比筛选）、按中心点 10km 内筛选 */
+/** 用户端：仅返回已审核通过且未下线的酒店的房间，支持分页、按目的地筛选、按限时优惠（promo=1–100，展示优惠力度≥该值的房间）、按中心点 10km 内筛选 */
 export const getRooms = async (req, res) => {
     try {
         const page = Math.max(1, parseInt(req.query.page) || 1);
         const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || DEFAULT_PAGE_SIZE));
         const destination = (req.query.destination || req.query.city || "").trim();
-        const promo = req.query.promo ? parseInt(req.query.promo, 10) : null;
+        const promoRaw = req.query.promo != null && req.query.promo !== "" ? parseInt(req.query.promo, 10) : null;
+        const promo = Number.isFinite(promoRaw) && promoRaw >= PROMO_MIN && promoRaw <= PROMO_MAX ? promoRaw : null;
         const searchLat = req.query.lat != null ? parseFloat(req.query.lat) : null;
         const searchLng = req.query.lng != null ? parseFloat(req.query.lng) : null;
         const useNearby = Number.isFinite(searchLat) && Number.isFinite(searchLng);
@@ -160,8 +162,12 @@ export const getRooms = async (req, res) => {
                 return { ...r, distanceKm: dist != null ? Math.round(dist * 10) / 10 : undefined };
             });
             hasMore = skip + rooms.length < total;
-        } else if (promo !== null && PROMO_VALUES.includes(promo)) {
-            filter.promoDiscount = promo;
+        } else if (promo !== null) {
+            // 限时优惠：展示优惠力度 ≥ promo% 的房间（promoDiscount 为数字且 >= promo）
+            filter.$and = [
+                { promoDiscount: { $ne: null } },
+                { promoDiscount: { $gte: promo } },
+            ];
             const skip = (page - 1) * limit;
             [rooms, total] = await Promise.all([
                 Room.find(filter)

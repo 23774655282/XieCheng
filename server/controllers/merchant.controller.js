@@ -88,10 +88,13 @@ export const getMyApplication = async (req, res) => {
   }
 };
 
-/** 管理员：获取预审核记录列表（含商户申请 + 商户新增酒店预审单，支持 status 筛选） */
+/** 管理员：获取预审核记录列表（含商户申请 + 商户新增酒店预审单，支持 status 筛选与分页：每页 10 或 20 条） */
 export const listMerchantApplications = async (req, res) => {
   try {
-    const { status } = req.query; // '' | pending | approved | rejected
+    const { status, page: pageStr, limit: limitStr } = req.query; // '' | pending | approved | rejected
+    const page = Math.max(1, parseInt(pageStr, 10) || 1);
+    const rawLimit = parseInt(limitStr, 10);
+    const limit = rawLimit === 20 ? 20 : 10;
     const applications = [];
 
     // 1. 商户申请（用户申请成为商户）
@@ -162,7 +165,10 @@ export const listMerchantApplications = async (req, res) => {
 
     if (!status) applications.sort((a, b) => (statusOrder[a.status] ?? 99) - (statusOrder[b.status] ?? 99) || new Date(b.createdAt) - new Date(a.createdAt));
 
-    return res.status(200).json({ success: true, applications });
+    const totalCount = applications.length;
+    const paged = applications.slice((page - 1) * limit, page * limit);
+
+    return res.status(200).json({ success: true, applications: paged, totalCount, page, limit });
   } catch (error) {
     console.error("listMerchantApplications error:", error);
     return res.status(500).json({ success: false, message: "获取申请列表失败" });
