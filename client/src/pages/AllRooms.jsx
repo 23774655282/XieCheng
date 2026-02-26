@@ -150,6 +150,29 @@ function AllRooms() {
     return p.toString();
   }, [destination, lat, lng]);
 
+  const searchLatNum = lat ? parseFloat(lat) : null;
+  const searchLngNum = lng ? parseFloat(lng) : null;
+
+  const computeDistanceKm = (lat1, lng1, lat2, lng2) => {
+    if (
+      !Number.isFinite(lat1) ||
+      !Number.isFinite(lng1) ||
+      !Number.isFinite(lat2) ||
+      !Number.isFinite(lng2)
+    ) return null;
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * Math.PI / 180) *
+        Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLng / 2) *
+        Math.sin(dLng / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  };
+
   useEffect(() => {
     axios.get('/api/hotels/public/cities').then(({ data }) => data.success && data.cities && setCityOptions(data.cities || [])).catch(() => {});
   }, [axios]);
@@ -1309,11 +1332,20 @@ function AllRooms() {
                               })()}
                               <div className="text-gray-700 text-xs mb-1.5 md:mb-2.5">
                                 <span className="line-clamp-2 font-medium">{hotel?.district ? `${hotel.district} · ${hotel?.city}` : `${hotel?.address} · ${hotel?.city}`}</span>
-                                {rooms[0]?.distanceKm != null && (
-                                  <span className="block text-gray-500 mt-0.5">
-                                    {isCity(destination, cityOptions) ? '距中心' : '距离您'} {rooms[0].distanceKm} km
-                                  </span>
-                                )}
+                                {(() => {
+                                  const room = rooms[0];
+                                  let dist = room?.distanceKm;
+                                  if ((dist == null || Number.isNaN(dist)) && searchLatNum != null && searchLngNum != null && hotel?.latitude != null && hotel?.longitude != null) {
+                                    dist = computeDistanceKm(searchLatNum, searchLngNum, hotel.latitude, hotel.longitude);
+                                  }
+                                  if (dist == null || Number.isNaN(dist)) return null;
+                                  const display = Math.round(dist * 10) / 10;
+                                  return (
+                                    <span className="block text-gray-500 mt-0.5">
+                                      {destination && isCity(destination, cityOptions) ? `距${destination}中心` : '距离您'} {display} km
+                                    </span>
+                                  );
+                                })()}
                               </div>
                               {hotel?.hotelIntro && (
                                 <p className="text-xs text-gray-500 leading-relaxed line-clamp-2 md:line-clamp-3 flex-1">

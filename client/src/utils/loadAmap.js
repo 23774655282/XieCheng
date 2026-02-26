@@ -7,12 +7,12 @@ let loadPromise = null;
 
 /**
  * 加载高德地图 JS API，返回 Promise<typeof window.AMap>
- * @param {string} [key] - 高德 Web端(JS API) Key，默认取 VITE_AMAP_KEY
+ * @param {string} [key] - 高德 Web端(JS API) Key，默认取 VITE_AMAP_JS_KEY（缺省时回退 VITE_AMAP_KEY）
  */
 export function loadAMap(key) {
-  const k = (key || import.meta.env.VITE_AMAP_KEY || '').trim();
+  const k = (key || import.meta.env.VITE_AMAP_JS_KEY || import.meta.env.VITE_AMAP_KEY || '').trim();
   if (!k) {
-    return Promise.reject(new Error('未配置 VITE_AMAP_KEY'));
+    return Promise.reject(new Error('未配置 VITE_AMAP_JS_KEY / VITE_AMAP_KEY'));
   }
   if (typeof window !== 'undefined' && window.AMap) {
     return Promise.resolve(window.AMap);
