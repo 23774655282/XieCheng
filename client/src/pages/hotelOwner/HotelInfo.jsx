@@ -16,6 +16,9 @@ function HotelInfo() {
     const [loading, setLoading] = useState(true);
     const [hotels, setHotels] = useState([]);
     const [statusFilter, setStatusFilter] = useState(""); // '' | pending_audit | pending_list | approved | rejected
+    const [page, setPage] = useState(1);
+    const [pageSize, setPageSize] = useState(10); // 10 | 20
+    const [totalCount, setTotalCount] = useState(0);
     const [selectMode, setSelectMode] = useState(false);
     const [selectedIds, setSelectedIds] = useState(new Set());
     const [deleteModal, setDeleteModal] = useState(null);
@@ -27,12 +30,14 @@ function HotelInfo() {
     const fetchHotels = async () => {
         try {
             const token = await getToken();
-            const url = statusFilter ? `/api/hotels/owner/list?status=${statusFilter}` : "/api/hotels/owner/list";
-            const { data } = await axios.get(url, {
+            const params = new URLSearchParams({ page: String(page), limit: String(pageSize) });
+            if (statusFilter) params.set("status", statusFilter);
+            const { data } = await axios.get(`/api/hotels/owner/list?${params}`, {
                 headers: { Authorization: `Bearer ${token}` },
             });
             if (data.success) {
                 setHotels(data.hotels || []);
+                setTotalCount(data.totalCount ?? 0);
             } else {
                 toast.error(data.message || "获取酒店列表失败");
             }
@@ -44,8 +49,12 @@ function HotelInfo() {
     };
 
     useEffect(() => {
+        setPage(1);
+    }, [statusFilter]);
+
+    useEffect(() => {
         fetchHotels();
-    }, [axios, getToken, statusFilter]);
+    }, [axios, getToken, statusFilter, page, pageSize]);
 
     const handleCardClick = (hotelId, h) => {
         if (selectMode) {
@@ -303,6 +312,43 @@ function HotelInfo() {
                     </button>
                 ))}
             </div>
+            {totalCount > 0 && (
+                <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                        <span className="text-gray-600 text-sm">共 {totalCount} 条</span>
+                        <label className="flex items-center gap-2 text-sm">
+                            <span className="text-gray-600">每页</span>
+                            <select
+                                value={pageSize}
+                                onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+                                className="border border-gray-300 rounded px-2 py-1 text-gray-800"
+                            >
+                                <option value={10}>10 条</option>
+                                <option value={20}>20 条</option>
+                            </select>
+                        </label>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <button
+                            type="button"
+                            onClick={() => setPage((p) => Math.max(1, p - 1))}
+                            disabled={page <= 1}
+                            className="px-3 py-1.5 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                        >
+                            上一页
+                        </button>
+                        <span className="text-gray-600 text-sm">第 {page} / {Math.max(1, Math.ceil(totalCount / pageSize))} 页</span>
+                        <button
+                            type="button"
+                            onClick={() => setPage((p) => p + 1)}
+                            disabled={page >= Math.ceil(totalCount / pageSize)}
+                            className="px-3 py-1.5 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                        >
+                            下一页
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* 已驳回弹窗：驳回理由 + 重新申请 */}
             {rejectModal && (
