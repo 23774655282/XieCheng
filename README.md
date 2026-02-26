@@ -8,9 +8,9 @@
 
 
 ### 移动端
-![Screenshot_2026-02-26-11-44-04-62_df198e732186825](https://github.com/user-attachments/assets/810d5baa-b652-4157-9fe0-078668b99d00)
-![Screenshot_2026-02-26-11-44-10-50_df198e732186825](https://github.com/user-attachments/assets/52f2a0df-808d-4d2c-b081-9ec27b7f4920)
-![Screenshot_2026-02-26-11-44-22-76_df198e732186825](https://github.com/user-attachments/assets/0d99c8ba-ad9e-4899-bc36-fc0794022311)
+![](https://github.com/user-attachments/assets/810d5baa-b652-4157-9fe0-078668b99d00)
+![](https://github.com/user-attachments/assets/52f2a0df-808d-4d2c-b081-9ec27b7f4920)
+![](https://github.com/user-attachments/assets/0d99c8ba-ad9e-4899-bc36-fc0794022311)
 
 
 ### 线上预览地址：
