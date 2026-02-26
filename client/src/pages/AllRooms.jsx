@@ -1212,7 +1212,14 @@ function AllRooms() {
           ) : (
             <>
               <div className="space-y-8">
-                {roomsByHotel.map(({ hotel, rooms }) => (
+                {roomsByHotel.map(({ hotel, rooms }) => {
+                  const displayImages =
+                    (hotel?.images?.length
+                      ? hotel.images
+                      : (hotel?.hotelExteriorImages?.length
+                          ? hotel.hotelExteriorImages
+                          : (hotel?.hotelInteriorImages || []))) || [];
+                  return (
                       <div
                         key={hotel?._id ?? hotel}
                         className="group/card rounded-2xl border border-gray-100 bg-white overflow-hidden shadow-sm hover:shadow-xl hover:border-gray-200 transition-all duration-300 min-w-0"
@@ -1220,7 +1227,7 @@ function AllRooms() {
                         <div className="flex flex-row min-h-[133px] md:min-h-[360px] gap-3 md:gap-6 min-w-0">
                           <div className="relative w-2/5 min-w-[100px] max-w-[200px] md:max-w-[280px] flex-shrink-0 rounded-l-2xl overflow-hidden">
                             <HotelImageCarousel
-                              images={hotel?.images}
+                              images={displayImages}
                               fallbackImage={rooms[0]?.images?.[0]}
                               className="w-full h-full min-h-[133px] md:min-h-[360px]"
                               onClick={() => navigate(appendSearch(`/hotels/${hotel?._id ?? hotel}`))}
