@@ -12,8 +12,8 @@
 
 <img src="https://github.com/user-attachments/assets/810d5baa-b652-4157-9fe0-078668b99d00" width="320" alt="mobile-1" />
 <img src="https://github.com/user-attachments/assets/52f2a0df-808d-4d2c-b081-9ec27b7f4920" width="320" alt="mobile-2" />
-<img src="https://github.com/user-attachments/assets/0d99c8ba-ad9e-4899-bc36-fc0794022311" width="320" alt="mobile-3" />
-![6577e47862170583782596b6a14d768d](https://github.com/user-attachments/assets/428a0dc0-5e57-483f-bbd9-eb5bb7f2a5d0)
+<img src="https://github.com/user-attachments/assets/428a0dc0-5e57-483f-bbd9-eb5bb7f2a5d0" width="320" alt="mobile-3" />
+
 
 
 ### 线上预览地址：
