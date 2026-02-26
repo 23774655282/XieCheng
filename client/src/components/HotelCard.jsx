@@ -31,7 +31,7 @@ function HotelCard({ room, idx }) {
         </div>
         <div className="flex items-center text-gray-500 text-sm mb-3 gap-1 min-h-0 overflow-hidden">
           <FaLocationArrow className="flex-shrink-0" />
-          <span className="truncate">{room.hotel.address}</span>
+          <span className="truncate">{room.hotel.district ? [room.hotel.district, room.hotel.city].filter(Boolean).join(' · ') : [room.hotel.address, room.hotel.city].filter(Boolean).join(' · ') || '—'}</span>
         </div>
         <div className="flex items-center justify-between mt-auto pt-2">
           <p className="text-lg font-semibold text-gray-900">

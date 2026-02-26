@@ -425,7 +425,7 @@ function MyBooking({ embedded = false }) {
                         </p>
                         <div className="flex items-center text-sm gap-2 mt-1">
                             <FaLocationArrow size={14} className="text-gray-500" />
-                            <span>{hotel.address || '—'}</span>
+                            <span>{[hotel.address, hotel.doorNumber].filter(Boolean).join(' ') || '—'}</span>
                         </div>
                         <div className="flex items-center text-sm gap-2 mt-1">
                             <CiUser size={16} className="text-gray-500" />

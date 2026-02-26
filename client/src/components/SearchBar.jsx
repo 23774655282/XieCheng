@@ -1,5 +1,4 @@
 import { SlCalender } from 'react-icons/sl';
-import { LuMapPinCheckInside } from 'react-icons/lu';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import DatePicker from 'react-datepicker';
@@ -12,6 +11,12 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useAppContext } from '../context/AppContext';
 import { assets } from '../assets/assets';
 import DestinationDropdown from './DestinationDropdown';
+import { regeoAmap, wgs84ToGcj02 } from '../utils/amap';
+import { isCity } from '../utils/destinationSearch';
+import { geocodeAmap } from '../utils/amap';
+import toast from 'react-hot-toast';
+
+const MY_LOCATION_LABEL = '我的位置';
 
 function SearchBar({ compact = false, datePickerOpen: datePickerOpenProp, setDatePickerOpen: setDatePickerOpenProp, onOpenDatePicker, heroStyle = false }) {
   const [searchParams] = useSearchParams();
@@ -28,12 +33,49 @@ function SearchBar({ compact = false, datePickerOpen: datePickerOpenProp, setDat
   const [cityOptions, setCityOptions] = useState([]);
   const [destinationOpen, setDestinationOpen] = useState(false);
   const [destinationError, setDestinationError] = useState('');
+  const [showDomestic, setShowDomestic] = useState(true); // true=国内，false=海外
+  const [destinationExact, setDestinationExact] = useState(false); // 具体地点须从联想选择
+  const [searchLat, setSearchLat] = useState(null); // 搜索中心纬度（10km 范围用）
+  const [searchLng, setSearchLng] = useState(null); // 搜索中心经度
   const [guestsOpen, setGuestsOpen] = useState(false);
   const [datePickerOpenInternal, setDatePickerOpenInternal] = useState(false);
   const datePickerOpen = setDatePickerOpenProp != null ? datePickerOpenProp : datePickerOpenInternal;
   const setDatePickerOpen = setDatePickerOpenProp ?? setDatePickerOpenInternal;
   const destinationRef = useRef(null);
   const guestsRef = useRef(null);
+  const myLocationCityRef = useRef(null);
+  const myLocationPlaceRef = useRef(null);
+
+  const backendRegeo = useCallback(async (lng, lat) => {
+    try {
+      const { data } = await axios.get('/api/amap/regeo', { params: { lng, lat }, timeout: 10000 });
+      if (data?.success && (data.city || data.province)) {
+        return { city: data.city || data.province || data.district || null, place: data.place || data.city || data.province || null };
+      }
+    } catch (_) {}
+    return null;
+  }, [axios]);
+
+  const resolveMyLocationCity = useCallback(async () => {
+    if (!navigator.geolocation) return null;
+    return new Promise((resolve) => {
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          const [lat, lng] = wgs84ToGcj02(pos.coords.latitude, pos.coords.longitude);
+          let result = await backendRegeo(lng, lat);
+          if (!result?.city) {
+            const key = import.meta.env.VITE_AMAP_KEY;
+            const addr = await regeoAmap(key, lng, lat);
+            const city = addr?.city || addr?.province || addr?.district || null;
+            result = city ? { city, place: addr?.place || city } : null;
+          }
+          resolve(result || null);
+        },
+        () => resolve(null),
+        { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+      );
+    });
+  }, [backendRegeo]);
 
   const performSearch = useCallback((overrides = {}) => {
     const dest = overrides.destination ?? destination;
@@ -42,6 +84,8 @@ function SearchBar({ compact = false, datePickerOpen: datePickerOpenProp, setDat
     const a = overrides.adults ?? adults;
     const c = overrides.children ?? children;
     const r = overrides.rooms ?? rooms;
+    const lat = overrides.lat ?? searchLat;
+    const lng = overrides.lng ?? searchLng;
     if (!dest || !String(dest).trim()) return;
     setDestinationError('');
     const params = new URLSearchParams();
@@ -51,16 +95,52 @@ function SearchBar({ compact = false, datePickerOpen: datePickerOpenProp, setDat
     params.set('adults', String(a));
     params.set('children', String(c));
     params.set('rooms', String(r));
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      params.set('lat', String(lat));
+      params.set('lng', String(lng));
+    }
     navigate(`/rooms?${params.toString()}`);
     window.scrollTo(0, 0);
     getToken().then((token) => {
       if (token) axios.post('/api/users/store-recent-search', { recentSerachCity: dest }, { headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
     });
-    addRecentSearch({ destination: String(dest).trim(), checkIn: cIn, checkOut: cOut, rooms: r, adults: a });
-  }, [destination, checkIn, checkOut, adults, children, rooms, navigate, getToken, axios, addRecentSearch]);
+    addRecentSearch({ destination: String(dest).trim(), checkIn: cIn, checkOut: cOut, rooms: r, adults: a, children: c, lat: Number.isFinite(lat) ? lat : undefined, lng: Number.isFinite(lng) ? lng : undefined });
+  }, [destination, checkIn, checkOut, adults, children, rooms, searchLat, searchLng, navigate, getToken, axios, addRecentSearch]);
+
+  const handleLocationIconClick = useCallback(() => {
+    setDestination(MY_LOCATION_LABEL);
+    setDestinationError('');
+    resolveMyLocationCity().then((result) => {
+      if (result?.city) {
+        myLocationCityRef.current = result.city;
+        myLocationPlaceRef.current = result.place || result.city;
+        const displayText = result.place || result.city;
+        setDestination(displayText);
+        toast.success(`已定位到 ${displayText}`);
+        performSearch({ destination: displayText });
+      } else {
+        const errMsg = '定位失败，请允许浏览器定位权限或手动输入城市名';
+        setDestinationError(errMsg);
+        toast.error(errMsg);
+      }
+    });
+  }, [resolveMyLocationCity, performSearch]);
 
   useEffect(() => {
     setDestination(searchParams.get('destination') || '');
+    const latParam = searchParams.get('lat');
+    const lngParam = searchParams.get('lng');
+    if (latParam != null && lngParam != null) {
+      const lat = parseFloat(latParam);
+      const lng = parseFloat(lngParam);
+      if (Number.isFinite(lat) && Number.isFinite(lng)) {
+        setSearchLat(lat);
+        setSearchLng(lng);
+      }
+    } else {
+      setSearchLat(null);
+      setSearchLng(null);
+    }
     const cIn = searchParams.get('checkIn') || getTodayLocal();
     const cOut = searchParams.get('checkOut') || (cIn ? formatLocalDate(addDays(parseLocalDate(cIn), 1)) : '');
     setCheckIn(cIn);
@@ -96,11 +176,49 @@ function SearchBar({ compact = false, datePickerOpen: datePickerOpenProp, setDat
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [guestsOpen]);
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
-    if (!destination || !destination.trim()) {
-      setDestinationError('请输入目的地');
+    let searchDestination = destination?.trim() || '';
+    const isMyLocation = searchDestination === MY_LOCATION_LABEL || searchDestination === myLocationPlaceRef.current;
+    if (isMyLocation) {
+      const cached = myLocationCityRef.current;
+      if (cached) {
+        searchDestination = cached;
+        performSearch({ destination: cached });
+        return;
+      }
+      const result = await resolveMyLocationCity();
+      if (result?.city) {
+        myLocationCityRef.current = result.city;
+        myLocationPlaceRef.current = result.place || result.city;
+        searchDestination = result.city;
+        setDestination(searchDestination);
+        performSearch({ destination: searchDestination });
+      } else {
+        setDestinationError('无法获取当前位置，请检查浏览器定位权限或直接输入城市名搜索');
+        toast.error('定位失败，请允许定位权限或输入目的地');
+      }
       return;
+    }
+    if (!searchDestination) {
+      setDestinationError('请输入目的地');
+      toast.error('请输入目的地');
+      return;
+    }
+    if (!isCity(searchDestination, cityOptions) && !destinationExact) {
+      setDestinationError('请选择准确的地址');
+      toast.error('请选择准确的地址');
+      return;
+    }
+    if (!searchLat && !searchLng && isCity(searchDestination, cityOptions)) {
+      const key = import.meta.env.VITE_AMAP_KEY;
+      const coords = await geocodeAmap(key, searchDestination);
+      if (coords && Number.isFinite(coords.lat) && Number.isFinite(coords.lng)) {
+        setSearchLat(coords.lat);
+        setSearchLng(coords.lng);
+        performSearch({ lat: coords.lat, lng: coords.lng });
+        return;
+      }
     }
     performSearch();
   }
@@ -111,11 +229,24 @@ function SearchBar({ compact = false, datePickerOpen: datePickerOpenProp, setDat
 
   if (compact) {
     return (
-      <div className="w-full h-full min-h-0" onClick={(e) => { if (!e.target.closest('input, button, a, label, [role="option"], [role="listbox"], ul, li, .react-datepicker-wrapper')) document.activeElement?.blur?.(); }} onFocus={(e) => { const t = e.target; if (t.tagName === 'INPUT' && t.id !== 'searchBar-destination') setTimeout(() => t.blur(), 0); }}>
+      <div className="w-full h-full min-h-0" onClick={(e) => { if (!e.target.closest('input, button, a, label, [role="option"], [role="listbox"], ul, li, .react-datepicker-wrapper')) { document.activeElement?.blur?.(); handleSubmit({ preventDefault: () => {} }); } }} onFocus={(e) => { const t = e.target; if (t.tagName === 'INPUT' && t.id !== 'searchBar-destination') setTimeout(() => t.blur(), 0); }}>
         <form onSubmit={handleSubmit} className={formClass}>
           <div className="relative flex-1 min-w-0 flex flex-col items-center justify-center overflow-visible py-1 px-1" ref={destinationRef}>
-            <input onChange={(e) => { setDestination(e.target.value); setDestinationOpen(true); setDestinationError(''); }} onFocus={() => { setDatePickerOpen(false); setDestinationOpen(true); }} value={destination} id="searchBar-destination" type="text" className="border-0 bg-transparent text-sm font-medium text-gray-900 placeholder:text-gray-400 outline-none w-full py-0.5 min-w-0 truncate text-center" placeholder="目的地" autoComplete="off" title="输入或选择目的地" />
-            {destinationOpen && <DestinationDropdown compact destination={destination} recentSearchRecords={recentSearchRecords} clearRecentSearch={clearRecentSearch} cityOptions={cityOptions} axios={axios} onSelect={(val) => { setDestination(val); setDestinationError(''); performSearch({ destination: val }); }} onClose={() => setDestinationOpen(false)} />}
+            <input onChange={(e) => { setDestination(e.target.value); setDestinationOpen(true); setDestinationError(''); setDestinationExact(false); setSearchLat(null); setSearchLng(null); }} onFocus={() => { setDatePickerOpen(false); setDestinationOpen(true); }} value={destination} id="searchBar-destination" type="text" className="border-0 bg-transparent text-sm font-medium text-gray-900 placeholder:text-gray-400 outline-none w-full py-0.5 min-w-0 truncate text-center" placeholder="目的地" autoComplete="off" title="输入或选择目的地" />
+            {destinationOpen && <DestinationDropdown compact destination={destination} recentSearchRecords={recentSearchRecords} clearRecentSearch={clearRecentSearch} cityOptions={cityOptions} axios={axios} onSelect={(val, opts) => {
+  setDestination(val);
+  setDestinationError('');
+  if (opts?.exact) setDestinationExact(true);
+  let lat = null, lng = null;
+  if (opts?.location) {
+    const parts = String(opts.location).split(',').map(Number);
+    if (parts.length >= 2 && Number.isFinite(parts[0]) && Number.isFinite(parts[1])) {
+      lng = parts[0]; lat = parts[1];
+      setSearchLat(lat); setSearchLng(lng);
+    }
+  }
+  if (val !== MY_LOCATION_LABEL) performSearch({ destination: val, lat, lng });
+}} onCityClick={(val) => { setDestination(val); setDestinationError(''); setSearchLat(null); setSearchLng(null); }} onRestoreRecent={async (r) => { if (!r?.destination) return; setDestination(r.destination); setCheckIn(r.checkIn || ''); setCheckOut(r.checkOut || ''); setRooms(r.rooms ?? 1); setAdults(r.adults ?? 2); setChildren(r.children ?? 0); setDestinationError(''); setDestinationExact(true); let lat = r.lat, lng = r.lng; if ((lat == null || lng == null) && r.destination) { const key = import.meta.env.VITE_AMAP_KEY; const coords = await geocodeAmap(key, r.destination); if (coords && Number.isFinite(coords.lat) && Number.isFinite(coords.lng)) { lat = coords.lat; lng = coords.lng; setSearchLat(lat); setSearchLng(lng); } } performSearch({ destination: r.destination, checkIn: r.checkIn, checkOut: r.checkOut, rooms: r.rooms, adults: r.adults, children: r.children, lat, lng }); }} onClose={() => setDestinationOpen(false)} onLocationClick={handleLocationIconClick} showDomestic={showDomestic} onShowDomesticChange={setShowDomestic} />}
           </div>
           <span className="w-px h-4 bg-gray-300 shrink-0" aria-hidden />
           <div className="flex-1 min-w-0 flex flex-col items-center justify-center overflow-visible py-1 px-1 relative">
@@ -124,7 +255,7 @@ function SearchBar({ compact = false, datePickerOpen: datePickerOpenProp, setDat
               <span className="block truncate text-gray-500">离 {checkOut ? formatDateCompact(parseLocalDate(checkOut)) : '—'}</span>
             </button>
             {datePickerOpen && createPortal(
-              <div data-date-picker-portal className="fixed inset-0 z-[100] bg-black/30" style={{ top: '10rem' }} onClick={() => setDatePickerOpen(false)}>
+              <div data-date-picker-portal className="fixed inset-0 z-[100] bg-black/30" style={{ top: '10rem' }} onClick={() => { setDatePickerOpen(false); handleSubmit({ preventDefault: () => {} }); }}>
                 <div className="fixed left-0 right-0 w-full bg-white border-t border-gray-200 shadow-lg flex flex-col" style={{ top: '10rem', bottom: 0, maxHeight: 'calc(100vh - 10rem)' }} onClick={(e) => e.stopPropagation()}>
                   <div className="flex-1 min-h-0 overflow-y-auto p-4 compact-datepicker-inline">
                     <DatePicker
@@ -158,7 +289,8 @@ function SearchBar({ compact = false, datePickerOpen: datePickerOpenProp, setDat
                 <div className="space-y-3">
                   <div className="flex items-center justify-between"><span className="text-sm text-gray-700">成人</span><div className="flex items-center gap-1"><button type="button" onClick={() => setAdults((a) => Math.max(1, a - 1))} disabled={adults <= 1} className="w-8 h-8 flex items-center justify-center rounded border border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-50">−</button><span className="w-8 text-center text-sm font-medium">{adults}</span><button type="button" onClick={() => setAdults((a) => Math.min(9, a + 1))} disabled={adults >= 9} className="w-8 h-8 flex items-center justify-center rounded border border-gray-600 text-gray-700">+</button></div></div>
                   <div className="flex items-center justify-between"><span className="text-sm text-gray-700">儿童</span><div className="flex items-center gap-1"><button type="button" onClick={() => setChildren((c) => Math.max(0, c - 1))} disabled={children <= 0} className="w-8 h-8 flex items-center justify-center rounded border border-gray-300 text-gray-600">−</button><span className="w-8 text-center text-sm font-medium">{children}</span><button type="button" onClick={() => setChildren((c) => Math.min(9, c + 1))} disabled={children >= 9} className="w-8 h-8 flex items-center justify-center rounded border border-gray-600">+</button></div></div>
-                  <div className="flex items-center justify-between"><span className="text-sm text-gray-700">客房</span><div className="flex items-center gap-1"><button type="button" onClick={() => setRooms((r) => Math.max(1, r - 1))} disabled={rooms <= 1} className="w-8 h-8 flex items-center justify-center rounded border border-gray-300 text-gray-600">−</button><span className="w-8 text-center text-sm font-medium">{rooms}</span><button type="button" onClick={() => setRooms((r) => Math.min(9, r + 1))} disabled={rooms >= 9} className="w-8 h-8 flex items-center justify-center rounded border border-gray-600">+</button></div></div>
+                  <div className="flex items-center justify-between"><span className="text-sm text-gray-700">客房</span><div className="flex items-center gap-1"><button type="button" onClick={() => setRooms((r) => Math.max(1, r - 1))} disabled={rooms <= 1} className="w-8 h-8 flex items-center justify-center rounded border border-gray-300 text-gray-600 hover:bg-gray-50">−</button><span className="w-8 text-center text-sm font-medium">{rooms}</span><button type="button" onClick={() => setRooms((r) => Math.min(9, r + 1))} disabled={rooms >= 9} className="w-8 h-8 flex items-center justify-center rounded border border-gray-600">+</button></div></div>
+                  <div className="pt-2 border-t border-gray-100"><div className="flex items-center justify-between"><span className="text-sm text-gray-700">携带宠物?</span><button type="button" role="switch" aria-checked={pets} onClick={() => setPets((p) => !p)} className={`relative inline-flex w-11 h-6 rounded-full transition-colors ${pets ? 'bg-blue-500' : 'bg-gray-300'}`}><span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all duration-200 ${pets ? 'left-[22px]' : 'left-0.5'}`} /></button></div><p className="text-xs text-gray-500 mt-1">辅助动物不视为宠物。</p></div>
                 </div>
                 <button type="button" onClick={() => { setGuestsOpen(false); performSearch(); }} className="mt-3 w-full py-2 rounded-lg bg-gray-900 text-white text-sm">完成</button>
               </div>
@@ -173,18 +305,39 @@ function SearchBar({ compact = false, datePickerOpen: datePickerOpenProp, setDat
   }
 
   return (
-    <div className={`w-full ${heroStyle ? 'max-w-[1124px] mx-auto' : ''}`} onClick={(e) => { if (!e.target.closest('input, button, a, label, [role="option"], [role="listbox"], ul, li, .react-datepicker-wrapper')) document.activeElement?.blur?.(); }} onFocus={(e) => { const t = e.target; if (t.tagName === 'INPUT' && t.id !== 'searchBar-destination') setTimeout(() => t.blur(), 0); }}>
+    <div className={`w-full ${heroStyle ? 'max-w-[1124px] mx-auto' : ''}`} onClick={(e) => { if (!e.target.closest('input, button, a, label, [role="option"], [role="listbox"], ul, li, .react-datepicker-wrapper')) { document.activeElement?.blur?.(); handleSubmit({ preventDefault: () => {} }); } }} onFocus={(e) => { const t = e.target; if (t.tagName === 'INPUT' && t.id !== 'searchBar-destination') setTimeout(() => t.blur(), 0); }}>
     <form onSubmit={handleSubmit} className={formClass}>
       <div className={`relative w-full md:flex-shrink-0 ${heroStyle ? 'md:w-[160px]' : 'md:min-w-0 md:max-w-[220px]'}`} ref={destinationRef}>
         <div className="flex items-center gap-2"><SlCalender /><label htmlFor="searchBar-destination">目的地</label></div>
-        <input onChange={(e) => { setDestination(e.target.value); setDestinationOpen(true); setDestinationError(''); }} onFocus={() => setDestinationOpen(true)} value={destination} id="searchBar-destination" type="text" className={`rounded-lg border px-3 py-2 mt-2 text-sm font-semibold text-gray-900 placeholder:font-normal placeholder:text-gray-400 outline-none w-full min-w-0 min-h-[56px] ${destinationOpen ? 'border-gray-700 bg-gray-100/50' : 'border-gray-200'}`} placeholder="输入或选择目的地" autoComplete="off" />
-        {destinationOpen && <DestinationDropdown destination={destination} recentSearchRecords={recentSearchRecords} clearRecentSearch={clearRecentSearch} cityOptions={cityOptions} axios={axios} onSelect={(val) => { setDestination(val); setDestinationError(''); performSearch({ destination: val }); }} onClose={() => setDestinationOpen(false)} />}
-        {destinationError && <div className="relative mt-2 w-fit"><div className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-b-[6px] border-b-rose-800" aria-hidden /><div className="bg-rose-800 text-white text-sm px-3 py-2 rounded-lg whitespace-nowrap">{destinationError}</div></div>}
+        <div className="relative mt-2">
+          <input onChange={(e) => { setDestination(e.target.value); setDestinationOpen(true); setDestinationError(''); setDestinationExact(false); setSearchLat(null); setSearchLng(null); }} onFocus={() => setDestinationOpen(true)} value={destination} id="searchBar-destination" type="text" className={`rounded-lg border px-3 py-2 text-sm font-semibold text-gray-900 placeholder:font-normal placeholder:text-gray-400 outline-none w-full min-w-0 min-h-[56px] truncate ${destinationOpen ? 'border-gray-700 bg-gray-100/50' : 'border-gray-200'}`} placeholder="输入或选择目的地" autoComplete="off" title={destination || '输入或选择目的地'} />
+          {destinationError && (
+            <div className="absolute top-full left-0 mt-1 z-20" role="alert">
+              <div className="bg-rose-800 text-white text-sm px-3 py-2 rounded-lg shadow-lg whitespace-nowrap">
+                {destinationError}
+              </div>
+            </div>
+          )}
+        </div>
+        {destinationOpen && <DestinationDropdown destination={destination} recentSearchRecords={recentSearchRecords} clearRecentSearch={clearRecentSearch} cityOptions={cityOptions} axios={axios} onSelect={(val, opts) => {
+  setDestination(val);
+  setDestinationError('');
+  if (opts?.exact) setDestinationExact(true);
+  let lat = null, lng = null;
+  if (opts?.location) {
+    const parts = String(opts.location).split(',').map(Number);
+    if (parts.length >= 2 && Number.isFinite(parts[0]) && Number.isFinite(parts[1])) {
+      lng = parts[0]; lat = parts[1];
+      setSearchLat(lat); setSearchLng(lng);
+    }
+  }
+  if (val !== MY_LOCATION_LABEL) performSearch({ destination: val, lat, lng });
+}} onCityClick={(val) => { setDestination(val); setDestinationError(''); setSearchLat(null); setSearchLng(null); }} onRestoreRecent={async (r) => { if (!r?.destination) return; setDestination(r.destination); setCheckIn(r.checkIn || ''); setCheckOut(r.checkOut || ''); setRooms(r.rooms ?? 1); setAdults(r.adults ?? 2); setChildren(r.children ?? 0); setDestinationError(''); setDestinationExact(true); let lat = r.lat, lng = r.lng; if ((lat == null || lng == null) && r.destination) { const key = import.meta.env.VITE_AMAP_KEY; const coords = await geocodeAmap(key, r.destination); if (coords && Number.isFinite(coords.lat) && Number.isFinite(coords.lng)) { lat = coords.lat; lng = coords.lng; setSearchLat(lat); setSearchLng(lng); } } performSearch({ destination: r.destination, checkIn: r.checkIn, checkOut: r.checkOut, rooms: r.rooms, adults: r.adults, children: r.children, lat, lng }); }} onClose={() => setDestinationOpen(false)} onLocationClick={handleLocationIconClick} showDomestic={showDomestic} onShowDomesticChange={setShowDomestic} />}
       </div>
 
       <div className={`w-full flex-1 ${heroStyle ? 'md:min-w-0' : 'md:min-w-[380px]'}`}>
         <div className={`flex items-center justify-between w-full ${heroStyle ? 'mb-2' : ''}`}><div className="flex items-center gap-2"><svg className="w-4 h-4 text-gray-800" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 10h16M8 14h8m-4-7V4M7 7V4m10 3V4M5 20h14a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1Z" /></svg><span className="cursor-default">入住</span></div><span className={`cursor-default ${heroStyle ? '' : 'pr-4'}`}>退房</span></div>
-        <DatePicker id="searchBar-checkInOut" selectsRange startDate={checkIn ? parseLocalDate(checkIn) : null} endDate={checkOut ? parseLocalDate(checkOut) : null} onChange={(dates) => { let [start, end] = dates || [null, null]; if (start && end && end <= start) end = addDays(start, 1); setCheckIn(start ? formatLocalDate(start) : ''); setCheckOut(end ? formatLocalDate(end) : ''); }} onCalendarOpen={() => setDatePickerOpen(true)} onCalendarClose={() => { setDatePickerOpen(false); performSearch(); }} minDate={new Date()} monthsShown={2} customInput={<button type="button" className={`rounded-lg border px-0 py-2 text-sm outline-none w-[101%] min-w-0 cursor-pointer caret-transparent select-none text-left min-h-[56px] flex items-stretch overflow-hidden ${heroStyle ? '' : 'mt-2 '}${datePickerOpen ? 'border-gray-700 bg-gray-100/50' : 'border-gray-200'}`}><div className="flex-1 flex flex-col justify-center px-4 text-left min-w-[6.5rem]"><div className="font-semibold text-gray-900">{checkIn ? formatDateShort(parseLocalDate(checkIn)) : '—'}{checkIn && <span className="text-xs font-normal text-gray-500 ml-1">{formatDateSuffix(parseLocalDate(checkIn))}</span>}</div></div><div className="flex items-center justify-center gap-2 px-4 text-gray-500 text-sm shrink-0 cursor-default" onClick={(e) => e.stopPropagation()}><span className="text-gray-400">—</span><span>{checkIn && checkOut ? differenceInCalendarDays(parseLocalDate(checkOut), parseLocalDate(checkIn)) : 0}晚</span><span className="text-gray-400">—</span></div><div className="flex-1 flex flex-col justify-center px-4 text-right min-w-[6.5rem]"><div className="font-semibold text-gray-900">{checkOut ? formatDateShort(parseLocalDate(checkOut)) : '—'}{checkOut && <span className="text-xs font-normal text-gray-500 ml-1">{formatDateSuffix(parseLocalDate(checkOut))}</span>}</div></div></button>} popperClassName="hero-datepicker-popper" popperPlacement="bottom-start" popperProps={{ middleware: [flip({ padding: 15, mainAxis: false, fallbackPlacements: [], fallbackStrategy: 'initialPlacement' }), offset(10)] }} locale={zhCN} calendarStartDay={0} onKeyDown={(e) => { if (e.key !== 'Tab') e.preventDefault(); }} />
+        <DatePicker id="searchBar-checkInOut" selectsRange startDate={checkIn ? parseLocalDate(checkIn) : null} endDate={checkOut ? parseLocalDate(checkOut) : null} onChange={(dates) => { let [start, end] = dates || [null, null]; if (start && end && end <= start) end = addDays(start, 1); setCheckIn(start ? formatLocalDate(start) : ''); setCheckOut(end ? formatLocalDate(end) : ''); }} onCalendarOpen={() => setDatePickerOpen(true)} onCalendarClose={() => { setDatePickerOpen(false); performSearch(); }} minDate={new Date()} monthsShown={2} customInput={<button type="button" className={`rounded-lg border px-0 py-2 text-sm outline-none w-[101%] min-w-0 cursor-pointer caret-transparent select-none text-left min-h-[56px] flex items-stretch overflow-hidden ${heroStyle ? '' : 'mt-2 '}${datePickerOpen ? 'border-gray-700 bg-gray-100/50' : 'border-gray-200'}`}><div className="flex-1 flex flex-col justify-center px-4 text-left min-w-[6.5rem]"><div className="font-semibold text-gray-900">{checkIn ? formatDateShort(parseLocalDate(checkIn)) : '—'}{checkIn && <span className="text-xs font-normal text-gray-500 ml-1">{formatDateSuffix(parseLocalDate(checkIn))}</span>}</div></div><div className="flex items-center justify-center gap-2 px-4 text-gray-500 text-sm shrink-0 cursor-default" onClick={(e) => e.stopPropagation()}><span className="text-gray-400">—</span><span>{checkIn && checkOut ? differenceInCalendarDays(parseLocalDate(checkOut), parseLocalDate(checkIn)) : 0}晚</span><span className="text-gray-400">—</span></div><div className="flex-1 flex flex-col justify-center px-4 text-right min-w-[6.5rem]"><div className="font-semibold text-gray-900">{checkOut ? formatDateShort(parseLocalDate(checkOut)) : '—'}{checkOut && <span className="text-xs font-normal text-gray-500 ml-1">{formatDateSuffix(parseLocalDate(checkOut))}</span>}</div></div></button>} popperClassName="hero-datepicker-popper" popperPlacement="bottom-start" popperProps={{ middleware: [flip({ padding: 15, mainAxis: false, fallbackPlacements: [], fallbackStrategy: 'initialPlacement' }), offset(0)] }} locale={zhCN} calendarStartDay={0} onKeyDown={(e) => { if (e.key !== 'Tab') e.preventDefault(); }} />
       </div>
 
       <div className={`relative flex md:flex-col max-md:gap-2 max-md:items-center shrink-0 w-full ${heroStyle ? 'md:flex-shrink-0 md:w-[240px]' : 'md:min-w-[260px]'}`} ref={guestsRef}>

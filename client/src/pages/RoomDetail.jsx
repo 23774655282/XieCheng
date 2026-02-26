@@ -210,7 +210,7 @@ function RoomDetail() {
             {/* Location */}
             <div className="flex items-center text-sm text-gray-500 mb-8 gap-2">
                 <FaLocationArrow className='text-gray-500' />
-                <span>{room.hotel.address}</span>
+                <span>{[room.hotel.address, room.hotel.doorNumber].filter(Boolean).join(' ')}</span>
             </div>
 
             {/* Images：点击可放大展示 */}

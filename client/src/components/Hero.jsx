@@ -8,6 +8,8 @@ import { addDays, differenceInCalendarDays } from 'date-fns'
 import { formatLocalDate, formatDateShort, formatDateSuffix, getTodayLocal, parseLocalDate } from '../utils/dateUtils'
 import 'react-datepicker/dist/react-datepicker.css'
 import { useAppContext } from '../context/AppContext'
+import { isCity } from '../utils/destinationSearch'
+import { geocodeAmap } from '../utils/amap'
 import { heroCarouselImages, assets } from '../assets/assets'
 import DestinationDropdown from './DestinationDropdown'
 import { regeoAmap, wgs84ToGcj02 } from '../utils/amap'
@@ -38,6 +40,10 @@ function Hero() {
     const slideIndexRef = useRef(0);
     const [destinationOpen, setDestinationOpen] = useState(false);
     const [destinationError, setDestinationError] = useState('');
+    const [showDomestic, setShowDomestic] = useState(true); // true=国内，false=海外
+    const [destinationExact, setDestinationExact] = useState(false); // 具体地点须从联想选择
+    const [searchLat, setSearchLat] = useState(null); // 搜索中心纬度（10km 范围用）
+    const [searchLng, setSearchLng] = useState(null); // 搜索中心经度
     const destinationRef = useRef(null);
     const [adults, setAdults] = useState(2);
     const [children, setChildren] = useState(0);
@@ -202,12 +208,33 @@ function Hero() {
         }
         if (!searchDestination) {
             setDestinationError('请输入目的地');
+            toast.error('请输入目的地');
+            return;
+        }
+        if (!isCity(searchDestination, cityOptions) && !destinationExact) {
+            setDestinationError('请选择准确的地址');
+            toast.error('请选择准确的地址');
             return;
         }
         setDestinationError('');
+        let lat = searchLat, lng = searchLng;
+        if (!lat && !lng && isCity(searchDestination, cityOptions)) {
+            const key = import.meta.env.VITE_AMAP_KEY;
+            const coords = await geocodeAmap(key, searchDestination);
+            if (coords && Number.isFinite(coords.lat) && Number.isFinite(coords.lng)) {
+                lat = coords.lat;
+                lng = coords.lng;
+                setSearchLat(lat);
+                setSearchLng(lng);
+            }
+        }
         const token = await getToken();
         const params = new URLSearchParams();
         params.set("destination", searchDestination);
+        if (Number.isFinite(lat) && Number.isFinite(lng)) {
+            params.set("lat", String(lat));
+            params.set("lng", String(lng));
+        }
         if (checkIn) params.set("checkIn", checkIn);
         if (checkOut) params.set("checkOut", checkOut);
         params.set("adults", String(adults));
@@ -222,7 +249,7 @@ function Hero() {
             ).catch(() => {});
         }
 
-        addRecentSearch({ destination: searchDestination, checkIn, checkOut, rooms, adults });
+        addRecentSearch({ destination: searchDestination, checkIn, checkOut, rooms, adults, children, lat: Number.isFinite(lat) ? lat : undefined, lng: Number.isFinite(lng) ? lng : undefined });
     }
 
   return (
@@ -313,15 +340,23 @@ function Hero() {
                 </div>
                 <div className="relative mt-2">
                     <input
-                        onChange={(e) => { setDestination(e.target.value); setDestinationOpen(true); setDestinationError(''); }}
+                        onChange={(e) => { setDestination(e.target.value); setDestinationOpen(true); setDestinationError(''); setDestinationExact(false); setSearchLat(null); setSearchLng(null); }}
                         onFocus={() => setDestinationOpen(true)}
                         value={destination}
                         id="destinationInput"
                         type="text"
-                        className={`rounded-lg border pl-3 pr-3 py-2 text-sm font-semibold text-gray-900 placeholder:font-normal placeholder:text-gray-400 outline-none w-full min-w-0 min-h-[56px] ${destinationOpen ? 'border-gray-700 bg-gray-100/50' : 'border-gray-200'}`}
+                        className={`rounded-lg border pl-3 pr-3 py-2 text-sm font-semibold text-gray-900 placeholder:font-normal placeholder:text-gray-400 outline-none w-full min-w-0 min-h-[56px] truncate ${destinationOpen ? 'border-gray-700 bg-gray-100/50' : 'border-gray-200'}`}
                         placeholder="请输入目的地"
                         autoComplete="off"
+                        title={destination || '请输入目的地'}
                     />
+                    {destinationError && (
+                        <div className="absolute top-full left-0 right-0 mt-1 z-20" role="alert">
+                            <div className="rounded-lg border border-rose-400 bg-rose-100 px-3 py-2.5 text-sm font-medium text-rose-800 shadow-lg">
+                                {destinationError}
+                            </div>
+                        </div>
+                    )}
                 </div>
                 {destinationOpen && (
                     <DestinationDropdown
@@ -330,16 +365,58 @@ function Hero() {
                         clearRecentSearch={clearRecentSearch}
                         cityOptions={cityOptions}
                         axios={axios}
-                        onSelect={(val) => { setDestination(val); setDestinationError(''); }}
+                        onSelect={(val, opts) => {
+  setDestination(val);
+  setDestinationError('');
+  if (opts?.exact) setDestinationExact(true);
+  if (opts?.location) {
+    const parts = String(opts.location).split(',').map(Number);
+    if (parts.length >= 2 && Number.isFinite(parts[0]) && Number.isFinite(parts[1])) {
+      setSearchLng(parts[0]);
+      setSearchLat(parts[1]);
+    }
+  }
+}}
+                        onCityClick={(val) => { setDestination(val); setDestinationError(''); setSearchLat(null); setSearchLng(null); }}
+                        onRestoreRecent={async (r) => {
+                            if (!r?.destination) return;
+                            setDestination(r.destination);
+                            setCheckIn(r.checkIn || '');
+                            setCheckOut(r.checkOut || '');
+                            setRooms(r.rooms ?? 1);
+                            setAdults(r.adults ?? 2);
+                            setChildren(r.children ?? 0);
+                            setDestinationError('');
+                            setDestinationExact(true);
+                            setDestinationOpen(false);
+                            let lat = r.lat, lng = r.lng;
+                            if ((lat == null || lng == null) && r.destination) {
+                                const key = import.meta.env.VITE_AMAP_KEY;
+                                const coords = await geocodeAmap(key, r.destination);
+                                if (coords && Number.isFinite(coords.lat) && Number.isFinite(coords.lng)) {
+                                    lat = coords.lat;
+                                    lng = coords.lng;
+                                    setSearchLat(lat);
+                                    setSearchLng(lng);
+                                }
+                            }
+                            const params = new URLSearchParams();
+                            params.set('destination', r.destination);
+                            if (r.checkIn) params.set('checkIn', r.checkIn);
+                            if (r.checkOut) params.set('checkOut', r.checkOut);
+                            params.set('adults', String(r.adults ?? 2));
+                            params.set('children', String(r.children ?? 0));
+                            params.set('rooms', String(r.rooms ?? 1));
+                            if (lat != null && Number.isFinite(lat)) params.set('lat', String(lat));
+                            if (lng != null && Number.isFinite(lng)) params.set('lng', String(lng));
+                            navigate(`/rooms?${params.toString()}`);
+                            addRecentSearch({ destination: r.destination, checkIn: r.checkIn, checkOut: r.checkOut, rooms: r.rooms, adults: r.adults, children: r.children, lat, lng });
+                        }}
                         onClose={() => setDestinationOpen(false)}
+                        onLocationClick={handleLocationIconClick}
+                        showDomestic={showDomestic}
+                        onShowDomesticChange={setShowDomestic}
                     />
-                )}
-                {destinationError && (
-                    <div className="mt-2 w-full" role="alert">
-                        <div className="w-full rounded-lg border border-rose-400 bg-rose-100 px-3 py-2.5 text-sm font-medium text-rose-800 shadow-sm">
-                            {destinationError}
-                        </div>
-                    </div>
                 )}
             </div>
 
@@ -397,7 +474,7 @@ function Hero() {
                     popperProps={{
                       middleware: [
                         flip({ padding: 15, mainAxis: false, fallbackPlacements: [], fallbackStrategy: 'initialPlacement' }),
-                        offset(10),
+                        offset(0),
                       ],
                     }}
                     locale={zhCN}

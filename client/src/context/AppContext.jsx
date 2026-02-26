@@ -49,7 +49,7 @@ export function AppProvider({ children }) {
       const raw = localStorage.getItem("recentSearchRecords");
       if (raw) {
         const arr = JSON.parse(raw);
-        return Array.isArray(arr) ? arr.slice(0, 5) : [];
+        return Array.isArray(arr) ? arr.slice(0, 2) : [];
       }
     } catch (_) {}
     return [];
@@ -63,11 +63,14 @@ export function AppProvider({ children }) {
       checkOut: record.checkOut || "",
       rooms: record.rooms ?? 1,
       adults: record.adults ?? 2,
+      children: record.children ?? 0,
+      lat: record.lat != null && Number.isFinite(record.lat) ? record.lat : undefined,
+      lng: record.lng != null && Number.isFinite(record.lng) ? record.lng : undefined,
     };
     if (!r.destination) return;
     setRecentSearchRecords((prev) => {
       const filtered = prev.filter((x) => x.destination !== r.destination);
-      const next = [r, ...filtered].slice(0, 5);
+      const next = [r, ...filtered].slice(0, 2);
       try { localStorage.setItem("recentSearchRecords", JSON.stringify(next)); } catch (_) {}
       return next;
     });
@@ -148,7 +151,7 @@ export function AppProvider({ children }) {
         setRecentSearchRecords((prev) => {
           const known = new Set(prev.map((x) => x.destination));
           const fromApi = apiCities.filter((c) => !known.has(c)).map((c) => ({ destination: c }));
-          const merged = [...prev, ...fromApi].slice(0, 5);
+          const merged = [...prev, ...fromApi].slice(0, 2);
           try { localStorage.setItem('recentSearchRecords', JSON.stringify(merged)); } catch (_) {}
           return merged;
         });

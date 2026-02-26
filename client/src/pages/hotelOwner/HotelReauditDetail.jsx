@@ -3,6 +3,8 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useAppContext } from "../../context/AppContext";
 import toast from "react-hot-toast";
 import { IoAdd, IoCloudUploadOutline, IoCreateOutline, IoClose } from "react-icons/io5";
+import AddressInput from "../../components/AddressInput";
+import CityInput, { parseCityFromDistrict, parseDistrictFromDistrict } from "../../components/CityInput";
 
 function RoomCountStepper({ value, roomId, onUpdate, axios, getToken }) {
     const [count, setCount] = useState(value);
@@ -78,6 +80,11 @@ function HotelReauditDetail() {
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const [form, setForm] = useState({
+        name: "",
+        city: "",
+        district: "",
+        address: "",
+        contact: "",
         latitude: "",
         longitude: "",
         doorNumber: "",
@@ -140,6 +147,11 @@ function HotelReauditDetail() {
                 const h = hotelRes.data.hotel;
                 setHotel(h);
                 const baseForm = {
+                    name: h.name || "",
+                    city: h.city || "",
+                    district: h.district || "",
+                    address: h.address || "",
+                    contact: h.contact || "",
                     latitude: h.latitude != null ? String(h.latitude) : "",
                     longitude: h.longitude != null ? String(h.longitude) : "",
                     doorNumber: h.doorNumber || "",
@@ -182,6 +194,11 @@ function HotelReauditDetail() {
         try {
             const token = await getToken();
             const fd = new FormData();
+            fd.append("name", form.name);
+            fd.append("city", form.city);
+            fd.append("district", form.district);
+            fd.append("address", form.address);
+            fd.append("contact", form.contact);
             fd.append("latitude", form.latitude);
             fd.append("longitude", form.longitude);
             fd.append("doorNumber", form.doorNumber);
@@ -297,20 +314,16 @@ function HotelReauditDetail() {
                 </button>
             </div>
 
-            {/* 预审单信息（只读） */}
+            {/* 预审单信息（仅申请人、执照、星级为只读） */}
             {hasPreReview && (
                 <section className="mb-8 p-4 sm:p-6 bg-gray-50 rounded-xl border border-gray-200">
                     <h2 className="text-base font-semibold text-gray-800 mb-4 flex items-center gap-2">
                         <span>预审单信息</span>
-                        <span className="text-xs font-normal text-amber-600">（不可修改）</span>
+                        <span className="text-xs font-normal text-amber-600">（不可修改：申请人、执照、星级评定）</span>
                     </h2>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                         {hotel.applicantName && <div><span className="text-gray-500 block">申请人</span><p className="font-medium text-gray-800">{hotel.applicantName}</p></div>}
                         {hotel.applicantPhone && <div><span className="text-gray-500 block">申请人手机</span><p className="font-medium text-gray-800">{hotel.applicantPhone}</p></div>}
-                        {hotel.name && <div><span className="text-gray-500 block">酒店名称</span><p className="font-medium text-gray-800">{hotel.name}</p></div>}
-                        {hotel.city && <div><span className="text-gray-500 block">城市</span><p className="font-medium text-gray-800">{hotel.city}</p></div>}
-                        {hotel.address && <div className="sm:col-span-2"><span className="text-gray-500 block">地址</span><p className="font-medium text-gray-800">{hotel.address}</p></div>}
-                        {hotel.contact && <div><span className="text-gray-500 block">联系电话</span><p className="font-medium text-gray-800">{hotel.contact}</p></div>}
                     </div>
                     <div className="mt-4 flex flex-wrap gap-4">
                         {hotel.licenseUrl && (
@@ -339,21 +352,67 @@ function HotelReauditDetail() {
                 </section>
             )}
 
-            {/* 补充信息（可编辑，与再审核时完全一致） */}
+            {/* 补充信息（可编辑，含酒店名/城市/地址/联系电话） */}
             <form onSubmit={handleSubmit} className="mb-8 p-4 sm:p-6 bg-white rounded-xl border border-gray-200 shadow-sm">
-                    <h2 className="text-base font-semibold text-gray-800 mb-4">补充信息</h2>
+                    <h2 className="text-base font-semibold text-gray-800 mb-4">补充信息（可编辑）</h2>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                         <div>
-                            <label className="block text-gray-600 mb-1">纬度（地图定位）</label>
-                            <input type="text" value={form.latitude} onChange={(e) => updateForm({ latitude: e.target.value })} placeholder="如 31.23" className="w-full border border-gray-300 rounded-lg px-3 py-2" />
+                            <label className="block text-gray-600 mb-1">酒店名称 *</label>
+                            <input type="text" value={form.name} onChange={(e) => updateForm({ name: e.target.value })} placeholder="酒店名称" required className="w-full border border-gray-300 rounded-lg px-3 py-2" />
                         </div>
                         <div>
-                            <label className="block text-gray-600 mb-1">经度（地图定位）</label>
-                            <input type="text" value={form.longitude} onChange={(e) => updateForm({ longitude: e.target.value })} placeholder="如 121.47" className="w-full border border-gray-300 rounded-lg px-3 py-2" />
+                            <label className="block text-gray-600 mb-1">行政区（由选中地址解析）</label>
+                            <input type="text" value={form.district} readOnly placeholder="请从地址联想中选择" className="w-full border border-gray-200 rounded-lg px-3 py-2 bg-gray-50 text-gray-600" />
                         </div>
                         <div>
-                            <label className="block text-gray-600 mb-1">门牌号</label>
-                            <input type="text" value={form.doorNumber} onChange={(e) => updateForm({ doorNumber: e.target.value })} placeholder="如 88号" className="w-full border border-gray-300 rounded-lg px-3 py-2" />
+                            <label className="block text-gray-600 mb-1">城市 *</label>
+                            <CityInput
+                                value={form.city}
+                                onChange={(v) => updateForm({ city: v })}
+                                placeholder="输入城市后选择"
+                                required
+                                className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                            />
+                        </div>
+                        <div className="sm:col-span-2">
+                            <label className="block text-gray-600 mb-1">地址 *</label>
+                            <AddressInput
+                                value={form.address}
+                                onChange={(v) => updateForm({ address: v })}
+                                city={form.city}
+                                onSelect={(tip) => {
+                                    const patch = {};
+                                    if (tip?.district) {
+                                        patch.city = parseCityFromDistrict(tip.district) || form.city;
+                                        patch.district = parseDistrictFromDistrict(tip.district) || form.district;
+                                    }
+                                    if (tip?.address) patch.doorNumber = tip.address;
+                                    if (tip?.location) {
+                                        const [lng, lat] = String(tip.location).split(',').map(Number);
+                                        patch.longitude = Number.isFinite(lng) ? String(lng) : form.longitude;
+                                        patch.latitude = Number.isFinite(lat) ? String(lat) : form.latitude;
+                                    }
+                                    if (Object.keys(patch).length) updateForm(patch);
+                                }}
+                                placeholder="输入地址后选择（已选城市则限定在该城市内）"
+                                className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-gray-600 mb-1">联系电话 *</label>
+                            <input type="text" value={form.contact} onChange={(e) => updateForm({ contact: e.target.value })} placeholder="酒店联系电话" required className="w-full border border-gray-300 rounded-lg px-3 py-2" />
+                        </div>
+                        <div>
+                            <label className="block text-gray-600 mb-1">纬度（由选中地址解析）</label>
+                            <input type="text" value={form.latitude} readOnly placeholder="请从地址联想中选择" className="w-full border border-gray-200 rounded-lg px-3 py-2 bg-gray-50 text-gray-600" />
+                        </div>
+                        <div>
+                            <label className="block text-gray-600 mb-1">经度（由选中地址解析）</label>
+                            <input type="text" value={form.longitude} readOnly placeholder="请从地址联想中选择" className="w-full border border-gray-200 rounded-lg px-3 py-2 bg-gray-50 text-gray-600" />
+                        </div>
+                        <div>
+                            <label className="block text-gray-600 mb-1">门牌号（由选中地址解析）</label>
+                            <input type="text" value={form.doorNumber} readOnly placeholder="请从地址联想中选择" className="w-full border border-gray-200 rounded-lg px-3 py-2 bg-gray-50 text-gray-600" />
                         </div>
                         <div>
                             <label className="block text-gray-600 mb-1">客房总数</label>

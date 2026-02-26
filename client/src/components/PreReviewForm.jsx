@@ -2,6 +2,8 @@ import { useState } from "react";
 import { IoIosCloseCircleOutline } from "react-icons/io";
 import { useAppContext } from "../context/AppContext";
 import toast from "react-hot-toast";
+import AddressInput from "./AddressInput";
+import CityInput, { parseCityFromDistrict, parseDistrictFromDistrict } from "./CityInput";
 
 /**
  * 预审单 - 与用户首次申请入驻酒店时填写的表单相同
@@ -16,6 +18,7 @@ function PreReviewForm({ onClose, onSuccess }) {
         hotelName: "",
         hotelAddress: "",
         hotelCity: "",
+        hotelDistrict: "",
         hotelContact: "",
     });
     const [licenseFile, setLicenseFile] = useState(null);
@@ -51,6 +54,7 @@ function PreReviewForm({ onClose, onSuccess }) {
             fd.append("hotelName", form.hotelName.trim());
             fd.append("hotelAddress", form.hotelAddress.trim());
             fd.append("hotelCity", form.hotelCity.trim());
+            fd.append("hotelDistrict", form.hotelDistrict.trim());
             fd.append("hotelContact", form.hotelContact.trim());
             fd.append("license", licenseFile);
             fd.append("starRating", starRatingFile);
@@ -186,24 +190,37 @@ function PreReviewForm({ onClose, onSuccess }) {
                             <label className={labelCls}>
                                 酒店所在城市 <span className="text-red-500">*</span>
                             </label>
-                            <input
-                                type="text"
-                                className={inputCls}
+                            <CityInput
                                 value={form.hotelCity}
-                                onChange={(e) => setForm((f) => ({ ...f, hotelCity: e.target.value }))}
-                                placeholder="如：北京、上海"
+                                onChange={(v) => setForm((f) => ({ ...f, hotelCity: v }))}
+                                placeholder="输入城市后选择"
+                                required
+                                className={inputCls}
                             />
+                        </div>
+                        <div className="flex flex-col">
+                            <label className={labelCls}>行政区（由地址联想填充）</label>
+                            <input type="text" value={form.hotelDistrict} readOnly placeholder="请从地址联想中选择" className={`${inputCls} bg-gray-50 text-gray-600`} />
                         </div>
                         <div className="flex flex-col md:col-span-2">
                             <label className={labelCls}>
                                 酒店地址 <span className="text-red-500">*</span>
                             </label>
-                            <input
-                                type="text"
-                                className={inputCls}
+                            <AddressInput
                                 value={form.hotelAddress}
-                                onChange={(e) => setForm((f) => ({ ...f, hotelAddress: e.target.value }))}
-                                placeholder="请输入酒店详细地址"
+                                onChange={(v) => setForm((f) => ({ ...f, hotelAddress: v }))}
+                                city={form.hotelCity}
+                                onSelect={(tip) => {
+                                    if (tip?.district) {
+                                        setForm((f) => ({
+                                            ...f,
+                                            hotelCity: parseCityFromDistrict(tip.district) || f.hotelCity,
+                                            hotelDistrict: parseDistrictFromDistrict(tip.district) || f.hotelDistrict
+                                        }));
+                                    }
+                                }}
+                                placeholder="输入地址后选择（已选城市则限定在该城市内）"
+                                className={inputCls}
                             />
                         </div>
                         <div className="flex flex-col">

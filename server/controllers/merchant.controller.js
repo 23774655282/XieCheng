@@ -229,6 +229,7 @@ export const approveHotelPreReview = async (req, res) => {
       name: app.hotelName,
       address: app.hotelAddress,
       city: app.hotelCity,
+      district: app.hotelDistrict || '',
       contact: app.hotelContact,
       starRating: 3,
       applicantName: app.applicantName,
