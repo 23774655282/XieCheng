@@ -1,5 +1,11 @@
+/** 约 40px 在给定缩放级别下对应的经纬度跨度（Web 墨卡托近似，用于“地标重合”判断） */
+function pixelToDegreesAtZoom(zoom, pixelSize = 40) {
+  const worldPixels = 256 * Math.pow(2, zoom);
+  return (pixelSize / worldPixels) * 360;
+}
+
 /**
- * 按缩放级别对酒店进行网格聚合，同一区域多家酒店显示为一个簇
+ * 按“地标是否重合”聚合：仅当两个酒店在当前缩放下会重叠（同格）时才合并为一簇
  * @param {Array<{ _id: string, _lat: number, _lng: number }>} hotels
  * @param {number} zoom - 地图缩放级别 4~18
  * @param {(lat: number, lng: number) => [number, number]} toGCJ - wgs84ToGcj02
@@ -10,16 +16,8 @@ export function clusterHotels(hotels, zoom, toGCJ) {
     return { clusters: [], singles: [] };
   }
   const zoomClamped = Math.max(4, Math.min(18, Number(zoom) || 10));
-  // 放大到一定级别（例如街道级 >= 14）时不再聚合，全部展示为单点，避免近邻酒店合并成一个簇
-  if (zoomClamped >= 14) {
-    const singles = hotels.map((h) => {
-      const [lat, lng] = toGCJ(h._lat, h._lng);
-      return { hotel: h, lat, lng };
-    });
-    return { clusters: [], singles };
-  }
-  // 缩放越小格子越大，聚合越强
-  const cellSize = 0.5 / Math.pow(2, (zoomClamped - 4) * 0.4);
+  // 格子大小 = 当前缩放下约 40px 对应的经度/纬度，只有落在同一格（地标重合）才合并
+  const cellSize = Math.max(1e-6, pixelToDegreesAtZoom(zoomClamped));
   const groups = new Map();
   const points = hotels.map((h) => {
     const [lat, lng] = toGCJ(h._lat, h._lng);
