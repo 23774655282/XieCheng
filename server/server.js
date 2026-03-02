@@ -11,6 +11,7 @@ import hotelRouter from './routes/hotel.route.js';
 import roomRouter from './routes/room.routes.js';
 import bookingRouter from './routes/booking.route.js';
 import { cancelExpiredUnpaidBookings } from './controllers/booking.controller.js';
+import { buildVectorIndex } from './services/rag.service.js';
 import reviewRouter from './routes/review.route.js';
 import amapRouter from './routes/amap.route.js';
 import stripeWebhook from './controllers/stripe.webhook.js';
@@ -72,6 +73,16 @@ const PORT = process.env.PORT || 5000;
 
 // 先连接数据库，再启动监听，避免监听后因 MongoDB 未就绪而 process.exit(1)
 await connectDB();
+
+// 预构建 RAG 向量索引（后台执行，不阻塞启动）
+const apiKey = process.env.AI_API_KEY;
+if (apiKey) {
+  const embeddingModel = process.env.AI_EMBEDDING_MODEL || "deepseek-embedding-v2";
+  const embeddingBaseURL = process.env.AI_EMBEDDING_BASE_URL || process.env.AI_API_BASE_URL || "https://api.deepseek.com/v1";
+  buildVectorIndex(apiKey, embeddingBaseURL, embeddingModel)
+    .then((ok) => console.log(ok ? "[RAG] 向量索引预构建完成" : "[RAG] 向量索引预构建跳过"))
+    .catch((err) => console.warn("[RAG] 向量索引预构建失败:", err?.message));
+}
 
 // 定时取消超时未支付订单（15分钟），每分钟执行一次
 setInterval(() => {

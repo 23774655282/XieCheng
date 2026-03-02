@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { useVirtualizer } from '@tanstack/react-virtual';
 import { useAppContext } from '../context/AppContext';
 
 const roomTypeToCn = { 'Single Bed': '单人间', 'Double Bed': '双人间', 'Luxury Room': '豪华房', 'Family Suite': '家庭套房' };
@@ -50,18 +49,18 @@ function saveToHistory(record) {
   localStorage.setItem(HISTORY_KEY, JSON.stringify(next));
 }
 
-/** 房型卡片组件 */
+/** 房型卡片组件：固定高度避免换一批时页面抖动 */
 function RoomCard({ room, onRoomClick }) {
   return (
     <div
       onClick={() => onRoomClick(room._id)}
-      className="flex flex-col bg-gray-50 rounded-xl border border-gray-100 overflow-hidden hover:shadow-md hover:border-blue-200 transition cursor-pointer"
+      className="flex flex-col h-[300px] bg-gray-50 rounded-xl border border-gray-100 overflow-hidden hover:shadow-md hover:border-blue-200 transition cursor-pointer"
     >
-      <img src={room.images?.[0]} alt="房间" className="w-full h-28 object-cover" loading="lazy" decoding="async" />
-      <div className="p-3">
-        <p className="font-semibold text-gray-800 text-sm">{getRoomTypeLabel(room.roomType)}</p>
+      <img src={room.images?.[0]} alt="房间" className="w-full h-28 flex-shrink-0 object-cover" loading="lazy" decoding="async" />
+      <div className="p-3 flex flex-col flex-1 min-h-0 overflow-hidden">
+        <p className="font-semibold text-gray-800 text-sm truncate">{getRoomTypeLabel(room.roomType)}</p>
         {room.hotel && <p className="text-xs text-gray-500 truncate">{room.hotel.name} · {room.hotel.city}</p>}
-        <div className="flex items-center justify-between mt-2">
+        <div className="flex items-center justify-between mt-2 flex-shrink-0">
           <span className="text-sm font-bold text-gray-800">
             {(room.promoDiscount != null && room.promoDiscount > 0)
               ? Math.round(room.pricePerNight * (1 - room.promoDiscount / 100))
@@ -69,68 +68,76 @@ function RoomCard({ room, onRoomClick }) {
           </span>
           <span className="text-xs text-blue-600">查看详情</span>
         </div>
+        <div className="mt-2 h-20 flex-shrink-0 overflow-y-auto overflow-x-hidden bg-amber-50/80 px-2 py-1.5 rounded">
+          {room.recommendationReason ? (
+            <p className="text-xs text-amber-700 whitespace-pre-wrap break-words">{room.recommendationReason}</p>
+          ) : (
+            <span className="text-xs text-amber-700/50">—</span>
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
-/** 虚拟列表渲染房型卡片（2 列网格，按行虚拟化） */
-const VirtualizedRoomGrid = React.memo(function VirtualizedRoomGrid({ rooms, onRoomClick }) {
-  const scrollRef = useRef(null);
-  const cols = 2;
-  const rowCount = Math.ceil(rooms.length / cols);
-  const rowVirtualizer = useVirtualizer({
-    count: rowCount,
-    getScrollElement: () => scrollRef.current,
-    estimateSize: () => 200,
-    overscan: 2,
-  });
+const ROOMS_PER_BATCH = 3;
 
-  if (rooms.length === 0) return null;
+/** 从房间池中按批次取 3 个，不足时从头补足（轮流展示） */
+function getDisplayRooms(rooms, batchIndex) {
+  const total = rooms.length;
+  if (total === 0) return [];
+  const displayRooms = [];
+  for (let i = 0; i < ROOMS_PER_BATCH; i++) {
+    const idx = (batchIndex * ROOMS_PER_BATCH + i) % total;
+    displayRooms.push(rooms[idx]);
+  }
+  return displayRooms;
+}
+
+/** 房型卡片网格（每次 3 个，轮流展示，换一批循环切换） */
+const RoomGrid = React.memo(function RoomGrid({ rooms, batchIndex, onRoomClick, onRefreshBatch, totalRooms }) {
+  const displayRooms = getDisplayRooms(rooms, batchIndex);
+
+  if (displayRooms.length === 0) return null;
 
   return (
-    <div ref={scrollRef} className="mt-4 max-h-80 overflow-y-auto overflow-x-hidden rounded-lg">
-      <div
-        style={{
-          height: `${rowVirtualizer.getTotalSize()}px`,
-          width: '100%',
-          position: 'relative',
-        }}
-      >
-        {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-          const start = virtualRow.index * cols;
-          const rowRooms = rooms.slice(start, start + cols);
-          return (
-            <div
-              key={virtualRow.key}
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '100%',
-                transform: `translateY(${virtualRow.start}px)`,
-              }}
-              className="grid grid-cols-1 sm:grid-cols-2 gap-3"
-            >
-              {rowRooms.map((room) => (
-                <RoomCard key={room._id} room={room} onRoomClick={onRoomClick} />
-              ))}
-            </div>
-          );
-        })}
+    <div className="mt-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {displayRooms.map((room, i) => (
+          <RoomCard key={`${room._id}-${batchIndex}-${i}`} room={room} onRoomClick={onRoomClick} />
+        ))}
       </div>
+      {totalRooms > 0 && (
+        <button
+          type="button"
+          onClick={onRefreshBatch}
+          className="mt-3 w-full py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors"
+        >
+          换一批
+        </button>
+      )}
     </div>
   );
 });
 
-/** 单条消息组件，供虚拟列表使用 */
-const ChatMessage = React.memo(function ChatMessage({ msg, onRoomClick }) {
+/** 单条消息组件 */
+const ChatMessage = React.memo(function ChatMessage({ msg, msgIndex, onRoomClick, onRefreshBatch }) {
+  const batchIndex = msg.batchIndex ?? 0;
+  const totalRooms = msg.rooms?.length ?? 0;
+  const displayRooms = msg.rooms ?? [];
+
   return (
     <div className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
       <div className={`max-w-[85%] rounded-2xl px-4 py-3 ${msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200 text-gray-800 shadow-sm'}`}>
         <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
-        {msg.role === 'assistant' && msg.rooms && msg.rooms.length > 0 && (
-          <VirtualizedRoomGrid rooms={msg.rooms} onRoomClick={onRoomClick} />
+        {msg.role === 'assistant' && displayRooms.length > 0 && (
+          <RoomGrid
+            rooms={displayRooms}
+            batchIndex={batchIndex}
+            totalRooms={totalRooms}
+            onRoomClick={onRoomClick}
+            onRefreshBatch={() => onRefreshBatch(msgIndex)}
+          />
         )}
       </div>
     </div>
@@ -150,20 +157,36 @@ function AiHotelChat() {
 
   const messages = viewingRecord ? viewingRecord.messages : currentMessages;
 
-  const rowVirtualizer = useVirtualizer({
-    count: messages.length,
-    getScrollElement: () => scrollParentRef.current,
-    estimateSize: (index) => {
-      const msg = messages[index];
-      return (msg?.role === 'assistant' && msg?.rooms?.length) ? 320 : 80;
-    },
-    overscan: 5,
-  });
-
   const handleRoomClick = useCallback((roomId) => {
     navigate(`/rooms/${roomId}`);
     window.scrollTo(0, 0);
   }, [navigate]);
+
+  const handleRefreshBatch = useCallback((msgIndex) => {
+    if (viewingRecord) {
+      const next = [...viewingRecord.messages];
+      const msg = next[msgIndex];
+      if (msg && msg.rooms) {
+        next[msgIndex] = { ...msg, batchIndex: (msg.batchIndex ?? 0) + 1 };
+        const updatedRecord = { ...viewingRecord, messages: next };
+        setViewingRecord(updatedRecord);
+        const newHistory = history.map((r) => (r.id === viewingRecord.id ? updatedRecord : r));
+        setHistory(newHistory);
+        try {
+          localStorage.setItem(HISTORY_KEY, JSON.stringify(newHistory.slice(0, MAX_HISTORY)));
+        } catch (_) {}
+      }
+    } else {
+      setCurrentMessages((prev) => {
+        const next = [...prev];
+        const msg = next[msgIndex];
+        if (msg && msg.rooms) {
+          next[msgIndex] = { ...msg, batchIndex: (msg.batchIndex ?? 0) + 1 };
+        }
+        return next;
+      });
+    }
+  }, [viewingRecord, history]);
 
   useEffect(() => {
     function handleClickOutside(e) {
@@ -182,8 +205,8 @@ function AiHotelChat() {
   }, [currentMessages, viewingRecord]);
 
   useEffect(() => {
-    if (messages.length > 0) {
-      rowVirtualizer.scrollToIndex(messages.length - 1, { align: 'end', behavior: 'smooth' });
+    if (messages.length > 0 && scrollParentRef.current) {
+      scrollParentRef.current.scrollTo({ top: scrollParentRef.current.scrollHeight, behavior: 'smooth' });
     }
   }, [messages.length]);
 
@@ -232,9 +255,9 @@ function AiHotelChat() {
           criteria.budget > 0 ? `预算：${criteria.budget} 元` : null,
         ].filter(Boolean).join(' · ');
         const content = rooms.length > 0
-          ? `根据您的要求（${summary}）为您找到以下 ${rooms.length} 个房型，点击卡片可查看详情并预订：`
+          ? `根据您的要求（${summary}）为您找到以下房型，点击卡片可查看详情并预订：`
           : `根据您的要求（${summary}）暂未找到符合条件的房型，可尝试放宽预算或更换目的地。`;
-        const assistantMsg = { role: 'assistant', content, criteria, rooms };
+        const assistantMsg = { role: 'assistant', content, criteria, rooms, batchIndex: 0 };
         setCurrentMessages((prev) => {
           const next = [...prev, assistantMsg];
           saveToHistory({ title: getRecordTitle(next), messages: next });
@@ -387,28 +410,15 @@ function AiHotelChat() {
               </div>
             )}
             {messages.length > 0 && (
-              <div
-                style={{
-                  height: `${rowVirtualizer.getTotalSize()}px`,
-                  width: '100%',
-                  position: 'relative',
-                }}
-              >
-                {rowVirtualizer.getVirtualItems().map((virtualRow) => (
-                  <div
-                    key={virtualRow.key}
-                    ref={rowVirtualizer.measureElement}
-                    data-index={virtualRow.index}
-                    className="pb-6"
-                    style={{
-                      position: 'absolute',
-                      top: 0,
-                      left: 0,
-                      width: '100%',
-                      transform: `translateY(${virtualRow.start}px)`,
-                    }}
-                  >
-                    <ChatMessage msg={messages[virtualRow.index]} onRoomClick={handleRoomClick} />
+              <div className="space-y-4">
+                {messages.map((msg, i) => (
+                  <div key={i} className="pb-4">
+                    <ChatMessage
+                      msg={msg}
+                      msgIndex={i}
+                      onRoomClick={handleRoomClick}
+                      onRefreshBatch={handleRefreshBatch}
+                    />
                   </div>
                 ))}
               </div>

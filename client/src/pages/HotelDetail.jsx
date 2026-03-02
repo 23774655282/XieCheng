@@ -17,6 +17,7 @@ import { IoLocationOutline } from "react-icons/io5";
 import { assets } from "../assets/assets";
 import toast from "react-hot-toast";
 import "react-datepicker/dist/react-datepicker.css";
+import { SkeletonHotelDetail } from "../components/Skeleton";
 
 const roomTypeToCn = { 'Single Bed': '单人间', 'Double Bed': '双人间', 'Luxury Room': '豪华房', 'Family Suite': '家庭套房' };
 const getRoomTypeLabel = (roomType) => roomTypeToCn[roomType] || roomType;
@@ -223,7 +224,7 @@ function HotelDetail() {
         }
     }
 
-    if (loading) return <div className="pt-28 p-4">加载中...</div>;
+    if (loading) return <SkeletonHotelDetail />;
     if (!hotel) return <div className="pt-28 p-4">酒店不存在</div>;
 
     return (

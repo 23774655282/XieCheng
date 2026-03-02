@@ -35,6 +35,8 @@ const roomSchema = new Schema({
     status: { type: String, enum: ["pending_audit", "approved"], default: "approved" },
 },{timestamps: true});
 
+roomSchema.index({ hotel: 1, isAvailable: 1, status: 1 });
+roomSchema.index({ status: 1, isAvailable: 1 });
 
 const Room = mongoose.model('Room', roomSchema);
 
