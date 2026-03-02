@@ -10,7 +10,7 @@ import { pagePerf } from '../utils/pagePerf';
  */
 export function CarouselPerformanceMonitor() {
   const location = useLocation();
-  const { isPerfMode: show, isLegacyCarousel: isLegacy, toggleLegacyCarousel } = usePerf();
+  const { isPerfMode: show, isUnoptimizedMode: isLegacy, toggleUnoptimizedMode } = usePerf();
   const isHomePage = location.pathname === '/';
   const prevPathRef = useRef(location.pathname);
 
@@ -49,7 +49,13 @@ export function CarouselPerformanceMonitor() {
     pagePerf.collect();
     pagePerf.currentRoute = location.pathname;
     pagePerf.fetchBuildSize().then(updatePageMetrics);
-    const unsubPage = pagePerf.subscribe(updatePageMetrics);
+    const unsubPage = pagePerf.subscribe(() => {
+      updatePageMetrics();
+      const p = { fcp: pagePerf.fcp, lcp: pagePerf.lcp, routeChangeMs: pagePerf.routeChangeMs, jsSize: pagePerf.jsTotalBytes, buildSize: pagePerf.buildTotalBytes };
+      if (p.fcp != null || p.lcp != null || p.routeChangeMs != null || p.jsSize > 0 || p.buildSize != null) {
+        console.log('[pagePerf]', p);
+      }
+    });
     const stopFCP = pagePerf.observeFCP(() => updatePageMetrics());
     const stopLCP = pagePerf.observeLCP(() => updatePageMetrics());
 
@@ -82,6 +88,7 @@ export function CarouselPerformanceMonitor() {
 
     rafRef.current = requestAnimationFrame(measureFps);
     updatePageMetrics();
+    console.log('[pagePerf] 初始化', { fcp: pagePerf.fcp, lcp: pagePerf.lcp, routeChangeMs: pagePerf.routeChangeMs, jsSize: pagePerf.jsTotalBytes });
     return () => {
       unsubscribe();
       unsubPage();
@@ -114,19 +121,17 @@ export function CarouselPerformanceMonitor() {
       <div className="border-b border-gray-200 bg-amber-50 px-3 py-2">
         <h3 className="text-sm font-semibold text-gray-800">
           性能监控
-          {isHomePage && (
-            <button
-              type="button"
-              onClick={toggleLegacyCarousel}
-              className={`ml-2 rounded px-1.5 py-0.5 text-xs ${isLegacy ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'} hover:opacity-80`}
-              title="切换轮播旧版/优化版"
-            >
-              {isLegacy ? '轮播旧版' : '轮播优化'}
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={toggleUnoptimizedMode}
+            className={`ml-2 rounded px-1.5 py-0.5 text-xs ${isLegacy ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'} hover:opacity-80`}
+            title="切换未优化/已优化（懒加载、骨架屏、虚拟列表等）"
+          >
+            {isLegacy ? '未优化' : '已优化'}
+          </button>
         </h3>
         <p className="mt-1 text-xs text-gray-500">
-          点击右下角 Perf 按钮开关
+          未优化=无懒加载、骨架屏、虚拟列表；已优化=全部启用
         </p>
       </div>
       <div className="p-3 space-y-3 text-sm max-h-[70vh] overflow-y-auto">
@@ -163,7 +168,7 @@ export function CarouselPerformanceMonitor() {
         </div>
 
         <hr className="border-gray-100" />
-        {isHomePage && (
+        {isHomePage ? (
         <>
         <div className="flex items-center justify-between">
           <span className="text-gray-600">实时 FPS</span>
@@ -214,6 +219,8 @@ export function CarouselPerformanceMonitor() {
           </>
         )}
         </>
+        ) : (
+        <p className="text-xs text-gray-500">首页可切换「未优化/已优化」对比轮播、懒加载、骨架屏等</p>
         )}
 
         <hr className="border-gray-100" />
@@ -222,6 +229,7 @@ export function CarouselPerformanceMonitor() {
           onClick={() => {
             const last = metrics.lastTransition;
             const text = [
+              `模式: ${isLegacy ? '未优化' : '已优化'}（懒加载、骨架屏、虚拟列表等）`,
               `路由: ${pageMetrics.currentRoute || location.pathname}`,
               `FCP: ${pageMetrics.fcp != null ? pageMetrics.fcp + 'ms' : '—'}`,
               `LCP: ${pageMetrics.lcp != null ? pageMetrics.lcp + 'ms' : '—'}`,

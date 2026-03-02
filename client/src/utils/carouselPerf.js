@@ -42,6 +42,7 @@ export const carouselPerf = {
     t.maxFps = validTimes.length > 0 ? Math.round(1000 / Math.min(...validTimes)) : 0;
     this.history.unshift({ ...t });
     if (this.history.length > 20) this.history.pop();
+    console.log('[carouselPerf] recordTransitionEnd', { durationMs: t.durationMs, isLastToFirst: t.isLastToFirst });
     this._notify?.();
   },
 

@@ -2,6 +2,7 @@ import Hotel from "../models/hotel.model.js";
 import Room from "../models/room.model.js";
 import RoomEditApplication from "../models/roomEditApplication.model.js";
 import OpenAI from "openai";
+import { searchSimilarRooms, generateRecommendationReasons } from "../services/rag.service.js";
 
 export const createRoom = async (req, res) => {
     try {
@@ -734,43 +735,81 @@ export const smartSearchRooms = async (req, res) => {
         const roomFilter = { isAvailable: true, hotel: { $in: approvedHotelIds }, status: { $ne: "pending_audit" } };
         if (roomType) roomFilter.roomType = roomType;
         const maxPricePerNight = budget > 0 && nights >= 1 ? Math.floor(budget / nights) : null;
-        let rooms;
-        if (maxPricePerNight != null && maxPricePerNight >= 0) {
-            // 预算筛选：按“折后单价”<= 预算/晚数，包含小于预算的房间（如预算500、460的房间要出现）
-            const pipeline = [
-                { $match: roomFilter },
-                {
-                    $addFields: {
-                        effectivePricePerNight: {
-                            $cond: {
-                                if: { $and: [{ $gt: ["$promoDiscount", 0] }, { $ne: ["$promoDiscount", null] }] },
-                                then: { $round: [{ $multiply: ["$pricePerNight", { $subtract: [1, { $divide: ["$promoDiscount", 100] }] }] }, 0] },
-                                else: "$pricePerNight"
+
+        const embeddingModel = process.env.AI_EMBEDDING_MODEL || "deepseek-embedding-v2";
+        const embeddingBaseURL = process.env.AI_EMBEDDING_BASE_URL || process.env.AI_API_BASE_URL || "https://api.deepseek.com/v1";
+
+        // 并行执行：MongoDB 查询 + 向量检索
+        const fetchRoomsPromise = (async () => {
+            if (maxPricePerNight != null && maxPricePerNight >= 0) {
+                const pipeline = [
+                    { $match: roomFilter },
+                    {
+                        $addFields: {
+                            effectivePricePerNight: {
+                                $cond: {
+                                    if: { $and: [{ $gt: ["$promoDiscount", 0] }, { $ne: ["$promoDiscount", null] }] },
+                                    then: { $round: [{ $multiply: ["$pricePerNight", { $subtract: [1, { $divide: ["$promoDiscount", 100] }] }] }, 0] },
+                                    else: "$pricePerNight"
+                                }
                             }
                         }
-                    }
-                },
-                { $match: { effectivePricePerNight: { $lte: maxPricePerNight } } },
-                { $sort: { pricePerNight: 1, createdAt: -1 } },
-                { $limit: 50 },
-                { $addFields: { hotelIdForLookup: { $toObjectId: "$hotel" } } },
-                { $lookup: { from: "hotels", localField: "hotelIdForLookup", foreignField: "_id", as: "hotel" } },
-                { $unwind: { path: "$hotel", preserveNullAndEmptyArrays: false } },
-                { $project: { hotelIdForLookup: 0, effectivePricePerNight: 0 } }
-            ];
-            rooms = await Room.aggregate(pipeline);
-        } else {
-            rooms = await Room.find(roomFilter)
+                    },
+                    { $match: { effectivePricePerNight: { $lte: maxPricePerNight } } },
+                    { $sort: { pricePerNight: 1, createdAt: -1 } },
+                    { $limit: 50 },
+                    { $addFields: { hotelIdForLookup: { $toObjectId: "$hotel" } } },
+                    { $lookup: { from: "hotels", localField: "hotelIdForLookup", foreignField: "_id", as: "hotel" } },
+                    { $unwind: { path: "$hotel", preserveNullAndEmptyArrays: false } },
+                    { $project: { hotelIdForLookup: 0, effectivePricePerNight: 0 } }
+                ];
+                return Room.aggregate(pipeline);
+            }
+            return Room.find(roomFilter)
                 .populate({ path: "hotel" })
                 .sort({ pricePerNight: 1, createdAt: -1 })
                 .limit(50)
                 .lean();
+        })();
+
+        const searchSimilarPromise = searchSimilarRooms(query, 50, apiKey, embeddingBaseURL, embeddingModel).catch(() => []);
+
+        const [rooms, similarRooms] = await Promise.all([fetchRoomsPromise, searchSimilarPromise]);
+
+        // 若有向量结果，取交集并按向量相似度排序；否则保持原顺序
+        let roomsFinal = rooms;
+        if (similarRooms.length > 0 && rooms.length > 0) {
+            const ordered = [];
+            similarRooms.forEach((sr) => {
+                const rid = String(sr._id);
+                const found = rooms.find((r) => String(r._id) === rid);
+                if (found) ordered.push(found);
+            });
+            if (ordered.length > 0) roomsFinal = ordered;
         }
+
+        // 最多取 24 个房型（8 批 × 3 个，供前端「换一批」轮流展示）
+        roomsFinal = roomsFinal.slice(0, 24);
+
+        // 生成推荐理由（基于房间数据增强 LLM 输出）
+        let reasonsMap = {};
+        try {
+            reasonsMap = await generateRecommendationReasons(roomsFinal, query, criteriaOut, apiKey, baseURL, model);
+        } catch (_) {
+            // 理由生成失败时不影响主流程
+        }
+
+        // 为每个房间附加推荐理由
+        const roomsWithReasons = roomsFinal.map((r) => ({
+            ...r,
+            recommendationReason: reasonsMap[String(r._id)] || null,
+        }));
+
         return res.status(200).json({
             success: true,
             criteria: criteriaOut,
-            rooms,
-            total: rooms.length,
+            rooms: roomsWithReasons,
+            total: roomsWithReasons.length,
         });
     } catch (error) {
         const errMsg = error?.message || String(error);

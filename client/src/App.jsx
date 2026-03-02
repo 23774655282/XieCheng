@@ -5,7 +5,7 @@ import NavBar from './components/NavBar';
 import Home from './pages/Home';
 import Footer from './components/Footer';
 import HotelReg from './components/HotalReg';
-import { CarouselPerformanceMonitor } from './components/CarouselPerformanceMonitor';
+import { PerfConsoleLogger } from './components/PerfConsoleLogger';
 import { PerfActivator } from './components/PerfActivator';
 import { useAppContext } from './context/AppContext';
 
@@ -56,7 +56,7 @@ function App() {
   return (
       <div className="min-h-screen flex flex-col min-w-0">
         <PerfActivator />
-        <CarouselPerformanceMonitor />
+        <PerfConsoleLogger />
         {!isOwnerPath && !isAdminPath && <NavBar/>}
         {showHotelReg && <HotelReg/>}
         <div className='w-full flex-1 min-h-0 min-w-0'>

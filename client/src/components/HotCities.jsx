@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom';
+import { usePerf } from '../context/PerfContext';
 import beijingImg from '../assets/beijing.jpg';
 import shanghaiImg from '../assets/shanghai.jpg';
 import tianjinImg from '../assets/tianjin.jpg';
@@ -11,6 +12,8 @@ const CITY_IMGS = [beijingImg, shanghaiImg, tianjinImg, chongqingImg, xiamenImg]
 
 function HotCities() {
   const navigate = useNavigate();
+  const { isUnoptimizedMode } = usePerf();
+  const imgLoading = isUnoptimizedMode ? 'eager' : 'lazy';
 
   const handleCityClick = async (city) => {
     const key = import.meta.env.VITE_AMAP_KEY;
@@ -56,7 +59,7 @@ function HotCities() {
               onClick={() => { handleCityClick(city); }}
               className="relative min-h-[260px] md:min-h-[320px] rounded-lg md:rounded-xl overflow-hidden cursor-pointer group"
             >
-              <div className="absolute inset-0 bg-cover bg-center transition-transform duration-500 ease-out group-hover:scale-110" style={{ backgroundImage: `url(${CITY_IMGS[i]})` }} />
+              <img src={CITY_IMGS[i]} alt="" loading={imgLoading} decoding="async" className="absolute inset-0 w-full h-full object-cover object-center transition-transform duration-500 ease-out group-hover:scale-110" />
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent transition-opacity group-hover:from-black/70 group-hover:via-black/10" />
               <div className="absolute inset-0 border border-white/10 rounded-lg md:rounded-xl group-hover:border-white/25 transition-colors" />
               <span className="absolute bottom-5 left-5 right-5 text-white text-xl md:text-2xl font-semibold tracking-tight drop-shadow-lg">{city}</span>
@@ -72,7 +75,7 @@ function HotCities() {
               onClick={() => { handleCityClick(city); }}
               className="relative min-h-[220px] md:min-h-[280px] rounded-lg md:rounded-xl overflow-hidden cursor-pointer group"
             >
-              <div className="absolute inset-0 bg-cover bg-center transition-transform duration-500 ease-out group-hover:scale-110" style={{ backgroundImage: `url(${CITY_IMGS[i + 2]})` }} />
+              <img src={CITY_IMGS[i + 2]} alt="" loading={imgLoading} decoding="async" className="absolute inset-0 w-full h-full object-cover object-center transition-transform duration-500 ease-out group-hover:scale-110" />
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent transition-opacity group-hover:from-black/70 group-hover:via-black/10" />
               <div className="absolute inset-0 border border-white/10 rounded-lg md:rounded-xl group-hover:border-white/25 transition-colors" />
               <span className="absolute bottom-4 left-4 right-4 text-white text-lg md:text-xl font-semibold tracking-tight drop-shadow-lg">{city}</span>

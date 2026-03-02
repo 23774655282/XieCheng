@@ -78,6 +78,11 @@ function SmartSearchResults() {
                 {room.hotel && (
                   <p className="text-sm text-gray-500 mb-2">{room.hotel.name} · {room.hotel.city}</p>
                 )}
+                {room.recommendationReason && (
+                  <p className="text-sm text-amber-600 mb-2 px-2 py-1.5 rounded-lg bg-amber-50 border border-amber-100/80">
+                    {room.recommendationReason}
+                  </p>
+                )}
                 <div className="flex flex-wrap gap-2 mb-3">
                   {(room.amenties || []).slice(0, 5).map((item, index) => (
                     <div key={index} className="flex items-center gap-1">

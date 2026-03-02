@@ -44,5 +44,8 @@ const hotelSchema = new Schema({
     starRatingCertificateUrl: { type: String, default: "" },
 }, { timestamps: true });
 
+hotelSchema.index({ status: 1 });
+hotelSchema.index({ city: 1, status: 1 });
+
 const Hotel = mongoose.model("Hotel", hotelSchema);
 export default Hotel;

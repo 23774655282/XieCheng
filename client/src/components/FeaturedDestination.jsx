@@ -1,11 +1,20 @@
 import { useAppContext } from '../context/AppContext';
 import HotelCard from './HotelCard'
+import { SkeletonFeaturedDestination } from './Skeleton'
+import { usePerf } from '../context/PerfContext'
 
 function FeaturedDestination() {
 
-  const { rooms } = useAppContext();
+  const { rooms, roomsLoading } = useAppContext();
+  const { isUnoptimizedMode } = usePerf();
 
-  return rooms.length > 0 && (
+  if (roomsLoading) {
+    if (isUnoptimizedMode) return <div className="flex flex-col items-center px-6 md:px-16 bg-slate-50 py-12 md:py-14"><p className="text-gray-500">加载中…</p></div>;
+    return <SkeletonFeaturedDestination />;
+  }
+  if (rooms.length === 0) return null;
+
+  return (
     <div className='flex flex-col items-center px-6 md:px-16 bg-slate-50 py-12 md:py-14'>
       <div className="w-full max-w-6xl mx-auto flex flex-col items-start text-left mb-12 md:mb-16">
         <h2 className="text-2xl md:text-4xl font-bold tracking-tight text-gray-800" style={{ fontFamily: 'system-ui, sans-serif' }}>
@@ -21,7 +30,7 @@ function FeaturedDestination() {
             ))}
         </div>
     </div>
-  )
+  );
 }
 
 export default FeaturedDestination

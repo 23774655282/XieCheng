@@ -22,7 +22,7 @@ const HERO_SLIDE_INTERVAL_MS = 5000;
 const MY_LOCATION_LABEL = '我的位置';
 
 function Hero() {
-    const { isPerfMode: perfMode, isLegacyCarousel: isLegacyMode } = usePerf();
+    const { isPerfMode: perfMode, isLegacyCarousel: isLegacyMode, isUnoptimizedMode } = usePerf();
     const prevSlideRef = useRef(0);
 
     const [destination, setDestination] = useState('');
@@ -271,17 +271,29 @@ function Hero() {
             backfaceVisibility: 'hidden',
           }}
         >
-          {carouselSlides.map((src, i) => (
-            <div
-              key={i}
-              className="flex-shrink-0 w-full h-full bg-cover bg-center bg-no-repeat bg-gray-900"
-              style={{
-                width: `${100 / totalSlides}%`,
-                backgroundImage: `url(${typeof src === 'string' ? src : src})`,
-                backfaceVisibility: 'hidden',
-              }}
-            />
-          ))}
+          {carouselSlides.map((src, i) => {
+            const imgSrc = typeof src === 'string' ? src : src;
+            const useEager = isUnoptimizedMode || i === 0;
+            return (
+              <div
+                key={i}
+                className="flex-shrink-0 w-full h-full relative bg-gray-900 overflow-hidden"
+                style={{
+                  width: `${100 / totalSlides}%`,
+                  backfaceVisibility: 'hidden',
+                }}
+              >
+                <img
+                  src={imgSrc}
+                  alt=""
+                  loading={useEager ? 'eager' : 'lazy'}
+                  decoding="async"
+                  fetchPriority={useEager && i === 0 ? 'high' : undefined}
+                  className="absolute inset-0 w-full h-full object-cover object-center"
+                />
+              </div>
+            );
+          })}
         </div>
       </div>
       <div className="absolute inset-0 bg-black/30 pointer-events-none" aria-hidden />

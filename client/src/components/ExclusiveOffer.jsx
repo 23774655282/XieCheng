@@ -1,9 +1,11 @@
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
+import { usePerf } from '../context/PerfContext'
 import { exclusiveOffers } from '../assets/assets'
 
 function ExclusiveOffer() {
     const navigate = useNavigate()
+    const { isUnoptimizedMode } = usePerf()
 
     return (
         <div className="flex flex-col items-center px-6 md:px-16 pt-12 md:pt-16 pb-24 md:pb-32 bg-gray-50">
@@ -21,10 +23,12 @@ function ExclusiveOffer() {
                         onClick={() => { navigate(`/rooms?promo=${items.priceOff}`); scrollTo(0, 0); }}
                         className="relative flex flex-col md:flex-row items-center justify-between gap-6 p-8 rounded-2xl shadow-lg min-h-[220px] overflow-hidden cursor-pointer group text-left w-full"
                     >
-                        <div
-                            className="absolute inset-0 bg-cover bg-center transition-transform duration-500 ease-out group-hover:scale-110"
-                            style={{ backgroundImage: `linear-gradient(rgba(0,0,0,0.45),rgba(0,0,0,0.45)), url(${items.image})` }}
-                        />
+                        <div className="absolute inset-0 overflow-hidden">
+                            <div className="absolute inset-0 transition-transform duration-500 ease-out group-hover:scale-110">
+                                <img src={items.image} alt="" loading={isUnoptimizedMode ? 'eager' : 'lazy'} decoding="async" className="absolute inset-0 w-full h-full object-cover object-center" />
+                                <div className="absolute inset-0 bg-black/45" aria-hidden />
+                            </div>
+                        </div>
                         <div className="relative z-10 flex flex-col items-center md:items-start">
                             <p className="text-3xl font-bold text-white drop-shadow mb-2">{items.priceOff}% 优惠</p>
                             <p className="text-xl font-semibold text-white drop-shadow mb-1">{items.title}</p>
