@@ -1,9 +1,5 @@
-import { useEffect, useState, useRef, useCallback } from "react";
-import { useVirtualizer } from "@tanstack/react-virtual";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { addDays, differenceInCalendarDays } from "date-fns";
-import { usePerf } from "../context/PerfContext";
-import { VirtualListPerformanceMonitor } from "../components/VirtualListPerformanceMonitor";
-import { virtualListPerf } from "../utils/virtualListPerf";
 import DatePicker from "react-datepicker";
 import { flip, offset } from "@floating-ui/react";
 import { zhCN } from "date-fns/locale/zh-CN";
@@ -37,13 +33,12 @@ const facilityLabelMap = {
     'Airport Shuttle': '机场接送',
 };
 
-const ROOM_CARD_HEIGHT = 220; // 卡片高度 + 间距
 const ROOMS_PER_PAGE = 10;
 
-/** 酒店详情页 - 房型列表使用虚拟列表优化 */
+/** 酒店详情页 - 房型列表分页展示，每页最多 10 条 */
 function HotelDetail() {
     const { id } = useParams();
-    const [displayedCount, setDisplayedCount] = useState(ROOMS_PER_PAGE);
+    const [currentPage, setCurrentPage] = useState(1);
     const navigate = useNavigate();
     const { axios, getToken, isAuthenticated, userInfo, setUserInfo, fetchUser, role } = useAppContext();
     const isFavorited = isAuthenticated && userInfo?.favoriteHotels?.some((hid) => String(hid) === id);
@@ -54,10 +49,7 @@ function HotelDetail() {
     const [lightboxImage, setLightboxImage] = useState(null);
     const [loading, setLoading] = useState(true);
     const [showOwnHotelModal, setShowOwnHotelModal] = useState(false);
-    const parentRef = useRef(null);
     const roomsSectionRef = useRef(null);
-    const listRenderStartRef = useRef(null);
-    const { isPerfMode: perfMode, isLegacyList: isLegacyList } = usePerf();
     const [roomAvailability, setRoomAvailability] = useState({});
     const [loadingRoomsSection, setLoadingRoomsSection] = useState(false);
     const [favoriteLoading, setFavoriteLoading] = useState(false);
@@ -78,7 +70,6 @@ function HotelDetail() {
             try {
                 const { data } = await axios.get(`/api/hotels/public/${id}`);
                 if (data.success) {
-                    if (perfMode) listRenderStartRef.current = performance.now();
                     setHotel(data.hotel);
                     setRooms(data.rooms || []);
                 }
@@ -88,7 +79,7 @@ function HotelDetail() {
                 setLoading(false);
             }
         })();
-    }, [id, perfMode]);
+    }, [id]);
 
     useEffect(() => {
         if (!hotel || role !== 'merchant' || !userInfo?._id) return;
@@ -96,29 +87,19 @@ function HotelDetail() {
         if (isOwn) setShowOwnHotelModal(true);
     }, [hotel, role, userInfo]);
 
-    const virtualizer = useVirtualizer({
-        count: rooms.length,
-        getScrollElement: () => parentRef.current,
-        estimateSize: () => ROOM_CARD_HEIGHT,
-        overscan: 5,
-    });
+    const totalPages = Math.max(1, Math.ceil(rooms.length / ROOMS_PER_PAGE));
+    const roomsToShow = useMemo(() => {
+        const start = (currentPage - 1) * ROOMS_PER_PAGE;
+        return rooms.slice(start, start + ROOMS_PER_PAGE);
+    }, [rooms, currentPage]);
 
     useEffect(() => {
-        if (!perfMode || rooms.length === 0) return;
-        const start = listRenderStartRef.current ?? performance.now();
-        requestAnimationFrame(() => {
-            const rendered = isLegacyList ? rooms.length : virtualizer.getVirtualItems().length;
-            virtualListPerf.isVirtual = !isLegacyList;
-            virtualListPerf.recordFirstRender(rooms.length, rendered, start);
-        });
-    }, [perfMode, rooms.length, isLegacyList]);
+        if (currentPage > totalPages) setCurrentPage(1);
+    }, [currentPage, totalPages]);
 
     useEffect(() => {
-        if (perfMode) {
-            listRenderStartRef.current = performance.now();
-            virtualListPerf.reset();
-        }
-    }, [perfMode, isLegacyList]);
+        setCurrentPage(1);
+    }, [id]);
 
     // 从 URL 同步搜索条件
     useEffect(() => {
@@ -158,7 +139,6 @@ function HotelDetail() {
                 if (cancelled) return;
                 const roomList = data.success ? (data.rooms || []) : [];
                 if (data.success) {
-                    if (perfMode) listRenderStartRef.current = performance.now();
                     setHotel(data.hotel);
                     setRooms(roomList);
                 }
@@ -191,7 +171,7 @@ function HotelDetail() {
                 if (!cancelled) setLoadingRoomsSection(false);
             });
         return () => { cancelled = true; };
-    }, [checkIn, checkOut, adults, children, roomCount, id, axios, perfMode]);
+    }, [checkIn, checkOut, adults, children, roomCount, id, axios]);
 
     async function toggleFavorite(e) {
         e.stopPropagation();
@@ -489,9 +469,8 @@ function HotelDetail() {
             {/* 用户评价 */}
             <HotelReviews hotelId={id} />
 
-            {/* 房型价格列表：虚拟列表或普通列表 */}
+            {/* 房型价格列表：分页展示，每页最多 10 条 */}
             <div ref={roomsSectionRef}>
-            {perfMode && <VirtualListPerformanceMonitor itemLabel="房间" />}
             <h2 className="text-lg font-bold mb-4">
                 房型与价格{rooms.length > 0 ? `（共 ${rooms.length} 间）` : ""}
                 {loadingRoomsSection && <span className="ml-2 text-sm font-normal text-gray-500">正在更新…</span>}
@@ -500,15 +479,8 @@ function HotelDetail() {
                 {rooms.length === 0 ? (
                     <p className="text-gray-500">暂无房型</p>
                 ) : (
-                    <div
-                        ref={parentRef}
-                        data-room-list-scroll
-                        className="overflow-y-auto rounded-xl"
-                        style={{ maxHeight: "min(70vh, 600px)" }}
-                    >
-                        {isLegacyList ? (
-                            <div className="space-y-4">
-                                {rooms.map((room) => {
+                    <div className="space-y-4 rounded-xl">
+                        {roomsToShow.map((room) => {
                                     const isUnavailable = checkIn && checkOut && roomAvailability[room._id] === false;
                                     const isAdmin = role === 'admin';
                                     const isOwnHotel = role === 'merchant' && hotel?.owner && userInfo?._id && String(hotel.owner) === String(userInfo._id);
@@ -577,97 +549,29 @@ function HotelDetail() {
                                         </div>
                                     );
                                 })}
-                            </div>
-                        ) : (
-                        <div
-                            style={{
-                                height: `${virtualizer.getTotalSize()}px`,
-                                width: "100%",
-                                position: "relative",
-                            }}
+                    </div>
+                )}
+                {rooms.length > ROOMS_PER_PAGE && (
+                    <div className="mt-4 flex items-center justify-center gap-2 flex-wrap">
+                        <button
+                            type="button"
+                            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                            disabled={currentPage <= 1}
+                            className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
                         >
-                            {virtualizer.getVirtualItems().map((virtualRow) => {
-                                const room = rooms[virtualRow.index];
-                            const isUnavailable = checkIn && checkOut && roomAvailability[room._id] === false;
-                            const isAdmin = role === 'admin';
-                            const isOwnHotel = role === 'merchant' && hotel?.owner && userInfo?._id && String(hotel.owner) === String(userInfo._id);
-                            const canBook = !isAdmin && !isOwnHotel && !isUnavailable;
-                            const handleCardClick = () => {
-                                if (isAdmin) { toast('管理员不能预订酒店'); return; }
-                                if (isOwnHotel) { toast('不能预定自己名下的酒店哦'); return; }
-                                if (isUnavailable) return;
-                                const params = new URLSearchParams();
-                                if (checkIn) params.set("checkIn", checkIn);
-                                if (checkOut) params.set("checkOut", checkOut);
-                                params.set("adults", String(adults));
-                                params.set("children", String(children));
-                                params.set("rooms", String(roomCount));
-                                const q = params.toString();
-                                navigate(q ? `/rooms/${room._id}?${q}` : `/rooms/${room._id}`);
-                            };
-                            return (
-                            <div
-                                key={room._id}
-                                data-index={virtualRow.index}
-                                ref={virtualizer.measureElement}
-                                role="button"
-                                tabIndex={0}
-                                onClick={handleCardClick}
-                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleCardClick(); } }}
-                                className={`bg-white rounded-xl p-4 flex flex-col md:flex-row md:items-center gap-4 transition-transform duration-200 hover:scale-[1.02] cursor-pointer ${isUnavailable ? "opacity-75" : ""}`}
-                                style={{
-                                    position: "absolute",
-                                    top: 0,
-                                    left: 0,
-                                    width: "100%",
-                                    transform: `translateY(${virtualRow.start}px)`,
-                                    boxShadow: '0 0 20px rgba(0,0,0,0.12)',
-                                    paddingBottom: "1rem",
-                                }}
-                            >
-                                <div className="relative w-full md:w-48 h-32 flex-shrink-0">
-                                    {room.images?.[0] && (
-                                        <img src={room.images[0]} alt="" className="w-full h-full object-cover rounded-lg" loading="lazy" decoding="async" />
-                                    )}
-                                    {isUnavailable && (
-                                        <div className="absolute inset-0 flex items-center justify-center bg-white/70 rounded-lg">
-                                            <span className="bg-gray-700/90 text-white px-3 py-1.5 rounded-lg text-sm font-medium">已订完</span>
-                                        </div>
-                                    )}
-                                </div>
-                                <div className="flex-1">
-                                    <p className="font-semibold">{getRoomTypeLabel(room.roomType)}</p>
-                                    <div className="flex flex-wrap gap-2 mt-2">
-{room.amenties?.map((a, i) => (
-                                        <span key={i} className="text-xs text-gray-600">{facilityLabelMap[a] || a}</span>
-                                    ))}
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <span className="text-xl font-bold">
-                                        {(room.promoDiscount != null && room.promoDiscount > 0)
-                                            ? Math.round(room.pricePerNight * (1 - room.promoDiscount / 100))
-                                            : room.pricePerNight} 元
-                                    </span>
-                                    <span className="text-gray-500 text-sm">/晚</span>
-                                    {(room.promoDiscount != null && room.promoDiscount > 0) && (
-                                        <span className="text-sm text-amber-600">已享{room.promoDiscount}%优惠</span>
-                                    )}
-                                    <button
-                                        type="button"
-                                        onClick={(e) => { e.stopPropagation(); handleCardClick(); }}
-                                        className={`ml-2 px-4 py-2 rounded text-sm font-medium ${!canBook ? "bg-gray-400 text-gray-200 cursor-not-allowed" : "bg-black text-white hover:bg-gray-800 cursor-pointer"}`}
-                                        title={isAdmin ? '管理员不能预订酒店' : isOwnHotel ? '不能预订自己的酒店' : undefined}
-                                        disabled={!canBook}
-                                    >
-                                        预订
-                                    </button>
-                                </div>
-                            </div>
-                        );
-                            })}
-                        </div>
-                        )}
+                            上一页
+                        </button>
+                        <span className="text-sm text-gray-600">
+                            第 {currentPage} / {totalPages} 页，共 {rooms.length} 间房型
+                        </span>
+                        <button
+                            type="button"
+                            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                            disabled={currentPage >= totalPages}
+                            className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                        >
+                            下一页
+                        </button>
                     </div>
                 )}
             </div>

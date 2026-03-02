@@ -10,7 +10,6 @@ import toast from 'react-hot-toast';
 import { formatDateShort, parseLocalDate } from '../utils/dateUtils';
 import { isCity } from '../utils/destinationSearch';
 import { usePerf } from '../context/PerfContext';
-import { VirtualListPerformanceMonitor } from '../components/VirtualListPerformanceMonitor';
 import { virtualListPerf } from '../utils/virtualListPerf';
 import { SkeletonRoomGrid, SkeletonHotelList } from '../components/Skeleton';
 
@@ -125,6 +124,8 @@ function AllRooms() {
   const [nextPage, setNextPage] = useState(2);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [legacyHotelListReady, setLegacyHotelListReady] = useState(false);
+  const [legacyAllRooms, setLegacyAllRooms] = useState([]);
   const bottomRef = useRef(null);
   const promoListParentRef = useRef(null);
   const mobileFilterRef = useRef(null);
@@ -136,7 +137,7 @@ function AllRooms() {
   const [hotelReviewStats, setHotelReviewStats] = useState({}); // { hotelId: { avgRating, total } }
   const [cityOptions, setCityOptions] = useState([]);
 
-  const roomsSource = promo ? promoRooms : (destination ? localRooms : contextRooms);
+  const roomsSource = promo ? promoRooms : (destination ? localRooms : (isLegacyList && !promo && !destination ? legacyAllRooms : contextRooms));
   const hasMoreSource = promo ? promoHasMore : (destination ? localHasMore : hasMore);
   const loadingMoreSource = promo ? loadingPromo : (destination ? loadingSearch : loadingMore);
   
@@ -179,8 +180,8 @@ function AllRooms() {
   }, [axios]);
 
   useEffect(() => {
-    if (!destination) return;
-    if (perfMode && !isLegacyList) listRenderStartRef.current = performance.now();
+    if (!destination || isLegacyList) return;
+    if (perfMode) listRenderStartRef.current = performance.now();
     setLoadingSearch(true);
     axios.get(`/api/rooms/?page=1&limit=12&${roomsQueryParams}`)
       .then(({ data }) => {
@@ -194,7 +195,7 @@ function AllRooms() {
   }, [roomsQueryParams, destination, perfMode, isLegacyList]);
 
   useEffect(() => {
-    if (!promo) return;
+    if (!promo || isLegacyList) return;
     axios.get(`/api/rooms/?page=1&limit=6&promo=${encodeURIComponent(promo)}`)
       .then(({ data }) => {
         if (data.success) {
@@ -205,7 +206,7 @@ function AllRooms() {
         }
       })
       .finally(() => setLoadingPromo(false));
-  }, [promo, axios, perfMode]);
+  }, [promo, isLegacyList, axios, perfMode]);
 
   const loadMore = useCallback(async () => {
     if (loadingMoreSource || !hasMoreSource) return;
@@ -704,11 +705,32 @@ function AllRooms() {
     if (contextRooms.length === 0) listRenderStartRef.current = performance.now();
   }, [perfMode, promo, destination, contextRooms.length]);
 
-  // 酒店列表 legacy 模式：一次性拉取全部酒店（无 destination 用 context，有 destination 用 localRooms API）
+  // 酒店列表 legacy 模式：一次性拉取全部酒店（无 destination 用 context，有 destination 用 localRooms API，promo 用 promoRooms API）
   useEffect(() => {
-    if (!isLegacyList || promo) return;
+    if (!isLegacyList) return;
     let cancelled = false;
-    if (destination) {
+    if (promo) {
+      setLoadingPromo(true);
+      setPromoHasMore(false);
+      if (perfMode) listRenderStartRef.current = performance.now();
+      (async () => {
+        let page = 1;
+        let hasMore = true;
+        while (hasMore && !cancelled) {
+          const { data } = await axios.get(`/api/rooms/?page=${page}&limit=12&promo=${encodeURIComponent(promo)}`);
+          if (!data?.success) break;
+          if (page === 1) setPromoRooms(data.rooms || []);
+          else setPromoRooms((prev) => [...prev, ...(data.rooms || [])]);
+          hasMore = data.hasMore ?? false;
+          page++;
+        }
+        if (!cancelled) {
+          setPromoNextPage(page);
+          setLoadingPromo(false);
+        }
+      })();
+    } else if (destination) {
+      setLoadingSearch(true);
       setLocalHasMore(false);
       if (perfMode) listRenderStartRef.current = performance.now();
       (async () => {
@@ -722,24 +744,34 @@ function AllRooms() {
           hasMore = data.hasMore ?? false;
           page++;
         }
-        if (!cancelled) setLocalNextPage(page);
+        if (!cancelled) {
+          setLocalNextPage(page);
+          setLoadingSearch(false);
+        }
       })();
     } else {
+      setLegacyHotelListReady(false);
       setHasMore(false);
       if (perfMode) listRenderStartRef.current = performance.now();
       (async () => {
         let page = 1;
         let hasMore = true;
         while (hasMore && !cancelled) {
-          const r = await fetchRooms(page);
-          hasMore = r?.hasMore ?? false;
+          const { data } = await axios.get(`/api/rooms/?page=${page}&limit=12&${roomsQueryParams}`);
+          if (!data?.success) break;
+          if (page === 1) setLegacyAllRooms(data.rooms || []);
+          else setLegacyAllRooms((prev) => [...prev, ...(data.rooms || [])]);
+          hasMore = data.hasMore ?? false;
           page++;
         }
-        if (!cancelled) setNextPage(page);
+        if (!cancelled) {
+          setNextPage(page);
+          setLegacyHotelListReady(true);
+        }
       })();
     }
     return () => { cancelled = true; };
-  }, [isLegacyList, promo, destination, roomsQueryParams, perfMode, fetchRooms, axios]);
+  }, [isLegacyList, promo, destination, roomsQueryParams, perfMode, axios]);
 
   const prevLegacyRef = useRef(isLegacyList);
   useEffect(() => {
@@ -1081,18 +1113,28 @@ function AllRooms() {
         </aside>
         )}
         <div className="flex flex-col gap-8 flex-1 min-w-0 order-1 lg:order-2">
-          {perfMode && isPromoMode && <VirtualListPerformanceMonitor itemLabel="房间" />}
-          {perfMode && !isPromoMode && <VirtualListPerformanceMonitor itemLabel="酒店" modeType="lazy" useWindowScroll />}
           {isPromoMode && loadingPromo && promoRooms.length === 0 ? (
+            isLegacyList ? (
+              <p className="text-gray-500 py-8">加载优惠房型中…</p>
+            ) : (
             <div className="rounded-2xl border border-gray-100 bg-gradient-to-b from-gray-50/80 to-white shadow-[0_2px_12px_rgba(0,0,0,0.06)] overflow-hidden" style={{ maxHeight: 'min(80vh, 880px)' }}>
               <SkeletonRoomGrid count={6} />
             </div>
+            )
           ) : destination && loadingSearch && localRooms.length === 0 ? (
+            isLegacyList ? (
+              <p className="text-gray-500 py-8">正在搜索「{destination}」…</p>
+            ) : (
             <div className="rounded-2xl border border-gray-100 bg-gradient-to-b from-gray-50/80 to-white shadow-[0_2px_12px_rgba(0,0,0,0.06)] overflow-hidden" style={{ maxHeight: 'min(80vh, 880px)' }}>
               <SkeletonRoomGrid count={6} />
             </div>
-          ) : !promo && !destination && roomsLoading && contextRooms.length === 0 ? (
+            )
+          ) : !promo && !destination && (isLegacyList ? !legacyHotelListReady : (roomsLoading && contextRooms.length === 0)) ? (
+            isLegacyList ? (
+              <p className="text-gray-500 py-8">加载中…</p>
+            ) : (
             <SkeletonHotelList count={4} />
+            )
           ) : filteredRooms.length === 0 ? (
             <p className="text-gray-500">
               {isPromoMode ? '暂无该优惠档位的房型。' : destination ? `未找到「${destination}」相关房间，请尝试其他目的地或清除筛选。` : '没有匹配筛选条件的房间。'}
@@ -1122,7 +1164,7 @@ function AllRooms() {
                               alt="房间"
                               title="查看房间详情"
                               className="w-full h-44 object-cover cursor-pointer group-hover:scale-105 transition-transform duration-500"
-                              loading="lazy"
+                              loading={isLegacyList ? 'eager' : 'lazy'}
                               decoding="async"
                             />
                             {isUnavailable && (
@@ -1207,7 +1249,7 @@ function AllRooms() {
                           alt="房间"
                           title="查看房间详情"
                           className="w-full h-44 object-cover cursor-pointer group-hover:scale-105 transition-transform duration-500"
-                          loading="lazy"
+                          loading={isLegacyList ? 'eager' : 'lazy'}
                           decoding="async"
                         />
                         {isUnavailable && (
@@ -1378,7 +1420,7 @@ function AllRooms() {
                                           if (canBookRoom(room) && !isUnavailable) { navigate(appendSearch(`/rooms/${room._id}`)); scrollTo(0, 0); }
                                         }}
                                       >
-                                        <img src={room.images?.[0]} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" loading="lazy" decoding="async" />
+                                        <img src={room.images?.[0]} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" loading={isLegacyList ? 'eager' : 'lazy'} decoding="async" />
                                         {isUnavailable && (
                                           <div className="absolute inset-0 bg-white/80 flex items-center justify-center">
                                             <span className="bg-gray-700/90 text-white px-2 py-1 rounded text-xs font-medium">已订完</span>

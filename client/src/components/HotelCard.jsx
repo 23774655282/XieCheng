@@ -1,8 +1,10 @@
 import { Link } from 'react-router-dom'
 import { assets } from '../assets/assets.js'
 import { FaLocationArrow } from 'react-icons/fa'
+import { usePerf } from '../context/PerfContext'
 
 function HotelCard({ room, idx }) {
+  const { isUnoptimizedMode } = usePerf();
   return (
     <Link
       to={`/rooms/${room._id}`}
@@ -14,7 +16,7 @@ function HotelCard({ room, idx }) {
           src={room.images[0]}
           alt={room.hotel.name}
           className="w-full h-44 object-cover transition-transform duration-500 ease-out group-hover:scale-110"
-          loading="lazy"
+          loading={isUnoptimizedMode ? 'eager' : 'lazy'}
           decoding="async"
         />
       </div>

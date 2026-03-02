@@ -1,12 +1,17 @@
 import { useAppContext } from '../context/AppContext';
 import HotelCard from './HotelCard'
 import { SkeletonFeaturedDestination } from './Skeleton'
+import { usePerf } from '../context/PerfContext'
 
 function FeaturedDestination() {
 
   const { rooms, roomsLoading } = useAppContext();
+  const { isUnoptimizedMode } = usePerf();
 
-  if (roomsLoading) return <SkeletonFeaturedDestination />;
+  if (roomsLoading) {
+    if (isUnoptimizedMode) return <div className="flex flex-col items-center px-6 md:px-16 bg-slate-50 py-12 md:py-14"><p className="text-gray-500">加载中…</p></div>;
+    return <SkeletonFeaturedDestination />;
+  }
   if (rooms.length === 0) return null;
 
   return (

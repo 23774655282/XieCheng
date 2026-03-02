@@ -30,6 +30,7 @@ export const virtualListPerf = {
     this.totalCount = totalCount;
     this.renderedRows = renderedRows;
     this.firstRenderMs = Math.round(performance.now() - startTime);
+    console.log('[virtualListPerf] recordFirstRender', { totalCount, renderedRows, firstRenderMs: this.firstRenderMs, isVirtual: this.isVirtual });
     this._notify?.();
   },
 

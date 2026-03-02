@@ -22,7 +22,7 @@ const HERO_SLIDE_INTERVAL_MS = 5000;
 const MY_LOCATION_LABEL = '我的位置';
 
 function Hero() {
-    const { isPerfMode: perfMode, isLegacyCarousel: isLegacyMode } = usePerf();
+    const { isPerfMode: perfMode, isLegacyCarousel: isLegacyMode, isUnoptimizedMode } = usePerf();
     const prevSlideRef = useRef(0);
 
     const [destination, setDestination] = useState('');
@@ -273,7 +273,7 @@ function Hero() {
         >
           {carouselSlides.map((src, i) => {
             const imgSrc = typeof src === 'string' ? src : src;
-            const isFirstSlide = i === 0;
+            const useEager = isUnoptimizedMode || i === 0;
             return (
               <div
                 key={i}
@@ -286,9 +286,9 @@ function Hero() {
                 <img
                   src={imgSrc}
                   alt=""
-                  loading={isFirstSlide ? 'eager' : 'lazy'}
+                  loading={useEager ? 'eager' : 'lazy'}
                   decoding="async"
-                  fetchPriority={isFirstSlide ? 'high' : undefined}
+                  fetchPriority={useEager && i === 0 ? 'high' : undefined}
                   className="absolute inset-0 w-full h-full object-cover object-center"
                 />
               </div>

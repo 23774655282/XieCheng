@@ -1,29 +1,21 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useCallback } from 'react';
 
 const STORAGE_KEY = 'perf_monitor';
-const LEGACY_CAROUSEL_KEY = 'perf_legacy_carousel';
-const LEGACY_LIST_KEY = 'perf_legacy_list';
+const UNOPTIMIZED_KEY = 'perf_unoptimized';
 
 const PerfContext = createContext(null);
 
 export function PerfProvider({ children }) {
   const [isPerfMode, setPerfModeState] = useState(() => {
     try {
-      return localStorage.getItem(STORAGE_KEY) === '1';
+      return localStorage.getItem(STORAGE_KEY) !== '0';
     } catch {
-      return false;
+      return true;
     }
   });
-  const [isLegacyCarousel, setLegacyCarousel] = useState(() => {
+  const [isUnoptimizedMode, setUnoptimizedMode] = useState(() => {
     try {
-      return localStorage.getItem(LEGACY_CAROUSEL_KEY) === '1';
-    } catch {
-      return false;
-    }
-  });
-  const [isLegacyList, setLegacyList] = useState(() => {
-    try {
-      return localStorage.getItem(LEGACY_LIST_KEY) === '1';
+      return localStorage.getItem(UNOPTIMIZED_KEY) === '1';
     } catch {
       return false;
     }
@@ -36,21 +28,11 @@ export function PerfProvider({ children }) {
     } catch {}
   }, []);
 
-  const toggleLegacyCarousel = useCallback(() => {
-    setLegacyCarousel((prev) => {
+  const toggleUnoptimizedMode = useCallback(() => {
+    setUnoptimizedMode((prev) => {
       const next = !prev;
       try {
-        localStorage.setItem(LEGACY_CAROUSEL_KEY, next ? '1' : '0');
-      } catch {}
-      return next;
-    });
-  }, []);
-
-  const toggleLegacyList = useCallback(() => {
-    setLegacyList((prev) => {
-      const next = !prev;
-      try {
-        localStorage.setItem(LEGACY_LIST_KEY, next ? '1' : '0');
+        localStorage.setItem(UNOPTIMIZED_KEY, next ? '1' : '0');
       } catch {}
       return next;
     });
@@ -61,10 +43,12 @@ export function PerfProvider({ children }) {
       value={{
         isPerfMode,
         setPerfMode,
-        isLegacyCarousel,
-        toggleLegacyCarousel,
-        isLegacyList,
-        toggleLegacyList,
+        isUnoptimizedMode,
+        toggleUnoptimizedMode,
+        isLegacyCarousel: isUnoptimizedMode,
+        isLegacyList: isUnoptimizedMode,
+        toggleLegacyList: toggleUnoptimizedMode,
+        toggleLegacyCarousel: toggleUnoptimizedMode,
       }}
     >
       {children}
@@ -77,9 +61,11 @@ export function usePerf() {
   return ctx || {
     isPerfMode: false,
     setPerfMode: () => {},
+    isUnoptimizedMode: false,
+    toggleUnoptimizedMode: () => {},
     isLegacyCarousel: false,
-    toggleLegacyCarousel: () => {},
     isLegacyList: false,
     toggleLegacyList: () => {},
+    toggleLegacyCarousel: () => {},
   };
 }
