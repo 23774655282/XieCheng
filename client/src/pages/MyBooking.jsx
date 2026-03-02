@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import Title from '../components/Title';
 import { FaLocationArrow } from 'react-icons/fa';
 import { CiUser } from 'react-icons/ci';
@@ -64,6 +65,139 @@ function AddressWithTooltip({ address, className = '' }) {
     );
 }
 
+/** 单个订单卡片（供虚拟列表使用） */
+function BookingCard({
+    booking,
+    onPayment,
+    onCancel,
+    onReview,
+    onRefund,
+    onPlatformRefund,
+}) {
+    const room = booking.room;
+    const hotel = booking.hotel;
+    const imgSrc = room?.images?.[0] || '';
+    if (!room || !hotel) {
+        return (
+            <div className="bg-white rounded-2xl shadow p-5 text-gray-500 text-sm">
+                订单数据不完整，可能酒店或房型已下架
+            </div>
+        );
+    }
+    const payLabel = (booking.refundStatus === 'rejected' && booking.refundPlatformReviewRequested) ? '客服介入中'
+        : booking.refundStatus === 'approved' ? '已退款'
+        : booking.refundStatus === 'pending' ? '退款中'
+        : booking.status === 'cancelled' ? '已取消'
+        : booking.isCompleted ? '已完成'
+        : booking.isPaid ? '已支付' : '待支付';
+    const payClass = payLabel === '客服介入中' ? 'bg-purple-100 text-purple-700'
+        : payLabel === '已退款' ? 'bg-slate-100 text-slate-600'
+        : payLabel === '退款中' ? 'bg-amber-100 text-amber-700'
+        : payLabel === '已取消' ? 'bg-gray-100 text-gray-600'
+        : payLabel === '已完成' ? 'bg-emerald-100 text-emerald-700'
+        : payLabel === '已支付' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600';
+    const suffix = payLabel === '已完成' && booking.hasReview ? ' · 已评价' : '';
+    const countdown = payLabel === '待支付' ? getPaymentCountdownSeconds(booking) : 0;
+
+    return (
+        <div className="bg-white rounded-2xl shadow-md hover:shadow-lg transition-shadow p-6 flex flex-col lg:grid lg:grid-cols-12 lg:gap-x-4 lg:gap-y-0 gap-5">
+            {/* 酒店 col-span-5 - 与表头对齐 */}
+            <div className="lg:col-span-5 flex gap-4 min-w-0">
+                <div className="flex flex-col shrink-0">
+                    {imgSrc ? (
+                        <img src={imgSrc} alt="房间" className="w-32 h-24 object-cover rounded-lg shadow-sm" />
+                    ) : (
+                        <div className="w-32 h-24 bg-gray-200 rounded-lg flex items-center justify-center text-gray-400 text-xs">暂无图</div>
+                    )}
+                    <div className="flex items-start gap-2 mt-3 w-32 min-w-0">
+                        <FaLocationArrow size={14} className="text-gray-500 shrink-0 mt-0.5" />
+                        <AddressWithTooltip
+                            address={[hotel.address, hotel.doorNumber].filter(Boolean).join(' ') || undefined}
+                            className="text-sm text-gray-600"
+                        />
+                    </div>
+                </div>
+                <div className="flex flex-col justify-between min-w-0 space-y-2">
+                    <p className="text-lg font-semibold text-gray-900 leading-relaxed">
+                        {hotel.name}
+                        <span className="text-sm font-normal text-gray-500 block mt-0.5">— {getRoomTypeLabel(room.roomType)}</span>
+                    </p>
+                    <div className="flex items-center text-sm gap-2 text-gray-600">
+                        <CiUser size={16} className="text-gray-500 shrink-0" />
+                        <span>{booking.guests} 人</span>
+                    </div>
+                    <p className="text-sm text-gray-700 pt-1">
+                        总价：<span className="font-semibold text-gray-900">{booking.totalPrice} 元</span>
+                    </p>
+                </div>
+            </div>
+            {/* 日期 col-span-3 */}
+            <div className="lg:col-span-3 flex flex-col justify-between gap-4 text-sm text-gray-700 space-y-3">
+                <div>
+                    <p className="font-semibold text-gray-800 mb-1.5">入住</p>
+                    <p className="text-gray-600">{booking.checkInDate ? new Date(booking.checkInDate).toLocaleDateString('zh-CN') : '—'}</p>
+                </div>
+                <div>
+                    <p className="font-semibold text-gray-800 mb-1.5">退房</p>
+                    <p className="text-gray-600">{booking.checkOutDate ? new Date(booking.checkOutDate).toLocaleDateString('zh-CN') : '—'}</p>
+                </div>
+            </div>
+            {/* 支付/订单状态 col-span-4 */}
+            <div className="lg:col-span-4 flex flex-col justify-between items-start lg:items-end gap-4">
+                <div className="flex flex-col items-end gap-1.5 w-full lg:w-auto">
+                    <span className={`px-3 py-1.5 rounded-full text-sm font-medium ${payClass}`}>
+                        {payLabel}{suffix}
+                    </span>
+                    {payLabel === '待支付' && countdown > 0 && (
+                        <span className="text-xs text-amber-600 font-medium w-full text-right whitespace-nowrap">
+                            剩余 {formatCountdown(countdown)} 未支付将自动取消
+                        </span>
+                    )}
+                </div>
+                {booking.status !== 'cancelled' && !booking.isPaid && (
+                    <button onClick={() => onPayment(booking._id)} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm shadow transition">
+                        立即支付
+                    </button>
+                )}
+                {booking.status !== 'cancelled' && !booking.isCompleted && (
+                    <button type="button" onClick={() => onCancel({ open: true, bookingId: booking._id, reason: '', otherText: '' })} className="bg-black hover:bg-gray-700 text-white px-4 py-2 rounded-lg text-sm shadow transition">
+                        取消订单
+                    </button>
+                )}
+                {booking.isCompleted && (
+                    booking.hasReview ? (
+                        <span className="mt-2 inline-block bg-amber-100 text-amber-600 px-4 py-2 rounded-lg text-sm cursor-not-allowed">已评价</span>
+                    ) : (
+                        <button type="button" onClick={() => onReview({ open: true, bookingId: booking._id, hotelId: hotel._id || hotel, hotelName: hotel.name || '', })} className="mt-2 bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg text-sm shadow transition">
+                            去评价
+                        </button>
+                    )
+                )}
+                {booking.isCompleted && !booking.refundRequested && booking.refundStatus !== 'approved' && (
+                    <button type="button" onClick={() => onRefund({ open: true, bookingId: booking._id, reason: '', supplement: '', isSupplement: false })} className="mt-2 bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg text-sm shadow transition">
+                        申请退款
+                    </button>
+                )}
+                {booking.isCompleted && booking.refundStatus === 'pending' && (
+                    <button type="button" onClick={() => onRefund({ open: true, bookingId: booking._id, reason: booking.refundReason || '', supplement: '', isSupplement: true })} className="mt-2 bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg text-sm shadow transition">
+                        退款中
+                    </button>
+                )}
+                {booking.isCompleted && booking.refundStatus === 'rejected' && (
+                    <>
+                        <span className="mt-2 inline-flex items-center px-3 py-1 rounded-full bg-red-50 text-red-700 text-sm font-medium">已被拒</span>
+                        {!booking.refundPlatformReviewRequested && (
+                            <button type="button" onClick={() => onPlatformRefund({ open: true, bookingId: booking._id, reason: '' })} className="mt-2 bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg text-sm shadow transition">
+                                选择客服介入
+                            </button>
+                        )}
+                    </>
+                )}
+            </div>
+        </div>
+    );
+}
+
 function MyBooking({ embedded = false }) {
 
     const { axios, getToken, user, role, merchantApplicationStatus, navigate } = useAppContext();
@@ -93,6 +227,14 @@ function MyBooking({ embedded = false }) {
     const starContainerRef = useRef(null);
     const pollRef = useRef(null);
     const [countdownTick, setCountdownTick] = useState(0);
+    const ordersScrollRef = useRef(null);
+
+    const ordersVirtualizer = useVirtualizer({
+        count: bookings.length,
+        getScrollElement: () => ordersScrollRef.current,
+        estimateSize: () => 260,
+        overscan: 3,
+    });
 
     function getStarRatingFromEvent(e) {
         const el = starContainerRef.current;
@@ -411,185 +553,52 @@ function MyBooking({ embedded = false }) {
         </>
     )}
 
-    {/* Table Headers */}
-    <div className="hidden lg:grid grid-cols-12 gap-4 text-sm font-semibold text-gray-500 uppercase border-b pb-4">
+    {/* Table Headers - 与卡片内容同 grid 对齐 */}
+    <div className="hidden lg:grid grid-cols-12 gap-x-4 px-6 text-sm font-semibold text-gray-500 uppercase border-b pb-4">
         <div className="col-span-5">酒店</div>
         <div className="col-span-3">日期</div>
         <div className="col-span-2">支付</div>
         <div className="col-span-2">订单状态</div>
     </div>
 
-    <div className="space-y-8 mt-8">
-        {bookings.length === 0 && (
+    <div className="mt-8">
+        {bookings.length === 0 ? (
             <p className="text-gray-500 text-center py-8">暂无订单</p>
-        )}
-        {bookings.map((booking) => {
-            const room = booking.room;
-            const hotel = booking.hotel;
-            const imgSrc = room?.images?.[0] || '';
-            if (!room || !hotel) {
-                return (
-                    <div key={booking._id} className="bg-white rounded-2xl shadow p-5 text-gray-500 text-sm">
-                        订单数据不完整，可能酒店或房型已下架
-                    </div>
-                );
-            }
-            return (
+        ) : (
             <div
-                key={booking._id}
-                className="bg-white rounded-2xl shadow-md hover:shadow-lg transition-shadow p-5 flex flex-col lg:flex-row gap-6"
+                ref={ordersScrollRef}
+                className="max-h-[60vh] overflow-y-auto overflow-x-hidden rounded-lg"
             >
-                {/* Hotel Info：左上房间照片，下为地址；右侧酒店名、房型、人数、总价 */}
-                <div className="flex flex-1 gap-5">
-                    <div className="flex flex-col shrink-0">
-                        {imgSrc ? (
-                            <img
-                                src={imgSrc}
-                                alt="房间"
-                                className="w-32 h-24 object-cover rounded-lg shadow-sm"
-                            />
-                        ) : (
-                            <div className="w-32 h-24 bg-gray-200 rounded-lg flex items-center justify-center text-gray-400 text-xs">暂无图</div>
-                        )}
-                        <div className="flex items-start gap-2 mt-2 w-32 min-w-0">
-                            <FaLocationArrow size={14} className="text-gray-500 shrink-0 mt-0.5" />
-                            <AddressWithTooltip
-                                address={[hotel.address, hotel.doorNumber].filter(Boolean).join(' ') || undefined}
-                                className="text-sm text-gray-600"
+                <div
+                    style={{
+                        height: `${ordersVirtualizer.getTotalSize()}px`,
+                        width: '100%',
+                        position: 'relative',
+                    }}
+                >
+                    {ordersVirtualizer.getVirtualItems().map((virtualRow) => (
+                        <div
+                            key={virtualRow.key}
+                            ref={ordersVirtualizer.measureElement}
+                            data-index={virtualRow.index}
+                            className="absolute left-0 top-0 w-full pb-8"
+                            style={{
+                                transform: `translateY(${virtualRow.start}px)`,
+                            }}
+                        >
+                            <BookingCard
+                                booking={bookings[virtualRow.index]}
+                                onPayment={handlePayment}
+                                onCancel={setCancelModal}
+                                onReview={setReviewModal}
+                                onRefund={setRefundModal}
+                                onPlatformRefund={setPlatformRefundModal}
                             />
                         </div>
-                    </div>
-                    <div className="flex flex-col justify-between text-gray-700 min-w-0">
-                        <p className="text-lg font-semibold text-gray-900 leading-snug">
-                            {hotel.name}
-                            <span className="text-sm font-normal text-gray-500"> — {getRoomTypeLabel(room.roomType)}</span>
-                        </p>
-                        <div className="flex items-center text-sm gap-2 mt-1">
-                            <CiUser size={16} className="text-gray-500" />
-                            <span>{booking.guests} 人</span>
-                        </div>
-                        <p className="text-sm mt-2">
-                            总价：<span className="font-semibold text-gray-900">{booking.totalPrice} 元</span>
-                        </p>
-                    </div>
-                </div>
-
-                {/* Check-in / Check-out */}
-                <div className="flex flex-col justify-between gap-4 min-w-[150px] text-sm text-gray-700">
-                    <div>
-                        <p className="font-semibold text-gray-800 mb-1">入住</p>
-                        <p>{booking.checkInDate ? new Date(booking.checkInDate).toLocaleDateString('zh-CN') : '—'}</p>
-                    </div>
-                    <div>
-                        <p className="font-semibold text-gray-800 mb-1">退房</p>
-                        <p>{booking.checkOutDate ? new Date(booking.checkOutDate).toLocaleDateString('zh-CN') : '—'}</p>
-                    </div>
-                </div>
-
-                {/* Payment & Status - 与商家仪表盘支付列统一：待支付/已支付/已取消/退款中/已退款/已完成 */}
-                <div className="flex flex-col justify-between items-start lg:items-end gap-4 min-w-[130px]">
-                    {(() => {
-                        const payLabel = (booking.refundStatus === 'rejected' && booking.refundPlatformReviewRequested) ? '客服介入中'
-                            : booking.refundStatus === 'approved' ? '已退款'
-                            : booking.refundStatus === 'pending' ? '退款中'
-                            : booking.status === 'cancelled' ? '已取消'
-                            : booking.isCompleted ? '已完成'
-                            : booking.isPaid ? '已支付' : '待支付';
-                        const payClass = payLabel === '客服介入中' ? 'bg-purple-100 text-purple-700'
-                            : payLabel === '已退款' ? 'bg-slate-100 text-slate-600'
-                            : payLabel === '退款中' ? 'bg-amber-100 text-amber-700'
-                            : payLabel === '已取消' ? 'bg-gray-100 text-gray-600'
-                            : payLabel === '已完成' ? 'bg-emerald-100 text-emerald-700'
-                            : payLabel === '已支付' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600';
-                        const suffix = payLabel === '已完成' && booking.hasReview ? ' · 已评价' : '';
-                        const countdown = payLabel === '待支付' ? getPaymentCountdownSeconds(booking) : 0;
-                        return (
-                            <div className="flex flex-col items-end gap-1 min-w-[200px]">
-                                <span className={`px-3 py-1 rounded-full text-sm font-medium ${payClass}`}>
-                                    {payLabel}{suffix}
-                                </span>
-                                {payLabel === '待支付' && countdown > 0 && (
-                                    <span className="text-xs text-amber-600 font-medium w-full text-right whitespace-nowrap">
-                                        剩余 {formatCountdown(countdown)} 未支付将自动取消
-                                    </span>
-                                )}
-                            </div>
-                        );
-                    })()}
-                    {booking.status !== 'cancelled' && !booking.isPaid && (
-                        <button
-                            onClick={() => handlePayment(booking._id)}
-                            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm shadow transition"
-                        >
-                            立即支付
-                        </button>
-                    )}
-                    {booking.status !== 'cancelled' && !booking.isCompleted && (
-                        <button
-                            type="button"
-                            onClick={() => setCancelModal({ open: true, bookingId: booking._id, reason: '', otherText: '' })}
-                            className="bg-black hover:bg-gray-700 text-white px-4 py-2 rounded-lg text-sm shadow transition"
-                        >
-                            取消订单
-                        </button>
-                    )}
-                    {booking.isCompleted && (
-                        booking.hasReview ? (
-                            <span className="mt-2 inline-block bg-amber-100 text-amber-600 px-4 py-2 rounded-lg text-sm cursor-not-allowed">
-                                已评价
-                            </span>
-                        ) : (
-                            <button
-                                type="button"
-                                onClick={() => setReviewModal({
-                                    open: true,
-                                    bookingId: booking._id,
-                                    hotelId: booking.hotel?._id || booking.hotel,
-                                    hotelName: booking.hotel?.name || '',
-                                })}
-                                className="mt-2 bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg text-sm shadow transition"
-                            >
-                                去评价
-                            </button>
-                        )
-                    )}
-                    {booking.isCompleted && !booking.refundRequested && booking.refundStatus !== 'approved' && (
-                        <button
-                            type="button"
-                            onClick={() => setRefundModal({ open: true, bookingId: booking._id, reason: '', isSupplement: false })}
-                            className="mt-2 bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg text-sm shadow transition"
-                        >
-                            申请退款
-                        </button>
-                    )}
-                    {booking.isCompleted && booking.refundStatus === 'pending' && (
-                        <button
-                            type="button"
-                            onClick={() => setRefundModal({ open: true, bookingId: booking._id, reason: booking.refundReason || '', isSupplement: true })}
-                            className="mt-2 bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg text-sm shadow transition"
-                        >
-                            退款中
-                        </button>
-                    )}
-                    {booking.isCompleted && booking.refundStatus === 'rejected' && (
-                        <>
-                            <span className="mt-2 inline-flex items-center px-3 py-1 rounded-full bg-red-50 text-red-700 text-sm font-medium">
-                                已被拒
-                            </span>
-                            {!booking.refundPlatformReviewRequested && (
-                                <button
-                                    type="button"
-                                    onClick={() => setPlatformRefundModal({ open: true, bookingId: booking._id, reason: '' })}
-                                    className="mt-2 bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg text-sm shadow transition"
-                                >
-                                    选择客服介入
-                                </button>
-                            )}
-                        </>
-                    )}
+                    ))}
                 </div>
             </div>
-        );})}
+        )}
     </div>
 
     {/* 扫码付款二维码弹窗 */}
