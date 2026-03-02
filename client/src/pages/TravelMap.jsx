@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { loadAMap } from '../utils/loadAmap';
-import { geocodeAmap, wgs84ToGcj02 } from '../utils/amap';
-import { clusterHotels } from '../utils/mapCluster';
+import { geocodeAmap, wgs84ToGcj02, getDistrictBounds } from '../utils/amap';
 import { useAppContext } from '../context/AppContext';
 
 const DEFAULT_CENTER = [39.9042, 116.4074]; // 北京 [lat, lng] GCJ-02
@@ -49,12 +48,14 @@ function TravelMap() {
   const [filterCity, setFilterCity] = useState('');
   const [filterStar, setFilterStar] = useState('');
   const [mapReady, setMapReady] = useState(false);
-  const [zoomVersion, setZoomVersion] = useState(0);
   const mapRef = useRef(null);
   const containerRef = useRef(null);
-  const markersRef = useRef([]);
+  const clusterRef = useRef(null);
+  const targetMarkerRef = useRef(null);
   const boundsRef = useRef(null);
   const onBoundsChangeRef = useRef(null);
+  const mountedRef = useRef(true);
+  const pendingBoundsRef = useRef(null);
 
   useEffect(() => {
     axios.get('/api/hotels/public/cities')
@@ -74,17 +75,63 @@ function TravelMap() {
     if (!q) return;
     (async () => {
       setLoadingGeo(true);
+      pendingBoundsRef.current = null;
       try {
-        const coords = await geocodeAmap(import.meta.env.VITE_AMAP_KEY, q);
+        const key = import.meta.env.VITE_AMAP_KEY;
+        let result = await getDistrictBounds(key, q);
+        if (result?.bounds && Array.isArray(result.bounds) && result.bounds.length >= 2) {
+          const [[minLng, minLat], [maxLng, maxLat]] = result.bounds;
+          if (Number.isFinite(minLng) && Number.isFinite(maxLng)) {
+            const map = mapRef.current;
+            const AMap = window.AMap;
+            if (map && AMap) {
+              map.setBounds(new AMap.Bounds([minLng, minLat], [maxLng, maxLat]));
+            } else {
+              pendingBoundsRef.current = [[minLng, minLat], [maxLng, maxLat]];
+            }
+            setLoadingGeo(false);
+            return;
+          }
+        }
+        const coords = await geocodeAmap(key, q);
+        if (coords?.city) {
+          result = await getDistrictBounds(key, coords.city);
+          if (result?.bounds && Array.isArray(result.bounds) && result.bounds.length >= 2) {
+            const [[minLng, minLat], [maxLng, maxLat]] = result.bounds;
+            if (Number.isFinite(minLng) && Number.isFinite(maxLng)) {
+              const map = mapRef.current;
+              const AMap = window.AMap;
+              if (map && AMap) {
+                map.setBounds(new AMap.Bounds([minLng, minLat], [maxLng, maxLat]));
+              } else {
+                pendingBoundsRef.current = [[minLng, minLat], [maxLng, maxLat]];
+              }
+              setLoadingGeo(false);
+              return;
+            }
+          }
+        }
         if (coords) {
           setMapCenter([coords.lat, coords.lng]);
-          setMapZoom(15);
+          setMapZoom(12);
         }
       } finally {
         setLoadingGeo(false);
       }
     })();
   }, [qParam]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    const AMap = window.AMap;
+    const pending = pendingBoundsRef.current;
+    if (!map || !AMap || !mapReady || !pending) return;
+    const [[minLng, minLat], [maxLng, maxLat]] = pending;
+    if (Number.isFinite(minLng) && Number.isFinite(maxLng)) {
+      map.setBounds(new AMap.Bounds([minLng, minLat], [maxLng, maxLat]));
+      pendingBoundsRef.current = null;
+    }
+  }, [mapReady, qParam]);
 
   const fetchHotels = useCallback(async (bounds, city, star) => {
     if (!bounds || typeof bounds.minLat !== 'number') return;
@@ -119,15 +166,78 @@ function TravelMap() {
   onBoundsChangeRef.current = onBoundsChange;
 
   useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
+  useEffect(() => {
     if (boundsRef.current) fetchHotels(boundsRef.current, filterCity, filterStar);
   }, [filterCity, filterStar, fetchHotels]);
+
+  const handleCloseHotelCard = useCallback(async () => {
+    const hotel = selectedHotel;
+    setSelectedHotel(null);
+    const map = mapRef.current;
+    if (!map || !hotel?.city) return;
+    const AMap = window.AMap;
+    if (!AMap) return;
+    const city = String(hotel.city || '').trim();
+    if (!city) return;
+    try {
+      const result = await getDistrictBounds(import.meta.env.VITE_AMAP_KEY, city);
+      if (result?.bounds && Array.isArray(result.bounds) && result.bounds.length >= 2) {
+        const [[minLng, minLat], [maxLng, maxLat]] = result.bounds;
+        if (Number.isFinite(minLng) && Number.isFinite(maxLng)) {
+          const bounds = new AMap.Bounds([minLng, minLat], [maxLng, maxLat]);
+          map.setBounds(bounds);
+          return;
+        }
+      }
+    } catch (_) {}
+    const lat = hotel._lat ?? hotel.latitude;
+    const lng = hotel._lng ?? hotel.longitude;
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      const [gcjLat, gcjLng] = wgs84ToGcj02(lat, lng);
+      map.setCenter([gcjLng, gcjLat]);
+      map.setZoom(12);
+    }
+  }, [selectedHotel]);
 
   const handleSearch = async () => {
     const q = searchInput.trim();
     if (!q) return;
     setLoadingGeo(true);
     try {
-      const coords = await geocodeAmap(import.meta.env.VITE_AMAP_KEY, q);
+      const key = import.meta.env.VITE_AMAP_KEY;
+      let result = await getDistrictBounds(key, q);
+      if (result?.bounds && Array.isArray(result.bounds) && result.bounds.length >= 2) {
+        const map = mapRef.current;
+        const AMap = window.AMap;
+        if (map && AMap) {
+          const [[minLng, minLat], [maxLng, maxLat]] = result.bounds;
+          if (Number.isFinite(minLng) && Number.isFinite(maxLng)) {
+            map.setBounds(new AMap.Bounds([minLng, minLat], [maxLng, maxLat]));
+            setLoadingGeo(false);
+            return;
+          }
+        }
+      }
+      const coords = await geocodeAmap(key, q);
+      if (coords?.city) {
+        result = await getDistrictBounds(key, coords.city);
+        if (result?.bounds && Array.isArray(result.bounds) && result.bounds.length >= 2) {
+          const map = mapRef.current;
+          const AMap = window.AMap;
+          if (map && AMap) {
+            const [[minLng, minLat], [maxLng, maxLat]] = result.bounds;
+            if (Number.isFinite(minLng) && Number.isFinite(maxLng)) {
+              map.setBounds(new AMap.Bounds([minLng, minLat], [maxLng, maxLat]));
+              setLoadingGeo(false);
+              return;
+            }
+          }
+        }
+      }
       if (coords) {
         setMapCenter([coords.lat, coords.lng]);
         setMapZoom(12);
@@ -160,10 +270,7 @@ function TravelMap() {
             if (params) onBoundsChangeRef.current(params);
           }, 350);
         }
-        map.on('moveend', () => {
-          emitBounds();
-          setZoomVersion((v) => v + 1);
-        });
+        map.on('moveend', emitBounds);
         emitBounds();
         setMapReady(true);
       })
@@ -188,53 +295,123 @@ function TravelMap() {
     map.setZoom(Math.max(4, Math.min(18, mapZoom)));
   }, [mapReady, mapCenter[0], mapCenter[1], mapZoom]);
 
-  // 目标点 + 酒店聚合/单点 标记
+  // 目标点标记（URL 定位点，独立于酒店聚合）
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
     const AMap = window.AMap;
-    const zoom = typeof map.getZoom === 'function' ? map.getZoom() : mapZoom;
-    markersRef.current.forEach((m) => m.setMap(null));
-    markersRef.current = [];
+    if (targetMarkerRef.current) {
+      targetMarkerRef.current.setMap(null);
+      targetMarkerRef.current = null;
+    }
     if (targetPosition && targetPosition.length >= 2) {
       const marker = new AMap.Marker({
         position: [targetPosition[1], targetPosition[0]],
         map,
         zIndex: 1000,
       });
-      markersRef.current.push(marker);
+      targetMarkerRef.current = marker;
     }
-    const { clusters, singles } = clusterHotels(hotels, zoom, wgs84ToGcj02);
-    clusters.forEach((c) => {
-      const div = document.createElement('div');
-      div.className = 'amap-cluster-marker';
-      div.innerHTML = `<span style="display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;background:#2563eb;color:#fff;font-weight:700;font-size:14px;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.3);">${c.count}</span>`;
-      const markerOpt = {
-        position: [c.centerLng, c.centerLat],
-        content: div,
-        map,
-      };
-      if (typeof AMap.Pixel === 'function') markerOpt.offset = new AMap.Pixel(-18, -18);
-      const marker = new AMap.Marker(markerOpt);
-      marker.on('click', () => {
-        setMapCenter([c.centerLat, c.centerLng]);
-        setMapZoom(Math.min(18, zoom + 2));
+    return () => {
+      if (targetMarkerRef.current) {
+        targetMarkerRef.current.setMap(null);
+        targetMarkerRef.current = null;
+      }
+    };
+  }, [mapReady, targetPosition]);
+
+  // 高德点聚合插件：酒店标记（按屏幕像素距离聚合，避免重叠）
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady || !window.AMap) return;
+
+    const AMap = window.AMap;
+
+    const destroyCluster = () => {
+      if (clusterRef.current) {
+        clusterRef.current.setMap(null);
+        clusterRef.current = null;
+      }
+    };
+
+    if (hotels.length === 0) {
+      destroyCluster();
+      return;
+    }
+
+    const points = hotels
+      .filter((h) => h._lat != null && h._lng != null && Number.isFinite(h._lat) && Number.isFinite(h._lng))
+      .map((h) => {
+        const [lat, lng] = wgs84ToGcj02(h._lat, h._lng);
+        return { lnglat: [lng, lat], extData: { hotel: h } };
       });
-      markersRef.current.push(marker);
+
+    if (points.length === 0) {
+      destroyCluster();
+      return;
+    }
+
+    map.plugin(['AMap.MarkerCluster'], () => {
+      if (!mountedRef.current) return;
+      destroyCluster();
+      const cluster = new AMap.MarkerCluster(map, points, {
+        gridSize: 60,
+        renderClusterMarker: (context) => {
+          const count = context.count;
+          context.marker.setContent(
+            `<div style="display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;background:#2563eb;color:#fff;font-weight:700;font-size:14px;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.3);">${count}</div>`
+          );
+          if (typeof AMap.Pixel === 'function') {
+            context.marker.setOffset(new AMap.Pixel(-18, -18));
+          }
+        },
+        renderMarker: (context) => {
+          context.marker.setIcon(
+            new AMap.Icon({
+              image: '//a.amap.com/jsapi_demos/static/demo-center/icons/poi-marker-red.png',
+              size: new AMap.Size(24, 36),
+              imageSize: new AMap.Size(24, 36),
+            })
+          );
+          if (typeof AMap.Pixel === 'function') {
+            context.marker.setOffset(new AMap.Pixel(-12, -36));
+          }
+        },
+      });
+
+      cluster.on('click', (ev) => {
+        const data = ev.clusterData || [];
+        const getLatLng = (p) => {
+          const ll = p?.lnglat;
+          if (Array.isArray(ll)) return { lat: ll[1], lng: ll[0] };
+          if (ll && (ll.lat != null || ll.lng != null)) return { lat: ll.lat, lng: ll.lng };
+          return null;
+        };
+        if (data.length > 1) {
+          const coords = data.map(getLatLng).filter(Boolean);
+          if (coords.length > 0) {
+            const lat = coords.reduce((s, c) => s + c.lat, 0) / coords.length;
+            const lng = coords.reduce((s, c) => s + c.lng, 0) / coords.length;
+            setMapCenter([lat, lng]);
+            const zoom = typeof map.getZoom === 'function' ? map.getZoom() : 12;
+            setMapZoom(Math.min(18, zoom + 2));
+          }
+        } else if (data.length === 1) {
+          const hotel = data[0].extData?.hotel;
+          const pos = getLatLng(data[0]);
+          if (hotel) setSelectedHotel(hotel);
+          if (pos) {
+            setMapCenter([pos.lat, pos.lng]);
+            setMapZoom(16);
+          }
+        }
+      });
+
+      clusterRef.current = cluster;
     });
-    singles.forEach(({ hotel: h, lat, lng }) => {
-      const marker = new AMap.Marker({
-        position: [lng, lat],
-        map,
-      });
-      marker.on('click', () => {
-        setSelectedHotel(h);
-        setMapCenter([lat, lng]);
-        setMapZoom(16);
-      });
-      markersRef.current.push(marker);
-    });
-  }, [mapReady, targetPosition, hotels, zoomVersion, mapZoom]);
+
+    return destroyCluster;
+  }, [mapReady, hotels]);
 
   return (
     <div className="flex flex-col h-screen pt-16">
@@ -310,7 +487,7 @@ function TravelMap() {
               <h3 className="font-semibold text-gray-800">酒店信息</h3>
               <button
                 type="button"
-                onClick={() => setSelectedHotel(null)}
+                onClick={handleCloseHotelCard}
                 className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

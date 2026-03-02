@@ -27,7 +27,11 @@ export async function geocodeAmap(key, address) {
     if (data.status !== '1' || !data.geocodes?.length) return null;
     const loc = data.geocodes[0].location; // "lng,lat"
     const [lng, lat] = loc.split(',').map(Number);
-    if (Number.isFinite(lat) && Number.isFinite(lng)) return { lat, lng };
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      const geo = data.geocodes[0];
+      const city = geo?.city ?? geo?.province ?? null;
+      return { lat, lng, city: city || undefined };
+    }
     return null;
   } catch (e) {
     console.warn('[amap] geocode error', e);
@@ -115,6 +119,56 @@ export async function regeoAmap(key, lng, lat) {
     };
   } catch (e) {
     console.warn('[amap] regeo error', e);
+    return null;
+  }
+}
+
+const AMAP_DISTRICT_URL = 'https://restapi.amap.com/v3/config/district';
+
+/**
+ * 高德行政区域查询：获取城市边界，用于地图 setFitView
+ * @param {string} key - 高德 Web 服务 Key
+ * @param {string} city - 城市名，如 "北京"、"上海"
+ * @returns {{ bounds: [[lng, lat], [lng, lat]], center: [lng, lat] } | null}
+ */
+export async function getDistrictBounds(key, city) {
+  const q = String(city || '').trim();
+  if (!q) return null;
+  const k = (key || import.meta.env.VITE_AMAP_KEY || '').trim();
+  if (!k) return null;
+  const url = `${AMAP_DISTRICT_URL}?keywords=${encodeURIComponent(q)}&subdistrict=0&extensions=all&key=${encodeURIComponent(k)}`;
+  try {
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data.status !== '1' || !data.districts?.[0]) return null;
+    const d = data.districts[0];
+    const polyline = d.polyline;
+    if (!polyline) return null;
+    let minLng = Infinity;
+    let maxLng = -Infinity;
+    let minLat = Infinity;
+    let maxLat = -Infinity;
+    const parts = polyline.split('|');
+    for (const part of parts) {
+      const points = part.split(';');
+      for (const pt of points) {
+        const [lng, lat] = pt.split(',').map(Number);
+        if (Number.isFinite(lng) && Number.isFinite(lat)) {
+          minLng = Math.min(minLng, lng);
+          maxLng = Math.max(maxLng, lng);
+          minLat = Math.min(minLat, lat);
+          maxLat = Math.max(maxLat, lat);
+        }
+      }
+    }
+    if (!Number.isFinite(minLng)) return null;
+    const center = d.center ? d.center.split(',').map(Number) : [(minLng + maxLng) / 2, (minLat + maxLat) / 2];
+    return {
+      bounds: [[minLng, minLat], [maxLng, maxLat]],
+      center: center.length === 2 ? center : [(minLng + maxLng) / 2, (minLat + maxLat) / 2],
+    };
+  } catch (e) {
+    if (import.meta.env.DEV) console.warn('[amap] district error', e);
     return null;
   }
 }
