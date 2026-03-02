@@ -12,6 +12,7 @@ import { isCity } from '../utils/destinationSearch';
 import { usePerf } from '../context/PerfContext';
 import { VirtualListPerformanceMonitor } from '../components/VirtualListPerformanceMonitor';
 import { virtualListPerf } from '../utils/virtualListPerf';
+import { SkeletonRoomGrid, SkeletonHotelList } from '../components/Skeleton';
 
 function CheckBox({ label, selected = false, onChange }) {
   return (
@@ -109,7 +110,7 @@ function AllRooms() {
   const promo = searchParams.get('promo') || '';
   const lat = searchParams.get('lat') || '';
   const lng = searchParams.get('lng') || '';
-  const { rooms: contextRooms, fetchRooms, axios, isAuthenticated, user: userInfo, role } = useAppContext();
+  const { rooms: contextRooms, fetchRooms, axios, isAuthenticated, user: userInfo, role, roomsLoading } = useAppContext();
 
   const [localRooms, setLocalRooms] = useState([]);
   const [localNextPage, setLocalNextPage] = useState(2);
@@ -1083,9 +1084,15 @@ function AllRooms() {
           {perfMode && isPromoMode && <VirtualListPerformanceMonitor itemLabel="房间" />}
           {perfMode && !isPromoMode && <VirtualListPerformanceMonitor itemLabel="酒店" modeType="lazy" useWindowScroll />}
           {isPromoMode && loadingPromo && promoRooms.length === 0 ? (
-            <p className="text-gray-500">加载优惠房型中...</p>
+            <div className="rounded-2xl border border-gray-100 bg-gradient-to-b from-gray-50/80 to-white shadow-[0_2px_12px_rgba(0,0,0,0.06)] overflow-hidden" style={{ maxHeight: 'min(80vh, 880px)' }}>
+              <SkeletonRoomGrid count={6} />
+            </div>
           ) : destination && loadingSearch && localRooms.length === 0 ? (
-            <p className="text-gray-500">正在搜索「{destination}」...</p>
+            <div className="rounded-2xl border border-gray-100 bg-gradient-to-b from-gray-50/80 to-white shadow-[0_2px_12px_rgba(0,0,0,0.06)] overflow-hidden" style={{ maxHeight: 'min(80vh, 880px)' }}>
+              <SkeletonRoomGrid count={6} />
+            </div>
+          ) : !promo && !destination && roomsLoading && contextRooms.length === 0 ? (
+            <SkeletonHotelList count={4} />
           ) : filteredRooms.length === 0 ? (
             <p className="text-gray-500">
               {isPromoMode ? '暂无该优惠档位的房型。' : destination ? `未找到「${destination}」相关房间，请尝试其他目的地或清除筛选。` : '没有匹配筛选条件的房间。'}

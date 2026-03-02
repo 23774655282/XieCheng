@@ -55,6 +55,7 @@ export function AppProvider({ children }) {
     return [];
   });
   const [rooms, setRooms] = useState([]);
+  const [roomsLoading, setRoomsLoading] = useState(true);
 
   function addRecentSearch(record) {
     const r = {
@@ -87,6 +88,7 @@ export function AppProvider({ children }) {
   }
 
   async function fetchRooms(page = 1) {
+    if (page === 1) setRoomsLoading(true);
     try {
       const { data } = await axios.get(`/api/rooms/?page=${page}&limit=12`);
       if (data.success) {
@@ -98,6 +100,8 @@ export function AppProvider({ children }) {
     } catch (error) {
       console.error("Error fetching rooms:", error);
       return { rooms: [], hasMore: false };
+    } finally {
+      if (page === 1) setRoomsLoading(false);
     }
   }
 
@@ -280,6 +284,7 @@ export function AppProvider({ children }) {
     clearRecentSearch,
     rooms,
     setRooms,
+    roomsLoading,
   };
 
   return (
