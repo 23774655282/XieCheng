@@ -10,6 +10,7 @@ function SmartSearch() {
 
   async function handleSubmit(e) {
     e.preventDefault();
+    //先判断用户是否输入了需求
     const q = (query || '').trim();
     if (!q) {
       setError('请输入您的出行需求');
