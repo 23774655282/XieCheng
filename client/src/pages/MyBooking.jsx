@@ -32,6 +32,38 @@ const CANCEL_REASONS = [
   { value: '其他', label: '其他' },
 ];
 
+/** 地址展示：过长则缩写，悬停 0.5 秒后弹框显示全部 */
+function AddressWithTooltip({ address, className = '' }) {
+    const [showTooltip, setShowTooltip] = useState(false);
+    const timeoutRef = useRef(null);
+    const full = address || '—';
+    const isLong = full.length > 12;
+
+    const onMouseEnter = () => {
+        if (!isLong) return;
+        timeoutRef.current = setTimeout(() => setShowTooltip(true), 500);
+    };
+    const onMouseLeave = () => {
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        setShowTooltip(false);
+    };
+
+    return (
+        <div
+            className={`relative min-w-0 flex-1 ${className}`}
+            onMouseEnter={onMouseEnter}
+            onMouseLeave={onMouseLeave}
+        >
+            <span className={isLong ? 'block truncate' : ''}>{full}</span>
+            {showTooltip && isLong && (
+                <div className="absolute left-0 bottom-full mb-1 z-50 py-2 px-3 bg-gray-900 text-white text-sm rounded-lg shadow-lg max-w-xs whitespace-normal">
+                    {full}
+                </div>
+            )}
+        </div>
+    );
+}
+
 function MyBooking({ embedded = false }) {
 
     const { axios, getToken, user, role, merchantApplicationStatus, navigate } = useAppContext();
@@ -407,26 +439,31 @@ function MyBooking({ embedded = false }) {
                 key={booking._id}
                 className="bg-white rounded-2xl shadow-md hover:shadow-lg transition-shadow p-5 flex flex-col lg:flex-row gap-6"
             >
-                {/* Hotel Info */}
+                {/* Hotel Info：左上房间照片，下为地址；右侧酒店名、房型、人数、总价 */}
                 <div className="flex flex-1 gap-5">
-                    {imgSrc ? (
-                        <img
-                            src={imgSrc}
-                            alt="房间"
-                            className="w-32 h-24 object-cover rounded-lg shadow-sm"
-                        />
-                    ) : (
-                        <div className="w-32 h-24 bg-gray-200 rounded-lg flex items-center justify-center text-gray-400 text-xs">暂无图</div>
-                    )}
-                    <div className="flex flex-col justify-between text-gray-700">
+                    <div className="flex flex-col shrink-0">
+                        {imgSrc ? (
+                            <img
+                                src={imgSrc}
+                                alt="房间"
+                                className="w-32 h-24 object-cover rounded-lg shadow-sm"
+                            />
+                        ) : (
+                            <div className="w-32 h-24 bg-gray-200 rounded-lg flex items-center justify-center text-gray-400 text-xs">暂无图</div>
+                        )}
+                        <div className="flex items-start gap-2 mt-2 w-32 min-w-0">
+                            <FaLocationArrow size={14} className="text-gray-500 shrink-0 mt-0.5" />
+                            <AddressWithTooltip
+                                address={[hotel.address, hotel.doorNumber].filter(Boolean).join(' ') || undefined}
+                                className="text-sm text-gray-600"
+                            />
+                        </div>
+                    </div>
+                    <div className="flex flex-col justify-between text-gray-700 min-w-0">
                         <p className="text-lg font-semibold text-gray-900 leading-snug">
                             {hotel.name}
                             <span className="text-sm font-normal text-gray-500"> — {getRoomTypeLabel(room.roomType)}</span>
                         </p>
-                        <div className="flex items-center text-sm gap-2 mt-1">
-                            <FaLocationArrow size={14} className="text-gray-500" />
-                            <span>{[hotel.address, hotel.doorNumber].filter(Boolean).join(' ') || '—'}</span>
-                        </div>
                         <div className="flex items-center text-sm gap-2 mt-1">
                             <CiUser size={16} className="text-gray-500" />
                             <span>{booking.guests} 人</span>
