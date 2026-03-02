@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { useAppContext } from '../context/AppContext';
 
 const roomTypeToCn = { 'Single Bed': '单人间', 'Double Bed': '双人间', 'Luxury Room': '豪华房', 'Family Suite': '家庭套房' };
@@ -49,6 +50,93 @@ function saveToHistory(record) {
   localStorage.setItem(HISTORY_KEY, JSON.stringify(next));
 }
 
+/** 房型卡片组件 */
+function RoomCard({ room, onRoomClick }) {
+  return (
+    <div
+      onClick={() => onRoomClick(room._id)}
+      className="flex flex-col bg-gray-50 rounded-xl border border-gray-100 overflow-hidden hover:shadow-md hover:border-blue-200 transition cursor-pointer"
+    >
+      <img src={room.images?.[0]} alt="房间" className="w-full h-28 object-cover" loading="lazy" decoding="async" />
+      <div className="p-3">
+        <p className="font-semibold text-gray-800 text-sm">{getRoomTypeLabel(room.roomType)}</p>
+        {room.hotel && <p className="text-xs text-gray-500 truncate">{room.hotel.name} · {room.hotel.city}</p>}
+        <div className="flex items-center justify-between mt-2">
+          <span className="text-sm font-bold text-gray-800">
+            {(room.promoDiscount != null && room.promoDiscount > 0)
+              ? Math.round(room.pricePerNight * (1 - room.promoDiscount / 100))
+              : room.pricePerNight} 元/晚
+          </span>
+          <span className="text-xs text-blue-600">查看详情</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** 虚拟列表渲染房型卡片（2 列网格，按行虚拟化） */
+const VirtualizedRoomGrid = React.memo(function VirtualizedRoomGrid({ rooms, onRoomClick }) {
+  const scrollRef = useRef(null);
+  const cols = 2;
+  const rowCount = Math.ceil(rooms.length / cols);
+  const rowVirtualizer = useVirtualizer({
+    count: rowCount,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 200,
+    overscan: 2,
+  });
+
+  if (rooms.length === 0) return null;
+
+  return (
+    <div ref={scrollRef} className="mt-4 max-h-80 overflow-y-auto overflow-x-hidden rounded-lg">
+      <div
+        style={{
+          height: `${rowVirtualizer.getTotalSize()}px`,
+          width: '100%',
+          position: 'relative',
+        }}
+      >
+        {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+          const start = virtualRow.index * cols;
+          const rowRooms = rooms.slice(start, start + cols);
+          return (
+            <div
+              key={virtualRow.key}
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                transform: `translateY(${virtualRow.start}px)`,
+              }}
+              className="grid grid-cols-1 sm:grid-cols-2 gap-3"
+            >
+              {rowRooms.map((room) => (
+                <RoomCard key={room._id} room={room} onRoomClick={onRoomClick} />
+              ))}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+});
+
+/** 单条消息组件，供虚拟列表使用 */
+const ChatMessage = React.memo(function ChatMessage({ msg, onRoomClick }) {
+  return (
+    <div className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+      <div className={`max-w-[85%] rounded-2xl px-4 py-3 ${msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200 text-gray-800 shadow-sm'}`}>
+        <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+        {msg.role === 'assistant' && msg.rooms && msg.rooms.length > 0 && (
+          <VirtualizedRoomGrid rooms={msg.rooms} onRoomClick={onRoomClick} />
+        )}
+      </div>
+    </div>
+  );
+});
+
 function AiHotelChat() {
   const { axios, navigate } = useAppContext();
   const [currentMessages, setCurrentMessages] = useState(loadCurrentSession);
@@ -57,10 +145,25 @@ function AiHotelChat() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [historyDropdownOpen, setHistoryDropdownOpen] = useState(false);
-  const messagesEndRef = useRef(null);
   const historyDropdownRef = useRef(null);
+  const scrollParentRef = useRef(null);
 
   const messages = viewingRecord ? viewingRecord.messages : currentMessages;
+
+  const rowVirtualizer = useVirtualizer({
+    count: messages.length,
+    getScrollElement: () => scrollParentRef.current,
+    estimateSize: (index) => {
+      const msg = messages[index];
+      return (msg?.role === 'assistant' && msg?.rooms?.length) ? 320 : 80;
+    },
+    overscan: 5,
+  });
+
+  const handleRoomClick = useCallback((roomId) => {
+    navigate(`/rooms/${roomId}`);
+    window.scrollTo(0, 0);
+  }, [navigate]);
 
   useEffect(() => {
     function handleClickOutside(e) {
@@ -78,8 +181,11 @@ function AiHotelChat() {
     if (!viewingRecord) saveCurrentSession(currentMessages);
   }, [currentMessages, viewingRecord]);
 
-  const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  useEffect(() => { scrollToBottom(); }, [messages]);
+  useEffect(() => {
+    if (messages.length > 0) {
+      rowVirtualizer.scrollToIndex(messages.length - 1, { align: 'end', behavior: 'smooth' });
+    }
+  }, [messages.length]);
 
   function getRecordTitle(msgs) {
     const firstUser = msgs.find((m) => m.role === 'user');
@@ -244,8 +350,8 @@ function AiHotelChat() {
             </button>
           </div>
         )}
-        <div className="flex-1 overflow-y-auto px-4 py-6">
-          <div className="max-w-2xl mx-auto space-y-6">
+        <div ref={scrollParentRef} className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-6">
+          <div className="max-w-2xl mx-auto">
             {!viewingRecord && currentMessages.length === 0 && (
               <div className="flex items-center justify-center min-h-[60vh]">
                 <div className="text-center max-w-md px-6 py-8 bg-white rounded-2xl border border-gray-200 shadow-sm">
@@ -280,46 +386,40 @@ function AiHotelChat() {
                 </div>
               </div>
             )}
-            {messages.map((msg, i) => (
-              <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[85%] rounded-2xl px-4 py-3 ${msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200 text-gray-800 shadow-sm'}`}>
-                  <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
-                  {msg.role === 'assistant' && msg.rooms && msg.rooms.length > 0 && (
-                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {msg.rooms.map((room) => (
-                        <div
-                          key={room._id}
-                          onClick={() => { navigate(`/rooms/${room._id}`); window.scrollTo(0, 0); }}
-                          className="flex flex-col bg-gray-50 rounded-xl border border-gray-100 overflow-hidden hover:shadow-md hover:border-blue-200 transition cursor-pointer"
-                        >
-                          <img src={room.images?.[0]} alt="房间" className="w-full h-28 object-cover" loading="lazy" decoding="async" />
-                          <div className="p-3">
-                            <p className="font-semibold text-gray-800 text-sm">{getRoomTypeLabel(room.roomType)}</p>
-                            {room.hotel && <p className="text-xs text-gray-500 truncate">{room.hotel.name} · {room.hotel.city}</p>}
-                            <div className="flex items-center justify-between mt-2">
-                              <span className="text-sm font-bold text-gray-800">
-                                {(room.promoDiscount != null && room.promoDiscount > 0)
-                                  ? Math.round(room.pricePerNight * (1 - room.promoDiscount / 100))
-                                  : room.pricePerNight} 元/晚
-                              </span>
-                              <span className="text-xs text-blue-600">查看详情</span>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+            {messages.length > 0 && (
+              <div
+                style={{
+                  height: `${rowVirtualizer.getTotalSize()}px`,
+                  width: '100%',
+                  position: 'relative',
+                }}
+              >
+                {rowVirtualizer.getVirtualItems().map((virtualRow) => (
+                  <div
+                    key={virtualRow.key}
+                    ref={rowVirtualizer.measureElement}
+                    data-index={virtualRow.index}
+                    className="pb-6"
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      transform: `translateY(${virtualRow.start}px)`,
+                    }}
+                  >
+                    <ChatMessage msg={messages[virtualRow.index]} onRoomClick={handleRoomClick} />
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
             {loading && (
-              <div className="flex justify-start">
+              <div className="flex justify-start pt-2">
                 <div className="bg-white border border-gray-200 rounded-2xl px-4 py-3 text-gray-500 text-sm">
                   AI 正在为您筛选…
                 </div>
               </div>
             )}
-            <div ref={messagesEndRef} />
           </div>
         </div>
 
