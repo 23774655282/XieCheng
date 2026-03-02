@@ -1,11 +1,11 @@
-/** 约 40px 在给定缩放级别下对应的经纬度跨度（Web 墨卡托近似，用于“地标重合”判断） */
+/** 约 40px 在给定缩放级别下对应的经纬度跨度（Web 墨卡托近似，用于"地标重合"判断） */
 function pixelToDegreesAtZoom(zoom, pixelSize = 40) {
   const worldPixels = 256 * Math.pow(2, zoom);
   return (pixelSize / worldPixels) * 360;
 }
 
 /**
- * 按“地标是否重合”聚合：仅当两个酒店在当前缩放下会重叠（同格）时才合并为一簇
+ * 按"地标是否重合"聚合：仅当两个酒店在当前缩放下会重叠（同格）时才合并为一簇
  * @param {Array<{ _id: string, _lat: number, _lng: number }>} hotels
  * @param {number} zoom - 地图缩放级别 4~18
  * @param {(lat: number, lng: number) => [number, number]} toGCJ - wgs84ToGcj02
