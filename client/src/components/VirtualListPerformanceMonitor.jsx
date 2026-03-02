@@ -11,7 +11,7 @@ import { virtualListPerf } from '../utils/virtualListPerf';
  * @param {boolean} [props.useWindowScroll=false] - 使用 window 监听滚动（酒店列表页面滚动）
  */
 export function VirtualListPerformanceMonitor({ itemLabel = '房间', modeType = 'virtual', useWindowScroll = false }) {
-  const { isPerfMode: show, isLegacyList: isLegacy, toggleLegacyList } = usePerf();
+  const { isPerfMode: show, isLegacyList: isLegacy, toggleUnoptimizedMode } = usePerf();
 
   const [metrics, setMetrics] = useState({
     totalCount: 0,
@@ -36,6 +36,15 @@ export function VirtualListPerformanceMonitor({ itemLabel = '房间', modeType =
         scrollFps: virtualListPerf.lastScrollFps,
         scrollFrameDrops: virtualListPerf.scrollFrameDrops,
       });
+      const v = {
+        totalCount: virtualListPerf.totalCount,
+        renderedRows: virtualListPerf.renderedRows,
+        firstRenderMs: virtualListPerf.firstRenderMs,
+        scrollFps: virtualListPerf.lastScrollFps,
+      };
+      if (v.totalCount > 0 || v.firstRenderMs != null || v.scrollFps > 0) {
+        console.log('[virtualListPerf]', v);
+      }
     };
 
     const unsub = virtualListPerf.subscribe(updateMetrics);
@@ -88,11 +97,11 @@ export function VirtualListPerformanceMonitor({ itemLabel = '房间', modeType =
           {modeType === 'lazy' ? '酒店列表性能' : '虚拟列表性能'}
           <button
             type="button"
-            onClick={toggleLegacyList}
+            onClick={toggleUnoptimizedMode}
             className={`ml-2 rounded px-1.5 py-0.5 text-xs ${isLegacy ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'} hover:opacity-80`}
-            title={modeType === 'lazy' ? '切换普通列表/懒加载' : '切换普通列表/虚拟列表'}
+            title="切换未优化/已优化（与首页性能监控统一）"
           >
-            {isLegacy ? '普通列表' : (modeType === 'lazy' ? '懒加载' : '虚拟列表')}
+            {isLegacy ? '未优化' : '已优化'}
           </button>
         </h3>
         <p className="mt-1 text-xs text-gray-500">
@@ -124,12 +133,12 @@ export function VirtualListPerformanceMonitor({ itemLabel = '房间', modeType =
           <div className="text-xs text-gray-600 bg-gray-50 rounded p-2">
             {!isLegacy ? (
               modeType === 'lazy' ? (
-                <>懒加载首屏渲染 <strong>{metrics.renderedRows}</strong> 个，触底加载更多</>
+                <>已优化：懒加载首屏渲染 <strong>{metrics.renderedRows}</strong> 个，触底加载更多</>
               ) : (
-                <>虚拟列表仅渲染 <strong>{metrics.renderedRows}</strong> 个，节省 <strong>{Math.max(0, metrics.totalCount - metrics.renderedRows)}</strong> 个 DOM 节点</>
+                <>已优化：虚拟列表仅渲染 <strong>{metrics.renderedRows}</strong> 个，节省 <strong>{Math.max(0, metrics.totalCount - metrics.renderedRows)}</strong> 个 DOM 节点</>
               )
             ) : (
-              <>普通列表渲染全部 <strong>{metrics.totalCount}</strong> 个</>
+              <>未优化：普通列表渲染全部 <strong>{metrics.totalCount}</strong> 个</>
             )}
           </div>
         )}

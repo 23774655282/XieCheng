@@ -1,9 +1,11 @@
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
+import { usePerf } from '../context/PerfContext'
 import { exclusiveOffers } from '../assets/assets'
 
 function ExclusiveOffer() {
     const navigate = useNavigate()
+    const { isUnoptimizedMode } = usePerf()
 
     return (
         <div className="flex flex-col items-center px-6 md:px-16 pt-12 md:pt-16 pb-24 md:pb-32 bg-gray-50">
@@ -23,7 +25,7 @@ function ExclusiveOffer() {
                     >
                         <div className="absolute inset-0 overflow-hidden">
                             <div className="absolute inset-0 transition-transform duration-500 ease-out group-hover:scale-110">
-                                <img src={items.image} alt="" loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover object-center" />
+                                <img src={items.image} alt="" loading={isUnoptimizedMode ? 'eager' : 'lazy'} decoding="async" className="absolute inset-0 w-full h-full object-cover object-center" />
                                 <div className="absolute inset-0 bg-black/45" aria-hidden />
                             </div>
                         </div>

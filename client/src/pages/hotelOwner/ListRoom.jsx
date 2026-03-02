@@ -8,7 +8,6 @@ import { useNavigate, useParams } from "react-router-dom"
 import { IoAdd } from "react-icons/io5"
 import { usePerf } from "../../context/PerfContext"
 import { virtualListPerf } from "../../utils/virtualListPerf"
-import { VirtualListPerformanceMonitor } from "../../components/VirtualListPerformanceMonitor"
 
 function RoomCountStepper({ value, roomId, onUpdate, axios, getToken }) {
   const [count, setCount] = useState(value)
@@ -298,7 +297,6 @@ function ListRoom() {
 
   return (
     <div>
-      {perfMode && <VirtualListPerformanceMonitor />}
       {/* 预审单信息（不可修改） - 仅预审通过的酒店展示 */}
       {hotelId && hasPreReview && (
         <div className="mb-6 p-4 bg-gray-50 rounded-xl border border-gray-200">
