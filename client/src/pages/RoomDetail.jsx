@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { addDays, differenceInCalendarDays } from 'date-fns';
 import { formatLocalDate, formatDateShort, formatDateSuffix, getTodayLocal, parseLocalDate } from '../utils/dateUtils';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { useParams, useSearchParams, Link } from 'react-router-dom';
 import { facilityIcons, roomCommonData, assets } from '../assets/assets';
 import { FaLocationArrow } from 'react-icons/fa';
 import { useAppContext } from '../context/AppContext';
@@ -201,7 +201,13 @@ function RoomDetail() {
             {/* Room Title */}
             <div className="mb-6">
                 <h1 className='text-2xl md:text-3xl font-bold text-gray-800'>
-                    {room.hotel.name}
+                    {room.hotel?._id ? (
+                        <Link to={`/hotels/${room.hotel._id}`} className="hover:text-blue-600 hover:underline transition">
+                            {room.hotel.name}
+                        </Link>
+                    ) : (
+                        room.hotel?.name
+                    )}
                     <span className='text-lg font-medium text-gray-600'> - {getRoomTypeLabel(room.roomType)}</span>
                 </h1>
                 <p className='text-green-600 font-semibold mt-2'>限时优惠</p>
@@ -260,7 +266,14 @@ function RoomDetail() {
             {/* Room Description */}
             <div className="mb-10">
                 <h2 className="text-xl font-semibold mb-4 text-gray-800">
-                    在 {room.hotel.name} 体验 {getRoomTypeLabel(room.roomType)} 的舒适空间
+                    在 {room.hotel?._id ? (
+                        <Link to={`/hotels/${room.hotel._id}`} className="hover:text-blue-600 hover:underline transition">
+                            {room.hotel.name}
+                        </Link>
+                    ) : (
+                        room.hotel?.name
+                    )}{' '}
+                    体验 {getRoomTypeLabel(room.roomType)} 的舒适空间
                 </h2>
 
                 <div className="flex flex-wrap gap-4 mb-4">
@@ -336,7 +349,13 @@ function RoomDetail() {
                         </span>
                     </div>
                     <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-gray-700">
-                        <span>酒店：{room?.hotel?.name || '—'}</span>
+                        <span>酒店：{room?.hotel?._id ? (
+                            <Link to={`/hotels/${room.hotel._id}`} className="hover:text-blue-600 hover:underline transition">
+                                {room.hotel.name}
+                            </Link>
+                        ) : (
+                            room?.hotel?.name || '—'
+                        )}</span>
                         <span>房型：{room ? getRoomTypeLabel(room.roomType) : '—'}</span>
                         <span className="font-medium">预估总价：{room && checkIn && checkOut ? (() => {
                             const pricePerNight = (room.promoDiscount != null && room.promoDiscount > 0)
