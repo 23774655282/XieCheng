@@ -5,13 +5,22 @@ import { useAppContext } from '../context/AppContext';
 const roomTypeToCn = { 'Single Bed': '单人间', 'Double Bed': '双人间', 'Luxury Room': '豪华房', 'Family Suite': '家庭套房' };
 const getRoomTypeLabel = (roomType) => roomTypeToCn[roomType] || roomType;
 
-const HISTORY_KEY = 'ai-hotel-chat-history';
-const CURRENT_SESSION_KEY = 'ai-hotel-current-messages';
+const HISTORY_KEY_PREFIX = 'ai-hotel-chat-history';
+const SESSION_KEY_PREFIX = 'ai-hotel-current-messages';
 const MAX_HISTORY = 30;
 
-function loadCurrentSession() {
+function getHistoryKey(userId) {
+  return userId ? `${HISTORY_KEY_PREFIX}-${userId}` : `${HISTORY_KEY_PREFIX}-guest`;
+}
+
+function getSessionKey(userId) {
+  return userId ? `${SESSION_KEY_PREFIX}-${userId}` : `${SESSION_KEY_PREFIX}-guest`;
+}
+
+function loadCurrentSession(sessionKey) {
+  const key = sessionKey || getSessionKey(null);
   try {
-    const raw = sessionStorage.getItem(CURRENT_SESSION_KEY);
+    const raw = sessionStorage.getItem(key);
     if (!raw) return [];
     const list = JSON.parse(raw);
     return Array.isArray(list) ? list : [];
@@ -20,9 +29,10 @@ function loadCurrentSession() {
   }
 }
 
-function saveCurrentSession(msgs) {
+function saveCurrentSession(msgs, sessionKey) {
+  const key = sessionKey || getSessionKey(null);
   try {
-    sessionStorage.setItem(CURRENT_SESSION_KEY, JSON.stringify(msgs));
+    sessionStorage.setItem(key, JSON.stringify(msgs));
   } catch {}
 }
 
@@ -33,9 +43,10 @@ const USAGE_GUIDE = [
   { title: '查看结果', content: 'AI 回复后会在对话中展示推荐房型，点击任意房型卡片可进入详情页进行预订。' },
 ];
 
-function loadHistory() {
+function loadHistory(historyKey) {
+  const key = historyKey || getHistoryKey(null);
   try {
-    const raw = localStorage.getItem(HISTORY_KEY);
+    const raw = localStorage.getItem(key);
     if (!raw) return [];
     const list = JSON.parse(raw);
     return Array.isArray(list) ? list.slice(0, MAX_HISTORY) : [];
@@ -44,10 +55,11 @@ function loadHistory() {
   }
 }
 
-function saveToHistory(record) {
-  const list = loadHistory();
+function saveToHistory(record, historyKey) {
+  const key = historyKey || getHistoryKey(null);
+  const list = loadHistory(key);
   const next = [{ ...record, id: record.id || Date.now(), createdAt: record.createdAt || Date.now() }, ...list].slice(0, MAX_HISTORY);
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(next));
+  localStorage.setItem(key, JSON.stringify(next));
 }
 
 /** 房型卡片组件：固定高度避免换一批时页面抖动 */
@@ -146,10 +158,20 @@ const ChatMessage = React.memo(function ChatMessage({ msg, msgIndex, onRoomClick
 });
 
 function AiHotelChat() {
-  const { axios, navigate } = useAppContext();
-  const [currentMessages, setCurrentMessages] = useState(loadCurrentSession);
-  const [history, setHistory] = useState(loadHistory);
+  const { axios, navigate, user } = useAppContext();
+  const userId = user?._id ? String(user._id) : null;
+  const historyKey = getHistoryKey(userId);
+  const sessionKey = getSessionKey(userId);
+
+  const [currentMessages, setCurrentMessages] = useState([]);
+  const [history, setHistory] = useState([]);
   const [viewingRecord, setViewingRecord] = useState(null);
+
+  useEffect(() => {
+    setHistory(loadHistory(historyKey));
+    setCurrentMessages(loadCurrentSession(sessionKey));
+    setViewingRecord(null);
+  }, [historyKey, sessionKey]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [historyDropdownOpen, setHistoryDropdownOpen] = useState(false);
@@ -158,10 +180,10 @@ function AiHotelChat() {
 
   const messages = viewingRecord ? viewingRecord.messages : currentMessages;
 
-  const stateRef = useRef({ viewingRecord, history, currentMessages });
+  const stateRef = useRef({ viewingRecord, history, currentMessages, historyKey });
   useEffect(() => {
-    stateRef.current = { viewingRecord, history, currentMessages };
-  }, [viewingRecord, history, currentMessages]);
+    stateRef.current = { viewingRecord, history, currentMessages, historyKey };
+  }, [viewingRecord, history, currentMessages, historyKey]);
 
   useEffect(() => {
     const backendUrl = import.meta.env.VITE_BACKEND_URL || '';
@@ -189,7 +211,7 @@ function AiHotelChat() {
         setViewingRecord({ ...vr, messages: next });
         setHistory(hist.map((r) => (r.id === vr.id ? { ...vr, messages: next } : r)));
         try {
-          localStorage.setItem(HISTORY_KEY, JSON.stringify(hist.map((r) => (r.id === vr.id ? { ...vr, messages: next } : r)).slice(0, MAX_HISTORY)));
+          localStorage.setItem(stateRef.current.historyKey, JSON.stringify(hist.map((r) => (r.id === vr.id ? { ...vr, messages: next } : r)).slice(0, MAX_HISTORY)));
         } catch (_) {}
       } else {
         setCurrentMessages((prev) => applyRoomsUpdate(prev));
@@ -224,7 +246,7 @@ function AiHotelChat() {
       const newHistory = history.map((r) => (r.id === viewingRecord.id ? updatedRecord : r));
       setHistory(newHistory);
       try {
-        localStorage.setItem(HISTORY_KEY, JSON.stringify(newHistory.slice(0, MAX_HISTORY)));
+        localStorage.setItem(historyKey, JSON.stringify(newHistory.slice(0, MAX_HISTORY)));
       } catch (_) {}
     } else {
       setCurrentMessages((prev) => applyBatchUpdate(prev));
@@ -256,14 +278,14 @@ function AiHotelChat() {
           const newHistory = history.map((r) => (r.id === viewingRecord.id ? { ...viewingRecord, messages: next } : r));
           setHistory(newHistory);
           try {
-            localStorage.setItem(HISTORY_KEY, JSON.stringify(newHistory.slice(0, MAX_HISTORY)));
+            localStorage.setItem(historyKey, JSON.stringify(newHistory.slice(0, MAX_HISTORY)));
           } catch (_) {}
         } else {
           setCurrentMessages((prev) => applyRoomsUpdate(prev));
         }
       }).catch(() => {});
     }
-  }, [viewingRecord, history, currentMessages, axios]);
+  }, [viewingRecord, history, currentMessages, axios, historyKey]);
 
   useEffect(() => {
     function handleClickOutside(e) {
@@ -278,8 +300,8 @@ function AiHotelChat() {
   }, [historyDropdownOpen]);
 
   useEffect(() => {
-    if (!viewingRecord) saveCurrentSession(currentMessages);
-  }, [currentMessages, viewingRecord]);
+    if (!viewingRecord) saveCurrentSession(currentMessages, sessionKey);
+  }, [currentMessages, viewingRecord, sessionKey]);
 
   useEffect(() => {
     if (messages.length > 0 && scrollParentRef.current) {
@@ -305,7 +327,7 @@ function AiHotelChat() {
   function handleNewChat() {
     setViewingRecord(null);
     setCurrentMessages([]);
-    saveCurrentSession([]);
+    saveCurrentSession([], sessionKey);
   }
 
   async function handleSend(e) {
@@ -314,9 +336,14 @@ function AiHotelChat() {
     if (!text || loading) return;
     setInput('');
     const userMsg = { role: 'user', content: text };
-    setCurrentMessages((prev) => [...prev, userMsg]);
+    const baseMessages = viewingRecord ? viewingRecord.messages : currentMessages;
+    if (viewingRecord) {
+      setViewingRecord({ ...viewingRecord, messages: [...baseMessages, userMsg] });
+    } else {
+      setCurrentMessages((prev) => [...prev, userMsg]);
+    }
     setLoading(true);
-    const lastAssistant = [...currentMessages].reverse().find((m) => m.role === 'assistant' && m.criteria);
+    const lastAssistant = [...baseMessages].reverse().find((m) => m.role === 'assistant' && m.criteria);
     const previousCriteria = lastAssistant ? lastAssistant.criteria : null;
     try {
       const { data } = await axios.post('/api/rooms/smart-search', { query: text, previousCriteria: previousCriteria || undefined });
@@ -335,19 +362,50 @@ function AiHotelChat() {
           ? `根据您的要求（${summary}）为您找到以下房型，点击卡片可查看详情并预订：`
           : `根据您的要求（${summary}）暂未找到符合条件的房型，可尝试放宽预算或更换目的地。`;
         const assistantMsg = { role: 'assistant', content, criteria, rooms, batchIndex: 0, query: text, reasonsCacheKey: data.reasonsCacheKey };
-        setCurrentMessages((prev) => {
-          const next = [...prev, assistantMsg];
-          saveToHistory({ title: getRecordTitle(next), messages: next });
-          setHistory(loadHistory());
-          return next;
-        });
+        const nextMessages = [...baseMessages, userMsg, assistantMsg];
+        if (viewingRecord) {
+          const updatedRecord = { ...viewingRecord, messages: nextMessages, title: getRecordTitle(nextMessages) };
+          setViewingRecord(updatedRecord);
+          const newHistory = history.map((r) => (r.id === viewingRecord.id ? updatedRecord : r));
+          setHistory(newHistory);
+          try {
+            localStorage.setItem(historyKey, JSON.stringify(newHistory.slice(0, MAX_HISTORY)));
+          } catch (_) {}
+        } else {
+          setCurrentMessages((prev) => {
+            const next = [...prev, assistantMsg];
+            saveToHistory({ title: getRecordTitle(next), messages: next }, historyKey);
+            setHistory(loadHistory(historyKey));
+            return next;
+          });
+        }
       } else {
         const errMsg = { role: 'assistant', content: data.message || '请求失败，请重试。', criteria: null, rooms: null };
-        setCurrentMessages((prev) => [...prev, errMsg]);
+        if (viewingRecord) {
+          setViewingRecord({ ...viewingRecord, messages: [...baseMessages, userMsg, errMsg] });
+          const updatedRecord = { ...viewingRecord, messages: [...baseMessages, userMsg, errMsg] };
+          const newHistory = history.map((r) => (r.id === viewingRecord.id ? updatedRecord : r));
+          setHistory(newHistory);
+          try {
+            localStorage.setItem(historyKey, JSON.stringify(newHistory.slice(0, MAX_HISTORY)));
+          } catch (_) {}
+        } else {
+          setCurrentMessages((prev) => [...prev, errMsg]);
+        }
       }
     } catch (err) {
       const errMsg = { role: 'assistant', content: err.response?.data?.message || err.message || '网络错误，请稍后重试。', criteria: null, rooms: null };
-      setCurrentMessages((prev) => [...prev, errMsg]);
+      if (viewingRecord) {
+        setViewingRecord({ ...viewingRecord, messages: [...baseMessages, userMsg, errMsg] });
+        const updatedRecord = { ...viewingRecord, messages: [...baseMessages, userMsg, errMsg] };
+        const newHistory = history.map((r) => (r.id === viewingRecord.id ? updatedRecord : r));
+        setHistory(newHistory);
+        try {
+          localStorage.setItem(historyKey, JSON.stringify(newHistory.slice(0, MAX_HISTORY)));
+        } catch (_) {}
+      } else {
+        setCurrentMessages((prev) => [...prev, errMsg]);
+      }
     } finally {
       setLoading(false);
     }
@@ -444,7 +502,7 @@ function AiHotelChat() {
       <div className="flex-1 flex flex-col min-w-0">
         {viewingRecord && (
           <div className="flex-shrink-0 px-4 py-2 bg-amber-50 border-b border-amber-200 flex items-center justify-between">
-            <span className="text-sm text-amber-800">正在查看历史记录</span>
+            <span className="text-sm text-amber-800">正在查看历史记录，可直接在下方继续提问</span>
             <button type="button" onClick={handleBackToCurrent} className="text-sm font-medium text-amber-700 hover:text-amber-900">
               返回当前对话
             </button>
@@ -516,13 +574,13 @@ function AiHotelChat() {
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder={viewingRecord ? '请先点击「返回当前对话」再发送' : '描述您的出行需求，例如：想去北京玩三天，两人，预算1500元'}
+              placeholder={viewingRecord ? '在此历史对话中继续提问…' : '描述您的出行需求，例如：想去北京玩三天，两人，预算1500元'}
               className="flex-1 rounded-xl border border-gray-200 px-4 py-3 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
-              disabled={loading || !!viewingRecord}
+              disabled={loading}
             />
             <button
               type="submit"
-              disabled={loading || !input.trim() || !!viewingRecord}
+              disabled={loading || !input.trim()}
               className="px-5 py-3 rounded-xl bg-blue-600 text-white font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               发送
