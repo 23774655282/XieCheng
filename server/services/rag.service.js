@@ -284,11 +284,12 @@ export async function searchSimilarRooms(query, topK = 30, apiKey, baseURL, embe
 const REASON_SYSTEM = `你是一个酒店推荐助手。用户已描述出行需求，系统已筛选出符合条件的房型列表。
 你的任务：为每个房型写一句**简短推荐理由**（20-50字），说明为什么适合该用户。
 要求：
-1. 只输出一个 JSON 对象，不要输出其他文字。
-2. 格式：{ "reasons": { "房间ID": "推荐理由", ... } }
-3. 房间ID 为传入列表中的 _id 字符串。
-4. 推荐理由要基于房型、酒店、设施、价格等具体信息，不要泛泛而谈。
-5. 若某房间无法写出理由，可写简短概括如"性价比高、位置便利"。`;
+1. **推荐理由必须使用中文**，禁止使用英文或其他语言。
+2. 只输出一个 JSON 对象，不要输出其他文字。
+3. 格式：{ "reasons": { "房间ID": "推荐理由", ... } }
+4. 房间ID 为传入列表中的 _id 字符串。
+5. 推荐理由要基于房型、酒店、设施、价格等具体信息，不要泛泛而谈。
+6. 若某房间无法写出理由，可写简短概括如"性价比高、位置便利"。`;
 
 /** 调用 LLM 为房间生成推荐理由 */
 export async function generateRecommendationReasons(rooms, userQuery, criteria, apiKey, baseURL, chatModel) {
