@@ -11,6 +11,7 @@ import * as lancedb from "@lancedb/lancedb";
 import OpenAI from "openai";
 import Room from "../models/room.model.js";
 import Hotel from "../models/hotel.model.js";
+import Review from "../models/review.model.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -28,7 +29,11 @@ const EMBEDDING_CACHE_MAX = 200;
 const EMBEDDING_CACHE_TTL_MS = 30 * 60 * 1000; // 30 分钟
 const embeddingCache = new Map();
 
-/** 从房间+酒店数据生成可检索文档文本 */
+/** Chunk 划分参数 */
+const CHUNK_MAX_CHARS = 450;
+const CHUNK_OVERLAP = 80;
+
+/** 从房间+酒店数据生成可检索文档文本（单文档，兼容旧逻辑） */
 export function roomToDocument(room) {
   const hotel = room.hotel;
   const parts = [
@@ -45,6 +50,64 @@ export function roomToDocument(room) {
     (room.amenties || []).join(" "),
   ];
   return parts.filter(Boolean).join(" ");
+}
+
+/**
+ * 语义分块：酒店名、城市、房型、价格、设施、介绍、用户评价
+ * 返回 { text, roomId, roomJson, chunkType }[]
+ * - 主块：酒店+房型基础信息
+ * - 评价块：用户评价（按长度切分，带重叠）
+ */
+function roomToChunks(room, reviewTexts = []) {
+  const hotel = room.hotel;
+  const roomId = room._id.toString();
+  const roomJson = JSON.stringify(room);
+
+  const hotelPart = [
+    hotel?.name || "",
+    hotel?.city || "",
+    hotel?.address || "",
+    hotel?.district || "",
+    hotel?.starRating ? `${hotel.starRating}星级` : "",
+    (hotel?.hotelIntro || "").trim(),
+    (hotel?.nearbyAttractions || []).join(" "),
+    (hotel?.promotions || []).join(" "),
+  ].filter(Boolean).join(" ");
+
+  const roomPart = [
+    roomTypeToCn[room.roomType] || room.roomType,
+    room.pricePerNight ? `每晚${room.pricePerNight}元` : "",
+    (room.amenties || []).join(" "),
+  ].filter(Boolean).join(" ");
+
+  const mainText = [hotelPart, roomPart].filter(Boolean).join(" ");
+  const chunks = [];
+
+  if (mainText.trim()) {
+    chunks.push({ text: mainText.trim(), roomId, roomJson, chunkType: "main" });
+  }
+
+  const reviewStr = reviewTexts.filter(Boolean).join(" ").trim();
+  if (reviewStr) {
+    if (reviewStr.length <= CHUNK_MAX_CHARS) {
+      chunks.push({ text: `用户评价：${reviewStr}`, roomId, roomJson, chunkType: "review" });
+    } else {
+      let pos = 0;
+      while (pos < reviewStr.length) {
+        const end = Math.min(pos + CHUNK_MAX_CHARS, reviewStr.length);
+        let slice = reviewStr.slice(pos, end);
+        if (end < reviewStr.length && !/[\s。！？，、]$/.test(slice)) {
+          const lastPause = Math.max(slice.lastIndexOf("。"), slice.lastIndexOf("！"), slice.lastIndexOf("？"), slice.lastIndexOf("，"));
+          if (lastPause > CHUNK_MAX_CHARS / 2) slice = slice.slice(0, lastPause + 1);
+        }
+        chunks.push({ text: `用户评价：${slice}`, roomId, roomJson, chunkType: "review" });
+        const advance = slice.length;
+        pos += advance - (pos + advance < reviewStr.length ? CHUNK_OVERLAP : 0);
+      }
+    }
+  }
+
+  return chunks;
 }
 
 /** 获取 embedding（支持 OpenAI / DeepSeek 等兼容 API），带缓存 */
@@ -74,7 +137,7 @@ async function getEmbedding(client, model, text) {
   return vec;
 }
 
-/** 构建向量索引并写入 LanceDB（仅已审核、可预订的房间） */
+/** 构建向量索引并写入 LanceDB（仅已审核、可预订的房间，含 Chunking） */
 export async function buildVectorIndex(apiKey, baseURL, embeddingModel) {
   if (!apiKey) return false;
   try {
@@ -99,24 +162,41 @@ export async function buildVectorIndex(apiKey, baseURL, embeddingModel) {
       return true;
     }
 
+    const hotelIds = rooms.map((r) => r.hotel?._id).filter(Boolean);
+    const reviewsRaw = await Review.find({ hotel: { $in: hotelIds } }).select("hotel comment").lean();
+    const reviewsByHotel = new Map();
+    for (const r of reviewsRaw) {
+      const hid = r.hotel?.toString?.() || String(r.hotel);
+      if (!reviewsByHotel.has(hid)) reviewsByHotel.set(hid, []);
+      if (r.comment?.trim()) reviewsByHotel.get(hid).push(r.comment.trim());
+    }
+
+    const allChunks = [];
+    for (const room of rooms) {
+      const hotelId = room.hotel?._id?.toString?.();
+      const reviewTexts = hotelId ? (reviewsByHotel.get(hotelId) || []) : [];
+      const chunks = roomToChunks(room, reviewTexts);
+      allChunks.push(...chunks);
+    }
+
     const batchSize = 10;
     const rows = [];
-    for (let i = 0; i < rooms.length; i += batchSize) {
-      const batch = rooms.slice(i, i + batchSize);
-      const texts = batch.map((r) => roomToDocument(r));
+    for (let i = 0; i < allChunks.length; i += batchSize) {
+      const batch = allChunks.slice(i, i + batchSize);
+      const texts = batch.map((c) => c.text);
       const res = await client.embeddings.create({
         model: embeddingModel,
         input: texts,
       });
       const embeddings = res?.data || [];
-      batch.forEach((room, j) => {
+      batch.forEach((chunk, j) => {
         const vec = embeddings[j]?.embedding;
         if (Array.isArray(vec)) {
           rows.push({
-            roomId: room._id.toString(),
+            roomId: chunk.roomId,
             vector: vec,
-            text: texts[j],
-            roomJson: JSON.stringify(room),
+            text: chunk.text,
+            roomJson: chunk.roomJson,
           });
         }
       });
@@ -170,21 +250,26 @@ export async function searchSimilarRooms(query, topK = 30, apiKey, baseURL, embe
     const queryVec = await getEmbedding(client, embeddingModel, query);
     if (!queryVec) return [];
 
+    const limitChunks = Math.min(topK * 5, 200);
     const results = await table
       .vectorSearch(queryVec)
       .distanceType("cosine")
-      .limit(topK)
+      .limit(limitChunks)
       .toArray();
 
+    const seenRoomIds = new Set();
     const rooms = [];
     for (const row of results) {
+      const roomId = row?.roomId;
       const roomJson = row?.roomJson;
-      if (roomJson) {
+      if (roomId && roomJson && !seenRoomIds.has(roomId)) {
+        seenRoomIds.add(roomId);
         try {
           const room = JSON.parse(roomJson);
           rooms.push(room);
+          if (rooms.length >= topK) break;
         } catch (_) {
-          /* 解析失败跳过 */
+          seenRoomIds.delete(roomId);
         }
       }
     }
