@@ -17,7 +17,9 @@ http://120.55.126.95/
 | 后端 | Node.js、Express 5、MongoDB、Mongoose |
 | 认证 | Clerk / JWT |
 | 地图 | 高德地图|
-| AI | DeepSeek API（智能搜索） |
+| AI | 通义千问 / DeepSeek（意图解析、Embedding、推荐理由） |
+| 向量库 | LanceDB（语义检索） |
+| 实时推送 | Socket.IO（推荐理由 WebSocket 推送） |
 
 ## 功能概览
 
@@ -30,7 +32,7 @@ http://120.55.126.95/
 - **我的预订**：订单列表、支付、取消
 - **个人中心**：资料、收藏、密码修改
 - **旅行地图**：高德地图展示酒店位置
-- **AI 酒店助手**：智能对话推荐酒店
+- **AI 酒店助手**：自然语言对话，RAG 向量检索 + LLM 意图解析，实时推荐房型及理由
 
 ### 商户端
 - **酒店信息**：编辑酒店基础信息、图片
@@ -59,7 +61,9 @@ Hotel-Booking-main/
 │   ├── controllers/       # 控制器
 │   ├── models/            # 数据模型
 │   ├── routes/            # 路由
+│   ├── services/          # RAG 服务（向量索引、检索、推荐理由）
 │   ├── middlewares/       # 中间件
+│   ├── ws.js              # WebSocket 推荐理由推送
 │   └── server.js
 └── README.md
 ```
@@ -111,7 +115,7 @@ cd ../server && npm install
 
 ### 3. 配置环境变量
 
-在 `client/.env` 中配置 `VITE_BACKEND_URL=http://localhost:3000`，后端在 `server/.env` 中按需配置。
+在 `client/.env` 中配置 `VITE_BACKEND_URL=http://localhost:3000`。后端 `server/.env` 需配置 `MONGO_URI`、`AI_API_KEY`；启用 AI 智能搜索还需 `AI_EMBEDDING_API_KEY`、`AI_EMBEDDING_BASE_URL`、`AI_REASON_*` 等。
 
 ### 4. 启动服务
 
@@ -133,6 +137,17 @@ cd client && npm run build
 cd ../server && npm start
 ```
 
+## AI 智能搜索（RAG）
+
+智能搜索采用 RAG（检索增强生成）流程：
+
+1. **向量索引**：启动时从 MongoDB 拉取已审核、可预订房间，经 Embedding API 向量化后写入 LanceDB
+2. **并行检索**：用户输入自然语言 → LLM 解析意图（目的地、预算、房型等）+ 向量语义检索（LanceDB cosine 相似度）
+3. **后置过滤**：按目的地、预算、房型做硬性过滤
+4. **推荐理由**：首屏 3 条同步生成，其余后台并行生成并通过 WebSocket 推送
+
+**环境变量**（`server/.env`）：`AI_API_KEY`、`AI_EMBEDDING_API_KEY`、`AI_EMBEDDING_BASE_URL`、`AI_REASON_MODEL`（qwen-turbo）、`AI_REASON_BASE_URL` 等。
+
 ## 主要 API
 
 | 路径 | 说明 |
@@ -140,7 +155,7 @@ cd ../server && npm start
 | `/api/auth` | 登录、注册、找回密码 |
 | `/api/users` | 用户信息、收藏 |
 | `/api/hotels` | 酒店 CRUD、公开查询 |
-| `/api/rooms` | 房型 CRUD、查询、智能搜索 |
+| `/api/rooms` | 房型 CRUD、查询、智能搜索、推荐理由 |
 | `/api/bookings` | 预订、支付、取消 |
 | `/api/reviews` | 评价 |
 | `/api/amap` | 高德地图代理 |
