@@ -1,15 +1,32 @@
 /**
  * RAG 服务：房间文档构建、向量检索、推荐理由生成
  * - 从 Hotel + Room 数据生成可检索文档
- * - 使用 Embedding API 做语义检索
+ * - 使用 LanceDB 持久化向量数据库 + Embedding API 做语义检索
  * - 一致性：仅索引已审核、可预订的房间
  */
 
+import path from "path";
+import { fileURLToPath } from "url";
+import * as lancedb from "@lancedb/lancedb";
 import OpenAI from "openai";
 import Room from "../models/room.model.js";
 import Hotel from "../models/hotel.model.js";
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
 const roomTypeToCn = { "Single Bed": "单人间", "Double Bed": "双人间", "Luxury Room": "豪华房", "Family Suite": "家庭套房" };
+
+/** LanceDB 存储路径（可通过 LANCEDB_PATH 环境变量覆盖） */
+function getLanceDbPath() {
+  return process.env.LANCEDB_PATH || path.join(__dirname, "..", "data", "lancedb-rooms");
+}
+
+const TABLE_NAME = "rooms";
+
+/** Embedding 缓存：key = model:input，value = { vec, ts }，减少重复 query 的 API 调用 */
+const EMBEDDING_CACHE_MAX = 200;
+const EMBEDDING_CACHE_TTL_MS = 30 * 60 * 1000; // 30 分钟
+const embeddingCache = new Map();
 
 /** 从房间+酒店数据生成可检索文档文本 */
 export function roomToDocument(room) {
@@ -30,37 +47,34 @@ export function roomToDocument(room) {
   return parts.filter(Boolean).join(" ");
 }
 
-/** 余弦相似度 */
-function cosineSimilarity(a, b) {
-  if (a.length !== b.length) return 0;
-  let dot = 0, normA = 0, normB = 0;
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i];
-    normA += a[i] * a[i];
-    normB += b[i] * b[i];
-  }
-  const denom = Math.sqrt(normA) * Math.sqrt(normB);
-  return denom > 0 ? dot / denom : 0;
-}
-
-/** 获取 embedding（支持 OpenAI / DeepSeek 等兼容 API） */
+/** 获取 embedding（支持 OpenAI / DeepSeek 等兼容 API），带缓存 */
 async function getEmbedding(client, model, text) {
   const input = String(text || "").trim().slice(0, 8000);
   if (!input) return null;
+
+  const cacheKey = `${model}:${input}`;
+  const cached = embeddingCache.get(cacheKey);
+  if (cached && Date.now() - cached.ts < EMBEDDING_CACHE_TTL_MS) {
+    return cached.vec;
+  }
+  if (cached) embeddingCache.delete(cacheKey);
+
   const res = await client.embeddings.create({
     model,
     input,
   });
   const vec = res?.data?.[0]?.embedding;
-  return Array.isArray(vec) ? vec : null;
+  if (!Array.isArray(vec)) return null;
+
+  if (embeddingCache.size >= EMBEDDING_CACHE_MAX) {
+    const keys = [...embeddingCache.keys()].slice(0, 50);
+    keys.forEach((k) => embeddingCache.delete(k));
+  }
+  embeddingCache.set(cacheKey, { vec, ts: Date.now() });
+  return vec;
 }
 
-/** 内存向量索引：{ roomId, vector, text }[] */
-let vectorIndex = [];
-let indexBuiltAt = null;
-const INDEX_TTL_MS = 15 * 60 * 1000; // 15 分钟缓存
-
-/** 构建向量索引（仅已审核、可预订的房间） */
+/** 构建向量索引并写入 LanceDB（仅已审核、可预订的房间） */
 export async function buildVectorIndex(apiKey, baseURL, embeddingModel) {
   if (!apiKey) return false;
   try {
@@ -73,13 +87,20 @@ export async function buildVectorIndex(apiKey, baseURL, embeddingModel) {
       status: { $ne: "pending_audit" },
     };
     const rooms = await Room.find(roomFilter).populate("hotel").lean();
+    const dbPath = getLanceDbPath();
+    const db = await lancedb.connect(dbPath);
+
     if (rooms.length === 0) {
-      vectorIndex = [];
-      indexBuiltAt = Date.now();
+      try {
+        await db.dropTable(TABLE_NAME);
+      } catch (_) {
+        /* 表不存在时忽略 */
+      }
       return true;
     }
-    const batchSize = 50;
-    const index = [];
+
+    const batchSize = 10;
+    const rows = [];
     for (let i = 0; i < rooms.length; i += batchSize) {
       const batch = rooms.slice(i, i + batchSize);
       const texts = batch.map((r) => roomToDocument(r));
@@ -91,17 +112,31 @@ export async function buildVectorIndex(apiKey, baseURL, embeddingModel) {
       batch.forEach((room, j) => {
         const vec = embeddings[j]?.embedding;
         if (Array.isArray(vec)) {
-          index.push({
+          rows.push({
             roomId: room._id.toString(),
-            room: room,
             vector: vec,
             text: texts[j],
+            roomJson: JSON.stringify(room),
           });
         }
       });
     }
-    vectorIndex = index;
-    indexBuiltAt = Date.now();
+
+    try {
+      await db.dropTable(TABLE_NAME);
+    } catch (_) {
+      /* 表不存在时忽略 */
+    }
+    const table = await db.createTable(TABLE_NAME, rows);
+    // 创建 IVFFlat 向量索引，加速语义检索（与 searchSimilarRooms 的 cosine 距离一致）
+    try {
+      await table.createIndex("vector", {
+        config: lancedb.Index.ivfFlat({ distanceType: "cosine" }),
+        replace: true,
+      });
+    } catch (idxErr) {
+      console.warn("[RAG] 向量索引创建跳过（表仍可检索）:", idxErr?.message);
+    }
     return true;
   } catch (err) {
     console.error("[RAG] buildVectorIndex error:", err?.message);
@@ -109,24 +144,51 @@ export async function buildVectorIndex(apiKey, baseURL, embeddingModel) {
   }
 }
 
-/** 语义检索：返回与 query 最相似的 topK 个房间 */
+/** 语义检索：从 LanceDB 返回与 query 最相似的 topK 个房间 */
 export async function searchSimilarRooms(query, topK = 30, apiKey, baseURL, embeddingModel) {
   if (!apiKey || !query?.trim()) return [];
-  const needsRebuild = !indexBuiltAt || Date.now() - indexBuiltAt > INDEX_TTL_MS;
-  if (vectorIndex.length === 0 || needsRebuild) {
-    const ok = await buildVectorIndex(apiKey, baseURL, embeddingModel);
-    if (!ok || vectorIndex.length === 0) return [];
-  }
   try {
+    const dbPath = getLanceDbPath();
+    const db = await lancedb.connect(dbPath);
+    let table;
+    try {
+      table = await db.openTable(TABLE_NAME);
+    } catch (_) {
+      const ok = await buildVectorIndex(apiKey, baseURL, embeddingModel);
+      if (!ok) return [];
+      table = await db.openTable(TABLE_NAME);
+    }
+
+    const rowCount = await table.countRows();
+    if (rowCount === 0) {
+      const ok = await buildVectorIndex(apiKey, baseURL, embeddingModel);
+      if (!ok) return [];
+      table = await db.openTable(TABLE_NAME);
+    }
+
     const client = new OpenAI({ apiKey, baseURL });
     const queryVec = await getEmbedding(client, embeddingModel, query);
     if (!queryVec) return [];
-    const scored = vectorIndex.map((item) => ({
-      ...item,
-      score: cosineSimilarity(queryVec, item.vector),
-    }));
-    scored.sort((a, b) => b.score - a.score);
-    return scored.slice(0, topK).map((s) => s.room);
+
+    const results = await table
+      .vectorSearch(queryVec)
+      .distanceType("cosine")
+      .limit(topK)
+      .toArray();
+
+    const rooms = [];
+    for (const row of results) {
+      const roomJson = row?.roomJson;
+      if (roomJson) {
+        try {
+          const room = JSON.parse(roomJson);
+          rooms.push(room);
+        } catch (_) {
+          /* 解析失败跳过 */
+        }
+      }
+    }
+    return rooms;
   } catch (err) {
     console.error("[RAG] searchSimilarRooms error:", err?.message);
     return [];

@@ -1,7 +1,9 @@
+import { createServer } from "http";
 import express from 'express';
 import cors from 'cors';
 import connectDB from './config/dbConnection.js';
 import { configDotenv } from 'dotenv';
+import { initWebSocket } from './ws.js';
 configDotenv();
 import userRouter from './routes/user.route.js';
 import authRouter from './routes/auth.route.js';
@@ -70,16 +72,21 @@ if (existsSync(clientDist)) {
 }
 
 const PORT = process.env.PORT || 5000;
+const httpServer = createServer(app);
 
 // 先连接数据库，再启动监听，避免监听后因 MongoDB 未就绪而 process.exit(1)
 await connectDB();
 
+// 初始化 WebSocket（用于推荐理由主动推送）
+await initWebSocket(httpServer);
+
 // 预构建 RAG 向量索引（后台执行，不阻塞启动）
-const apiKey = process.env.AI_API_KEY;
-if (apiKey) {
+// Embedding 优先使用 AI_EMBEDDING_API_KEY（如通义千问），否则用 AI_API_KEY
+const embeddingApiKey = process.env.AI_EMBEDDING_API_KEY || process.env.AI_API_KEY;
+if (embeddingApiKey) {
   const embeddingModel = process.env.AI_EMBEDDING_MODEL || "deepseek-embedding-v2";
   const embeddingBaseURL = process.env.AI_EMBEDDING_BASE_URL || process.env.AI_API_BASE_URL || "https://api.deepseek.com/v1";
-  buildVectorIndex(apiKey, embeddingBaseURL, embeddingModel)
+  buildVectorIndex(embeddingApiKey, embeddingBaseURL, embeddingModel)
     .then((ok) => console.log(ok ? "[RAG] 向量索引预构建完成" : "[RAG] 向量索引预构建跳过"))
     .catch((err) => console.warn("[RAG] 向量索引预构建失败:", err?.message));
 }
@@ -91,6 +98,6 @@ setInterval(() => {
 // 启动时立即执行一次
 cancelExpiredUnpaidBookings().catch((err) => console.error("[定时任务] 取消超时订单失败:", err));
 
-app.listen(PORT, () => {
+httpServer.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });

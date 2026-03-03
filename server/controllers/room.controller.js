@@ -1,8 +1,14 @@
+import mongoose from "mongoose";
 import Hotel from "../models/hotel.model.js";
 import Room from "../models/room.model.js";
 import RoomEditApplication from "../models/roomEditApplication.model.js";
 import OpenAI from "openai";
 import { searchSimilarRooms, generateRecommendationReasons } from "../services/rag.service.js";
+import { emitReasons } from "../ws.js";
+
+/** 推荐理由缓存：key = reasonsCacheKey，value = { roomId: reason }，供「换一批」时优先读取 */
+const reasonsCache = new Map();
+const REASONS_CACHE_TTL_MS = 30 * 60 * 1000;
 
 export const createRoom = async (req, res) => {
     try {
@@ -83,6 +89,36 @@ const NEARBY_KM = 12; // 12km，略大于 10km 以应对坐标系偏差和边界
 /** 转义正则特殊字符，避免用户输入导致正则异常 */
 function escapeRegex(str) {
     return String(str || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** 后置过滤：对向量检索结果按用户硬性条件（目的地、预算、房型）过滤，保持向量相似度顺序 */
+function filterRoomsByCriteria(rooms, criteria) {
+    if (!rooms?.length) return [];
+    const { destination, nights, budget, roomType } = criteria || {};
+    const maxPricePerNight = budget > 0 && nights >= 1 ? Math.floor(budget / nights) : null;
+    let destRe = null;
+    if (destination && String(destination).trim()) {
+        destRe = new RegExp(escapeRegex(destination.trim()), "i");
+    }
+    return rooms.filter((r) => {
+        if (destRe) {
+            const hotel = r.hotel;
+            const city = hotel?.city || "";
+            const name = hotel?.name || "";
+            const address = hotel?.address || "";
+            if (!destRe.test(city) && !destRe.test(name) && !destRe.test(address)) return false;
+        }
+        if (maxPricePerNight != null && maxPricePerNight >= 0) {
+            const effectivePrice = (r.promoDiscount != null && r.promoDiscount > 0)
+                ? Math.round(r.pricePerNight * (1 - r.promoDiscount / 100))
+                : r.pricePerNight;
+            if (effectivePrice > maxPricePerNight) return false;
+        }
+        if (roomType) {
+            if (r.roomType !== roomType) return false;
+        }
+        return true;
+    });
 }
 
 /** Haversine 球面距离（km） */
@@ -663,7 +699,7 @@ JSON 必须包含且仅包含以下 6 个字段（均为数字或字符串）：
 
 若请求中带有「上一轮条件」，则在上一轮基础上只更新用户本轮提到或可推断的字段，未提到的保持上一轮的值。`;
 
-/** 智能搜索：用 OpenAI 解析用户自然语言，再按条件筛选房间；支持多轮对话，可传 previousCriteria 合并上一轮条件 */
+/** 智能搜索：纯向量检索，将用户问题向量化后与房间文档做语义相似度匹配；支持多轮对话，可传 previousCriteria 合并上一轮条件（用于展示） */
 export const smartSearchRooms = async (req, res) => {
     try {
         const query = (req.body?.query || "").trim();
@@ -684,6 +720,7 @@ export const smartSearchRooms = async (req, res) => {
             if (parts.length > 0) userContent = `【上一轮条件】${parts.join("，")}\n【用户本轮说】${query}`;
         }
         const apiKey = process.env.AI_API_KEY;
+        const reasonApiKey = process.env.AI_REASON_API_KEY || apiKey;
         if (!apiKey) {
             return res.status(503).json({
                 success: false,
@@ -691,18 +728,29 @@ export const smartSearchRooms = async (req, res) => {
             });
         }
         const baseURL = process.env.AI_API_BASE_URL || "https://api.deepseek.com/v1";
+        const reasonBaseURL = process.env.AI_REASON_BASE_URL || baseURL;
         const model = process.env.AI_CHAT_MODEL || "deepseek-chat";
+        const reasonModel = process.env.AI_REASON_MODEL || "qwen-turbo";
+        const embeddingModel = process.env.AI_EMBEDDING_MODEL || "deepseek-embedding-v2";
+        const embeddingBaseURL = process.env.AI_EMBEDDING_BASE_URL || process.env.AI_API_BASE_URL || "https://api.deepseek.com/v1";
+        const embeddingApiKey = process.env.AI_EMBEDDING_API_KEY || apiKey;
+
+        // 并行执行：LLM 意图解析 + 向量检索
         const client = new OpenAI({ apiKey, baseURL });
-        const completion = await client.chat.completions.create({
-            model,
-            messages: [
-                { role: "system", content: SMART_SEARCH_SYSTEM },
-                { role: "user", content: userContent },
-            ],
-            response_format: { type: "json_object" },
-            temperature: 0.2,
-        });
-        const raw = completion.choices[0]?.message?.content;
+        const [completionRes, similarRooms] = await Promise.all([
+            client.chat.completions.create({
+                model,
+                messages: [
+                    { role: "system", content: SMART_SEARCH_SYSTEM },
+                    { role: "user", content: userContent },
+                ],
+                response_format: { type: "json_object" },
+                temperature: 0.2,
+            }),
+            searchSimilarRooms(query, 50, embeddingApiKey, embeddingBaseURL, embeddingModel).catch(() => []),
+        ]);
+
+        const raw = completionRes.choices[0]?.message?.content;
         if (!raw) {
             return res.status(502).json({ success: false, message: "AI 未返回有效结果，请重试" });
         }
@@ -726,80 +774,59 @@ export const smartSearchRooms = async (req, res) => {
         const rawRoomType = String(criteria.roomType ?? prev.roomType ?? "").trim();
         const roomType = VALID_ROOM_TYPES.includes(rawRoomType) ? rawRoomType : null;
         const criteriaOut = { destination: destination || null, adults, children, nights, budget: budget || null, roomType };
-        const hotelFilter = { status: "approved" };
-        if (destination) {
-            const re = new RegExp(escapeRegex(destination), "i");
-            hotelFilter.$or = [{ city: re }, { name: re }, { address: re }];
-        }
-        const approvedHotelIds = await Hotel.find(hotelFilter).distinct("_id").then((ids) => ids.map((id) => id.toString()));
-        const roomFilter = { isAvailable: true, hotel: { $in: approvedHotelIds }, status: { $ne: "pending_audit" } };
-        if (roomType) roomFilter.roomType = roomType;
-        const maxPricePerNight = budget > 0 && nights >= 1 ? Math.floor(budget / nights) : null;
 
-        const embeddingModel = process.env.AI_EMBEDDING_MODEL || "deepseek-embedding-v2";
-        const embeddingBaseURL = process.env.AI_EMBEDDING_BASE_URL || process.env.AI_API_BASE_URL || "https://api.deepseek.com/v1";
-
-        // 并行执行：MongoDB 查询 + 向量检索
-        const fetchRoomsPromise = (async () => {
-            if (maxPricePerNight != null && maxPricePerNight >= 0) {
-                const pipeline = [
-                    { $match: roomFilter },
-                    {
-                        $addFields: {
-                            effectivePricePerNight: {
-                                $cond: {
-                                    if: { $and: [{ $gt: ["$promoDiscount", 0] }, { $ne: ["$promoDiscount", null] }] },
-                                    then: { $round: [{ $multiply: ["$pricePerNight", { $subtract: [1, { $divide: ["$promoDiscount", 100] }] }] }, 0] },
-                                    else: "$pricePerNight"
-                                }
-                            }
-                        }
-                    },
-                    { $match: { effectivePricePerNight: { $lte: maxPricePerNight } } },
-                    { $sort: { pricePerNight: 1, createdAt: -1 } },
-                    { $limit: 50 },
-                    { $addFields: { hotelIdForLookup: { $toObjectId: "$hotel" } } },
-                    { $lookup: { from: "hotels", localField: "hotelIdForLookup", foreignField: "_id", as: "hotel" } },
-                    { $unwind: { path: "$hotel", preserveNullAndEmptyArrays: false } },
-                    { $project: { hotelIdForLookup: 0, effectivePricePerNight: 0 } }
-                ];
-                return Room.aggregate(pipeline);
-            }
-            return Room.find(roomFilter)
-                .populate({ path: "hotel" })
-                .sort({ pricePerNight: 1, createdAt: -1 })
-                .limit(50)
-                .lean();
-        })();
-
-        const searchSimilarPromise = searchSimilarRooms(query, 50, apiKey, embeddingBaseURL, embeddingModel).catch(() => []);
-
-        const [rooms, similarRooms] = await Promise.all([fetchRoomsPromise, searchSimilarPromise]);
-
-        // 若有向量结果，取交集并按向量相似度排序；否则保持原顺序
-        let roomsFinal = rooms;
-        if (similarRooms.length > 0 && rooms.length > 0) {
-            const ordered = [];
-            similarRooms.forEach((sr) => {
-                const rid = String(sr._id);
-                const found = rooms.find((r) => String(r._id) === rid);
-                if (found) ordered.push(found);
-            });
-            if (ordered.length > 0) roomsFinal = ordered;
-        }
+        // 后置过滤：保证满足用户硬性条件（目的地、预算、房型）
+        const roomsFiltered = filterRoomsByCriteria(similarRooms, criteriaOut);
 
         // 最多取 24 个房型（8 批 × 3 个，供前端「换一批」轮流展示）
-        roomsFinal = roomsFinal.slice(0, 24);
+        const roomsFinal = roomsFiltered.slice(0, 24);
 
-        // 生成推荐理由（基于房间数据增强 LLM 输出）
+        // 首屏只生成 3 条，立即返回；后台继续异步生成其余房型的推荐理由
+        const ROOMS_PER_BATCH = 3;
+        const initialRooms = roomsFinal.slice(0, ROOMS_PER_BATCH);
         let reasonsMap = {};
         try {
-            reasonsMap = await generateRecommendationReasons(roomsFinal, query, criteriaOut, apiKey, baseURL, model);
+            reasonsMap = await generateRecommendationReasons(initialRooms, query, criteriaOut, reasonApiKey, reasonBaseURL, reasonModel);
         } catch (_) {
             // 理由生成失败时不影响主流程
         }
 
-        // 为每个房间附加推荐理由
+        const reasonsCacheKey = `reasons:${query}:${roomsFinal.map((r) => String(r._id)).join(",")}`;
+        reasonsCache.set(reasonsCacheKey, { ...reasonsMap, _ts: Date.now() });
+
+        // 后台并行生成其余房型的推荐理由（不阻塞响应），完成时通过 WebSocket 主动推送
+        const remainingRooms = roomsFinal.slice(ROOMS_PER_BATCH);
+        if (remainingRooms.length > 0) {
+            (async () => {
+                const BATCH = 3;
+                const batches = [];
+                for (let i = 0; i < remainingRooms.length; i += BATCH) {
+                    batches.push(remainingRooms.slice(i, i + BATCH));
+                }
+                const results = await Promise.allSettled(
+                    batches.map(async (batch) => {
+                        const value = await generateRecommendationReasons(batch, query, criteriaOut, reasonApiKey, reasonBaseURL, reasonModel);
+                        if (value && typeof value === "object") {
+                            emitReasons(reasonsCacheKey, value);
+                        }
+                        return value;
+                    })
+                );
+                const cached = reasonsCache.get(reasonsCacheKey);
+                if (cached && typeof cached === "object" && cached._ts) {
+                    const { _ts, ...rest } = cached;
+                    for (const result of results) {
+                        if (result.status === "fulfilled" && result.value && typeof result.value === "object") {
+                            Object.assign(rest, result.value);
+                        } else if (result.status === "rejected") {
+                            console.error("[RAG] 后台推荐理由生成失败:", result.reason?.message);
+                        }
+                    }
+                    reasonsCache.set(reasonsCacheKey, { ...rest, _ts: Date.now() });
+                }
+            })().catch(() => {});
+        }
+
         const roomsWithReasons = roomsFinal.map((r) => ({
             ...r,
             recommendationReason: reasonsMap[String(r._id)] || null,
@@ -810,6 +837,7 @@ export const smartSearchRooms = async (req, res) => {
             criteria: criteriaOut,
             rooms: roomsWithReasons,
             total: roomsWithReasons.length,
+            reasonsCacheKey,
         });
     } catch (error) {
         const errMsg = error?.message || String(error);
@@ -825,5 +853,75 @@ export const smartSearchRooms = async (req, res) => {
             msg = "无法连接 AI 服务，请检查网络或 API 配置";
         else if (errMsg) msg = errMsg;
         return res.status(500).json({ success: false, message: msg });
+    }
+};
+
+/** 按需获取指定房型的推荐理由（供「换一批」时调用）；优先从缓存读取，缓存未命中则生成 */
+export const getRecommendationReasons = async (req, res) => {
+    try {
+        const roomIds = req.body?.roomIds;
+        const query = (req.body?.query || "").trim();
+        const criteria = req.body?.criteria || {};
+        const reasonsCacheKey = req.body?.reasonsCacheKey;
+        if (!Array.isArray(roomIds) || roomIds.length === 0 || !query) {
+            return res.status(400).json({ success: false, message: "缺少 roomIds 或 query" });
+        }
+        let reasonsMap = {};
+        if (reasonsCacheKey) {
+            const cached = reasonsCache.get(reasonsCacheKey);
+            if (cached && typeof cached === "object" && cached._ts) {
+                if (Date.now() - cached._ts < REASONS_CACHE_TTL_MS) {
+                    const { _ts, ...rest } = cached;
+                    for (const id of roomIds) {
+                        const sid = String(id);
+                        if (rest[sid]) reasonsMap[sid] = rest[sid];
+                    }
+                } else {
+                    reasonsCache.delete(reasonsCacheKey);
+                }
+            }
+        }
+        const needIds = roomIds.filter((id) => !reasonsMap[String(id)]);
+        if (needIds.length === 0) {
+            return res.status(200).json({ success: true, reasons: reasonsMap });
+        }
+        const apiKey = process.env.AI_API_KEY;
+        const reasonApiKey = process.env.AI_REASON_API_KEY || apiKey;
+        if (!apiKey) {
+            return res.status(503).json({ success: false, message: "智能搜索暂未配置" });
+        }
+        const baseURL = process.env.AI_API_BASE_URL || "https://api.deepseek.com/v1";
+        const reasonBaseURL = process.env.AI_REASON_BASE_URL || baseURL;
+        const reasonModel = process.env.AI_REASON_MODEL || "qwen-turbo";
+        const ids = needIds.slice(0, 10).map((id) => {
+            try {
+                return new mongoose.Types.ObjectId(id);
+            } catch {
+                return null;
+            }
+        }).filter(Boolean);
+        if (ids.length === 0) {
+            return res.status(200).json({ success: true, reasons: reasonsMap });
+        }
+        const rooms = await Room.find({ _id: { $in: ids } }).populate("hotel").lean();
+        if (rooms.length > 0) {
+            try {
+                const generated = await generateRecommendationReasons(rooms, query, criteria, reasonApiKey, reasonBaseURL, reasonModel);
+                Object.assign(reasonsMap, generated);
+                if (reasonsCacheKey) {
+                    const cached = reasonsCache.get(reasonsCacheKey);
+                    if (cached && typeof cached === "object" && cached._ts) {
+                        const { _ts, ...rest } = cached;
+                        reasonsCache.set(reasonsCacheKey, { ...rest, ...generated, _ts: Date.now() });
+                    }
+                }
+            } catch (err) {
+                console.error("[RAG] getRecommendationReasons error:", err?.message);
+            }
+        }
+        return res.status(200).json({ success: true, reasons: reasonsMap });
+    } catch (error) {
+        console.error("getRecommendationReasons error:", error?.message);
+        return res.status(500).json({ success: false, message: "获取推荐理由失败" });
     }
 };
