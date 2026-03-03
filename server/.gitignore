@@ -77,6 +77,9 @@ web_modules/
 # 用户上传的图片/文件（部署时由运行时生成）
 uploads/
 
+# LanceDB 向量数据库存储目录
+data/
+
 # parcel-bundler cache (https://parceljs.org/)
 .cache
 .parcel-cache

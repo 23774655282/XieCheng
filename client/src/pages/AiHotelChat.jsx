@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { io } from 'socket.io-client';
 import { useAppContext } from '../context/AppContext';
 
 const roomTypeToCn = { 'Single Bed': '单人间', 'Double Bed': '双人间', 'Luxury Room': '豪华房', 'Family Suite': '家庭套房' };
@@ -54,13 +55,13 @@ function RoomCard({ room, onRoomClick }) {
   return (
     <div
       onClick={() => onRoomClick(room._id)}
-      className="flex flex-col h-[300px] bg-gray-50 rounded-xl border border-gray-100 overflow-hidden hover:shadow-md hover:border-blue-200 transition cursor-pointer"
+      className="flex flex-col h-[250px] bg-gray-50 rounded-xl border border-gray-100 overflow-hidden hover:shadow-md hover:border-blue-200 transition cursor-pointer"
     >
-      <img src={room.images?.[0]} alt="房间" className="w-full h-28 flex-shrink-0 object-cover" loading="lazy" decoding="async" />
-      <div className="p-3 flex flex-col flex-1 min-h-0 overflow-hidden">
+      <img src={room.images?.[0]} alt="房间" className="w-full h-24 flex-shrink-0 object-cover" loading="lazy" decoding="async" />
+      <div className="p-2.5 flex flex-col flex-1 min-h-0 overflow-hidden">
         <p className="font-semibold text-gray-800 text-sm truncate">{getRoomTypeLabel(room.roomType)}</p>
         {room.hotel && <p className="text-xs text-gray-500 truncate">{room.hotel.name} · {room.hotel.city}</p>}
-        <div className="flex items-center justify-between mt-2 flex-shrink-0">
+        <div className="flex items-center justify-between mt-1.5 flex-shrink-0">
           <span className="text-sm font-bold text-gray-800">
             {(room.promoDiscount != null && room.promoDiscount > 0)
               ? Math.round(room.pricePerNight * (1 - room.promoDiscount / 100))
@@ -68,7 +69,7 @@ function RoomCard({ room, onRoomClick }) {
           </span>
           <span className="text-xs text-blue-600">查看详情</span>
         </div>
-        <div className="mt-2 h-20 flex-shrink-0 overflow-y-auto overflow-x-hidden bg-amber-50/80 px-2 py-1.5 rounded">
+        <div className="mt-1.5 h-14 flex-shrink-0 overflow-y-auto overflow-x-hidden bg-amber-50/80 px-2 py-1 rounded">
           {room.recommendationReason ? (
             <p className="text-xs text-amber-700 whitespace-pre-wrap break-words">{room.recommendationReason}</p>
           ) : (
@@ -157,36 +158,112 @@ function AiHotelChat() {
 
   const messages = viewingRecord ? viewingRecord.messages : currentMessages;
 
+  const stateRef = useRef({ viewingRecord, history, currentMessages });
+  useEffect(() => {
+    stateRef.current = { viewingRecord, history, currentMessages };
+  }, [viewingRecord, history, currentMessages]);
+
+  useEffect(() => {
+    const backendUrl = import.meta.env.VITE_BACKEND_URL || '';
+    const socket = io(backendUrl || '/');
+    socket.on('reasons', ({ reasonsCacheKey, reasons }) => {
+      if (!reasonsCacheKey || !reasons || typeof reasons !== 'object') return;
+      const { viewingRecord: vr, history: hist, currentMessages: cm } = stateRef.current;
+      const msgs = vr ? vr.messages : cm;
+      const msgIndex = msgs.findIndex((m) => m.reasonsCacheKey === reasonsCacheKey);
+      if (msgIndex < 0) return;
+      const msg = msgs[msgIndex];
+      if (!msg?.rooms?.length) return;
+      const updatedRooms = msg.rooms.map((r) => {
+        const reason = reasons[String(r._id)];
+        if (reason) return { ...r, recommendationReason: reason };
+        return r;
+      });
+      const applyRoomsUpdate = (list) => {
+        const next = [...list];
+        next[msgIndex] = { ...next[msgIndex], rooms: updatedRooms };
+        return next;
+      };
+      if (vr) {
+        const next = applyRoomsUpdate(vr.messages);
+        setViewingRecord({ ...vr, messages: next });
+        setHistory(hist.map((r) => (r.id === vr.id ? { ...vr, messages: next } : r)));
+        try {
+          localStorage.setItem(HISTORY_KEY, JSON.stringify(hist.map((r) => (r.id === vr.id ? { ...vr, messages: next } : r)).slice(0, MAX_HISTORY)));
+        } catch (_) {}
+      } else {
+        setCurrentMessages((prev) => applyRoomsUpdate(prev));
+      }
+    });
+    return () => socket.disconnect();
+  }, []);
+
   const handleRoomClick = useCallback((roomId) => {
     navigate(`/rooms/${roomId}`);
     window.scrollTo(0, 0);
   }, [navigate]);
 
   const handleRefreshBatch = useCallback((msgIndex) => {
+    const msgs = viewingRecord ? viewingRecord.messages : currentMessages;
+    const msg = msgs[msgIndex];
+    if (!msg || !msg.rooms?.length) return;
+    const nextBatchIndex = (msg.batchIndex ?? 0) + 1;
+    const nextDisplayRooms = getDisplayRooms(msg.rooms, nextBatchIndex);
+    const needReasonIds = nextDisplayRooms.filter((r) => !r.recommendationReason).map((r) => r._id);
+
+    const applyBatchUpdate = (messages) => {
+      const next = [...messages];
+      next[msgIndex] = { ...next[msgIndex], batchIndex: nextBatchIndex };
+      return next;
+    };
+
     if (viewingRecord) {
-      const next = [...viewingRecord.messages];
-      const msg = next[msgIndex];
-      if (msg && msg.rooms) {
-        next[msgIndex] = { ...msg, batchIndex: (msg.batchIndex ?? 0) + 1 };
-        const updatedRecord = { ...viewingRecord, messages: next };
-        setViewingRecord(updatedRecord);
-        const newHistory = history.map((r) => (r.id === viewingRecord.id ? updatedRecord : r));
-        setHistory(newHistory);
-        try {
-          localStorage.setItem(HISTORY_KEY, JSON.stringify(newHistory.slice(0, MAX_HISTORY)));
-        } catch (_) {}
-      }
+      const next = applyBatchUpdate(viewingRecord.messages);
+      const updatedRecord = { ...viewingRecord, messages: next };
+      setViewingRecord(updatedRecord);
+      const newHistory = history.map((r) => (r.id === viewingRecord.id ? updatedRecord : r));
+      setHistory(newHistory);
+      try {
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(newHistory.slice(0, MAX_HISTORY)));
+      } catch (_) {}
     } else {
-      setCurrentMessages((prev) => {
-        const next = [...prev];
-        const msg = next[msgIndex];
-        if (msg && msg.rooms) {
-          next[msgIndex] = { ...msg, batchIndex: (msg.batchIndex ?? 0) + 1 };
-        }
-        return next;
-      });
+      setCurrentMessages((prev) => applyBatchUpdate(prev));
     }
-  }, [viewingRecord, history]);
+
+    const queryForReasons = msg.query || msgs.slice(0, msgIndex).reverse().find((m) => m.role === 'user')?.content || '';
+    if (needReasonIds.length > 0 && queryForReasons && msg.criteria) {
+      axios.post('/api/rooms/recommendation-reasons', {
+        roomIds: needReasonIds,
+        query: queryForReasons,
+        criteria: msg.criteria,
+        reasonsCacheKey: msg.reasonsCacheKey,
+      }).then(({ data }) => {
+        if (!data.success || !data.reasons) return;
+        const reasons = data.reasons;
+        const updatedRooms = msg.rooms.map((r) => {
+          const reason = reasons[String(r._id)];
+          if (reason) return { ...r, recommendationReason: reason };
+          return r;
+        });
+        const applyRoomsUpdate = (messages) => {
+          const next = [...messages];
+          next[msgIndex] = { ...next[msgIndex], rooms: updatedRooms };
+          return next;
+        };
+        if (viewingRecord) {
+          const next = applyRoomsUpdate(viewingRecord.messages);
+          setViewingRecord({ ...viewingRecord, messages: next });
+          const newHistory = history.map((r) => (r.id === viewingRecord.id ? { ...viewingRecord, messages: next } : r));
+          setHistory(newHistory);
+          try {
+            localStorage.setItem(HISTORY_KEY, JSON.stringify(newHistory.slice(0, MAX_HISTORY)));
+          } catch (_) {}
+        } else {
+          setCurrentMessages((prev) => applyRoomsUpdate(prev));
+        }
+      }).catch(() => {});
+    }
+  }, [viewingRecord, history, currentMessages, axios]);
 
   useEffect(() => {
     function handleClickOutside(e) {
@@ -257,7 +334,7 @@ function AiHotelChat() {
         const content = rooms.length > 0
           ? `根据您的要求（${summary}）为您找到以下房型，点击卡片可查看详情并预订：`
           : `根据您的要求（${summary}）暂未找到符合条件的房型，可尝试放宽预算或更换目的地。`;
-        const assistantMsg = { role: 'assistant', content, criteria, rooms, batchIndex: 0 };
+        const assistantMsg = { role: 'assistant', content, criteria, rooms, batchIndex: 0, query: text, reasonsCacheKey: data.reasonsCacheKey };
         setCurrentMessages((prev) => {
           const next = [...prev, assistantMsg];
           saveToHistory({ title: getRecordTitle(next), messages: next });
