@@ -2,8 +2,9 @@ import { lazy, Suspense } from 'react';
 import { Route, Routes, useLocation, Navigate } from 'react-router-dom';
 import './App.css';
 import NavBar from './components/NavBar';
-import Home from './pages/Home';
 import Footer from './components/Footer';
+
+const Home = lazy(() => import('./pages/Home'));
 import HotelReg from './components/HotalReg';
 import { PerfConsoleLogger } from './components/PerfConsoleLogger';
 import { PerfActivator } from './components/PerfActivator';

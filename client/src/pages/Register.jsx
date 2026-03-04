@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAppContext } from "../context/AppContext";
+import { tokenCookie } from "../utils/cookie";
 import loginBg from "../assets/login_bg.jpg";
 import toast from "react-hot-toast";
 
@@ -60,7 +61,7 @@ function Register() {
         code: code.trim(),
       });
       if (data.success) {
-        localStorage.setItem("token", data.token);
+        tokenCookie.set(data.token);
         await fetchUser();
         navigate("/", { replace: true });
       } else {
