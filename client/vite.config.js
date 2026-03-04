@@ -39,9 +39,36 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        manualChunks: {
-          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-          'vendor-ui': ['react-hot-toast', 'react-datepicker'],
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('react-datepicker')) return 'vendor-datepicker';
+            if (id.includes('react-hot-toast')) return 'vendor-toast';
+            if (id.includes('react-icons')) return 'vendor-icons';
+            if (id.includes('react-router') || id.includes('react-dom') || id.includes('/react/')) {
+              return 'vendor-react';
+            }
+            if (id.includes('@tanstack/react-virtual')) {
+              return 'vendor-virtual';
+            }
+            if (id.includes('socket.io')) {
+              return 'vendor-socket';
+            }
+            if (id.includes('qrcode')) {
+              return 'vendor-qrcode';
+            }
+            if (id.includes('pinyin-pro')) {
+              return 'vendor-pinyin';
+            }
+            if (id.includes('date-fns')) {
+              return 'vendor-date-fns';
+            }
+            if (id.includes('@floating-ui')) {
+              return 'vendor-floating-ui';
+            }
+            if (id.includes('axios')) {
+              return 'vendor-axios';
+            }
+          }
         },
       },
     },
