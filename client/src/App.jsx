@@ -3,13 +3,12 @@ import { Route, Routes, useLocation, Navigate } from 'react-router-dom';
 import './App.css';
 import NavBar from './components/NavBar';
 import Footer from './components/Footer';
-
-const Home = lazy(() => import('./pages/Home'));
 import HotelReg from './components/HotalReg';
 import { PerfConsoleLogger } from './components/PerfConsoleLogger';
 import { PerfActivator } from './components/PerfActivator';
 import { useAppContext } from './context/AppContext';
 
+const Home = lazy(() => import('./pages/Home'));
 const AllRooms = lazy(() => import('./pages/AllRooms'));
 const SmartSearchResults = lazy(() => import('./pages/SmartSearchResults'));
 const AiHotelChat = lazy(() => import('./pages/AiHotelChat'));
