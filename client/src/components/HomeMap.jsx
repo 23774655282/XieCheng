@@ -1,27 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { loadAMap } from '../utils/loadAmap';
+import { loadAMap, setupMoveendDebounce } from '../utils/loadAmap';
 import { geocodeAmap, wgs84ToGcj02, getDistrictBounds } from '../utils/amap';
 import { useAppContext } from '../context/AppContext';
 
 const DEFAULT_CENTER = [39.9042, 116.4074];
 const DEFAULT_ZOOM = 4;
-
-function boundsToParams(bounds) {
-  if (!bounds) return null;
-  const sw = bounds.getSouthWest && bounds.getSouthWest();
-  const ne = bounds.getNorthEast && bounds.getNorthEast();
-  if (!sw || !ne) return null;
-  const lng1 = typeof sw.getLng === 'function' ? sw.getLng() : sw.lng;
-  const lat1 = typeof sw.getLat === 'function' ? sw.getLat() : sw.lat;
-  const lng2 = typeof ne.getLng === 'function' ? ne.getLng() : ne.lng;
-  const lat2 = typeof ne.getLat === 'function' ? ne.getLat() : ne.lat;
-  return {
-    minLat: Math.min(lat1, lat2),
-    maxLat: Math.max(lat1, lat2),
-    minLng: Math.min(lng1, lng2),
-    maxLng: Math.max(lng1, lng2),
-  };
-}
 
 function HomeMap() {
   const { axios, navigate } = useAppContext();
@@ -182,13 +165,13 @@ function HomeMap() {
     };
   }, []);
 
-  // 放大后的全屏地图
+  // 放大后的全屏地图（防抖与按视口请求由 setupMoveendDebounce 统一处理）
   useEffect(() => {
     if (!expanded) return;
     const el = bigContainerRef.current;
     if (!el) return;
     let map = null;
-    let debounceTimer = null;
+    let cleanup = null;
     const fetchRef = { current: fetchHotelsByBounds };
     fetchRef.current = fetchHotelsByBounds;
 
@@ -200,23 +183,13 @@ function HomeMap() {
           viewMode: '2D',
         });
         bigMapRef.current = map;
-
-        function emitBounds() {
-          if (debounceTimer) clearTimeout(debounceTimer);
-          debounceTimer = setTimeout(() => {
-            const b = map.getBounds();
-            const params = boundsToParams(b);
-            if (params) fetchRef.current(params);
-          }, 350);
-        }
-        map.on('moveend', emitBounds);
-        emitBounds();
+        cleanup = setupMoveendDebounce(map, (params) => fetchRef.current(params), 350);
         setBigMapReady(true);
       })
       .catch((err) => console.error('[HomeMap] big loadAMap failed', err));
 
     return () => {
-      if (debounceTimer) clearTimeout(debounceTimer);
+      if (cleanup) cleanup();
       if (bigClusterRef.current) {
         bigClusterRef.current.setMap(null);
         bigClusterRef.current = null;
