@@ -1,29 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { loadAMap } from '../utils/loadAmap';
+import { loadAMap, setupMoveendDebounce } from '../utils/loadAmap';
 import { geocodeAmap, wgs84ToGcj02, getDistrictBounds } from '../utils/amap';
 import { useAppContext } from '../context/AppContext';
 
 const DEFAULT_CENTER = [39.9042, 116.4074]; // 北京 [lat, lng] GCJ-02
 const DEFAULT_ZOOM = 4;
-
-/** 从高德 Bounds 得到 { minLat, maxLat, minLng, maxLng } */
-function boundsToParams(bounds) {
-  if (!bounds) return null;
-  const sw = bounds.getSouthWest && bounds.getSouthWest();
-  const ne = bounds.getNorthEast && bounds.getNorthEast();
-  if (!sw || !ne) return null;
-  const lng1 = typeof sw.getLng === 'function' ? sw.getLng() : sw.lng;
-  const lat1 = typeof sw.getLat === 'function' ? sw.getLat() : sw.lat;
-  const lng2 = typeof ne.getLng === 'function' ? ne.getLng() : ne.lng;
-  const lat2 = typeof ne.getLat === 'function' ? ne.getLat() : ne.lat;
-  return {
-    minLat: Math.min(lat1, lat2),
-    maxLat: Math.max(lat1, lat2),
-    minLng: Math.min(lng1, lng2),
-    maxLng: Math.max(lng1, lng2),
-  };
-}
 
 function TravelMap() {
   const navigate = useNavigate();
@@ -247,12 +229,12 @@ function TravelMap() {
     }
   };
 
-  // 初始化高德地图
+  // 初始化高德地图（防抖与按视口请求由 setupMoveendDebounce 统一处理）
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
     let map = null;
-    let debounceTimer = null;
+    let cleanup = null;
     loadAMap()
       .then((AMap) => {
         map = new AMap.Map(el, {
@@ -261,24 +243,14 @@ function TravelMap() {
           viewMode: '2D',
         });
         mapRef.current = map;
-
-        function emitBounds() {
-          if (debounceTimer) clearTimeout(debounceTimer);
-          debounceTimer = setTimeout(() => {
-            const b = map.getBounds();
-            const params = boundsToParams(b);
-            if (params) onBoundsChangeRef.current(params);
-          }, 350);
-        }
-        map.on('moveend', emitBounds);
-        emitBounds();
+        cleanup = setupMoveendDebounce(map, (params) => onBoundsChangeRef.current(params), 350);
         setMapReady(true);
       })
       .catch((err) => {
         console.error('[TravelMap] loadAMap failed', err);
       });
     return () => {
-      if (debounceTimer) clearTimeout(debounceTimer);
+      if (cleanup) cleanup();
       if (map) {
         map.destroy();
         mapRef.current = null;
