@@ -445,8 +445,13 @@ function TravelMap() {
         <div className="flex-1 min-h-0 min-w-0 relative">
           <div ref={containerRef} className="w-full h-full" />
           {!mapReady && (
-            <div className="absolute inset-0 flex items-center justify-center bg-gray-100 text-gray-500">
-              地图加载中…
+            <div className="absolute inset-0 map-skeleton flex flex-col items-center justify-center gap-4" aria-hidden>
+              <div className="grid grid-cols-4 gap-2 w-3/4 max-w-xs opacity-60">
+                {[...Array(12)].map((_, i) => (
+                  <div key={i} className="aspect-square rounded bg-white/50" />
+                ))}
+              </div>
+              <span className="text-sm text-gray-500 font-medium">地图加载中…</span>
             </div>
           )}
           <div className="absolute bottom-3 left-3 right-3 sm:right-auto sm:left-4 sm:max-w-[280px] rounded-lg bg-white/95 shadow px-3 py-2 text-sm text-gray-600 z-[1000]">

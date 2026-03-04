@@ -1,5 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&family=Playfair:ital,opsz,wght@0,5..1200,300..900;1,5..1200,300..900&display=swap');
-
+/* 字体已改为 index.html 中非阻塞加载，此处不再 @import */
 @import "tailwindcss";
 
 * {
@@ -62,4 +61,15 @@ body {
 }
 [data-room-list-scroll]::-webkit-scrollbar-thumb:hover {
   background: rgba(0, 0, 0, 0.25);
+}
+
+/* 地图骨架屏：shimmer 动画 */
+@keyframes map-skeleton-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.map-skeleton {
+  background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%);
+  background-size: 200% 100%;
+  animation: map-skeleton-shimmer 1.5s ease-in-out infinite;
 }
