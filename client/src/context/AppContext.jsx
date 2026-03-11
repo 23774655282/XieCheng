@@ -145,7 +145,7 @@ export function AppProvider({ children }) {
           const r = data.role || "user";
           setRoleState(r);
           setMerchantApplicationStatus(data.merchantApplicationStatus || "none");
-          setIsOwner(r === "merchant" || r === "admin");
+          setIsOwner(r === "merchant");  // 仅商户可访问商户中心，管理员与商户互斥
           setIsPlatformAdmin(r === "admin");
           setUserInfo({
             _id: data._id || null,
@@ -229,7 +229,7 @@ export function AppProvider({ children }) {
     const r = (user && user.role) || "user";
     setRoleState(r);
     setMerchantApplicationStatus("none");
-    setIsOwner(r === "merchant" || r === "admin");
+    setIsOwner(r === "merchant");  // 仅商户可访问商户中心，管理员与商户互斥
     setIsPlatformAdmin(r === "admin");
     setUserInfo({
       _id: user?.id || null,

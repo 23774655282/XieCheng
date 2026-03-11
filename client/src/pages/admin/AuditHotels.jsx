@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAppContext } from "../../context/AppContext";
 import toast from "react-hot-toast";
-
-const roomTypeToCn = { "Single Bed": "单人间", "Double Bed": "双人间", "King Bed": "大床房", "Luxury Room": "豪华房", "Family Suite": "家庭套房", "Standard Room": "标准间", "Business Room": "商务房", "Sea View Room": "海景房", "Suite": "套房" };
+import { getRoomTypeLabel } from "../../utils/roomTypes";
 
 const STATUS_MAP = {
     pending_audit: "待审核",
@@ -382,7 +381,7 @@ function AuditHotels() {
                                                                         )}
                                                                     </div>
                                                                 </td>
-                                                                <td className="p-2 sm:p-3 font-medium">{roomTypeToCn[r.roomType] || r.roomType}</td>
+                                                                <td className="p-2 sm:p-3 font-medium">{getRoomTypeLabel(r.roomType)}</td>
                                                                 <td className="p-2 sm:p-3">{r.pricePerNight} 元</td>
                                                                 <td className="p-2 sm:p-3">{r.promoDiscount != null ? `${r.promoDiscount}%` : "—"}</td>
                                                                 <td className="p-2 sm:p-3">{r.roomCount ?? 1}</td>

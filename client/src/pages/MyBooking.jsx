@@ -7,8 +7,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { useAppContext } from '../context/AppContext';
 import toast from 'react-hot-toast';
 
-const roomTypeToCn = { 'Single Bed': '单人间', 'Double Bed': '双人间', 'Luxury Room': '豪华房', 'Family Suite': '家庭套房' };
-const getRoomTypeLabel = (roomType) => roomTypeToCn[roomType] || roomType;
+import { getRoomTypeLabel } from '../utils/roomTypes';
 
 const PAYMENT_DEADLINE_MINUTES = 15;
 

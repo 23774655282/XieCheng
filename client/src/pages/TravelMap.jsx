@@ -3,14 +3,18 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { loadAMap, setupMoveendDebounce } from '../utils/loadAmap';
 import { geocodeAmap, wgs84ToGcj02, getDistrictBounds } from '../utils/amap';
 import { useAppContext } from '../context/AppContext';
+import { usePerf } from '../context/PerfContext';
 
 const DEFAULT_CENTER = [39.9042, 116.4074]; // 北京 [lat, lng] GCJ-02
 const DEFAULT_ZOOM = 4;
+/** 全量模式：中国大致范围，用于一次性加载全部酒店（TBT 对比用） */
+const FULL_BOUNDS = { minLat: 18, maxLat: 54, minLng: 73, maxLng: 135 };
 
 function TravelMap() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { axios } = useAppContext();
+  const { isViewportMap } = usePerf();
   const [searchInput, setSearchInput] = useState('');
   const latParam = searchParams.get('lat');
   const lngParam = searchParams.get('lng');
@@ -142,8 +146,8 @@ function TravelMap() {
 
   const onBoundsChange = useCallback((b) => {
     boundsRef.current = b;
-    fetchHotels(b, filterCity, filterStar);
-  }, [filterCity, filterStar, fetchHotels]);
+    if (isViewportMap) fetchHotels(b, filterCity, filterStar);
+  }, [filterCity, filterStar, fetchHotels, isViewportMap]);
 
   onBoundsChangeRef.current = onBoundsChange;
 
@@ -152,9 +156,14 @@ function TravelMap() {
     return () => { mountedRef.current = false; };
   }, []);
 
+  // 视口模式：bounds 变化时请求；全量模式：filter 变化时用 FULL_BOUNDS 请求
   useEffect(() => {
-    if (boundsRef.current) fetchHotels(boundsRef.current, filterCity, filterStar);
-  }, [filterCity, filterStar, fetchHotels]);
+    if (isViewportMap) {
+      if (boundsRef.current) fetchHotels(boundsRef.current, filterCity, filterStar);
+    } else {
+      fetchHotels(FULL_BOUNDS, filterCity, filterStar);
+    }
+  }, [filterCity, filterStar, fetchHotels, isViewportMap]);
 
   const handleCloseHotelCard = useCallback(async () => {
     const hotel = selectedHotel;
@@ -229,7 +238,7 @@ function TravelMap() {
     }
   };
 
-  // 初始化高德地图（防抖与按视口请求由 setupMoveendDebounce 统一处理）
+  // 初始化高德地图；视口模式用 setupMoveendDebounce 按视口请求，全量模式不监听 moveend
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -243,7 +252,11 @@ function TravelMap() {
           viewMode: '2D',
         });
         mapRef.current = map;
-        cleanup = setupMoveendDebounce(map, (params) => onBoundsChangeRef.current(params), 350);
+        if (isViewportMap) {
+          cleanup = setupMoveendDebounce(map, (params) => onBoundsChangeRef.current(params), 350);
+        } else {
+          boundsRef.current = FULL_BOUNDS;
+        }
         setMapReady(true);
       })
       .catch((err) => {
@@ -257,7 +270,7 @@ function TravelMap() {
       }
       setMapReady(false);
     };
-  }, []);
+  }, [isViewportMap]);
 
   // 同步 mapCenter / mapZoom 到地图（搜索或 URL 变化）
   useEffect(() => {

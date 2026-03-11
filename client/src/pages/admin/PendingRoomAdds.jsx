@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAppContext } from "../../context/AppContext";
 import toast from "react-hot-toast";
-
-const roomTypeToCn = { "Single Bed": "单人间", "Double Bed": "双人间", "King Bed": "大床房", "Luxury Room": "豪华房", "Family Suite": "家庭套房", "Standard Room": "标准间", "Business Room": "商务房", "Sea View Room": "海景房", "Suite": "套房" };
+import { getRoomTypeLabel } from "../../utils/roomTypes";
 
 const facilityLabelMap = {
     "Free Wifi": "免费 Wi-Fi", "Free Breakfast": "免费早餐", "Room Service": "客房服务", "Mountain View": "山景",
@@ -134,7 +133,7 @@ function PendingRoomAdds() {
                                         {r.hotel?.name || "—"}
                                         {r.hotel?.city && <span className="block text-xs text-gray-500">{r.hotel.city}</span>}
                                     </td>
-                                    <td className="p-2 sm:p-3 font-medium">{roomTypeToCn[r.roomType] || r.roomType}</td>
+                                    <td className="p-2 sm:p-3 font-medium">{getRoomTypeLabel(r.roomType)}</td>
                                     <td className="p-2 sm:p-3 text-xs text-gray-600 hidden md:table-cell max-w-[200px]">
                                         {(r.amenties || []).length > 0 ? (r.amenties || []).map((a, i) => (facilityLabelMap[a] || a)).join("、") : "—"}
                                     </td>

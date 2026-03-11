@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 import DatePicker from 'react-datepicker';
 import { zhCN } from 'date-fns/locale/zh-CN';
 import 'react-datepicker/dist/react-datepicker.css';
+import { getRoomTypeLabel } from '../../utils/roomTypes';
 
 function formatDateStr(d) {
   if (!d) return '—';
@@ -150,19 +151,6 @@ function Dashboard() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
-
-  const roomTypeToCn = {
-    'Single Bed': '单人间',
-    'Double Bed': '双人间',
-    'King Bed': '大床房',
-    'Luxury Room': '豪华房',
-    'Family Suite': '家庭套房',
-    'Standard Room': '标准间',
-    'Business Room': '商务房',
-    'Sea View Room': '海景房',
-    'Suite': '套房',
-  };
-  const getRoomTypeLabel = (roomType) => roomTypeToCn[roomType] || roomType;
 
   const hotelNames = useMemo(() => {
     const bookings = (dashboardData.bookings || []).filter((item) => item != null);

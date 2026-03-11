@@ -58,6 +58,12 @@ function ApplyMerchant() {
     return null;
   }
 
+  if (role === "admin") {
+    toast.error("管理员不能申请成为商户");
+    navigate(-1);
+    return null;
+  }
+
   const status = merchantApplicationStatus || "none";
   const showForm = status === "none" || (status === "rejected" && showReapplyForm);
   const allFilled =
