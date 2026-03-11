@@ -6,6 +6,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { AiOutlineLoading3Quarters } from 'react-icons/ai';
 import { checkImageResolution, MIN_RECOMMENDED_LONG_EDGE } from '../../utils/imageUtils';
+import { ROOM_TYPE_OPTIONS } from '../../utils/roomTypes';
 
 function AddRoom() {
 
@@ -256,10 +257,9 @@ function AddRoom() {
               <option value="">
                 请选择房型
               </option>
-              <option value="Single Bed">单人间</option>
-              <option value="Double Bed">双人间</option>
-              <option value="Luxury Room">豪华房</option>
-              <option value="Family Suite">家庭套房</option>
+              {ROOM_TYPE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
             </select>
           </div>
           <div>

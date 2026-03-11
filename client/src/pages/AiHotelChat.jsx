@@ -1,9 +1,8 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import { io } from 'socket.io-client';
 import { useAppContext } from '../context/AppContext';
 
-const roomTypeToCn = { 'Single Bed': '单人间', 'Double Bed': '双人间', 'Luxury Room': '豪华房', 'Family Suite': '家庭套房' };
-const getRoomTypeLabel = (roomType) => roomTypeToCn[roomType] || roomType;
+import { getRoomTypeLabel } from '../utils/roomTypes';
 
 const HISTORY_KEY_PREFIX = 'ai-hotel-chat-history';
 const SESSION_KEY_PREFIX = 'ai-hotel-current-messages';
@@ -157,6 +156,105 @@ const ChatMessage = React.memo(function ChatMessage({ msg, msgIndex, onRoomClick
   );
 });
 
+/** 视口按需渲染阈值：消息数超过此值才启用优化 */
+const VIEWPORT_RENDER_THRESHOLD = 8;
+/** 缓冲区高度（px）：视口上下各预渲染此距离内的消息 */
+const VIEWPORT_BUFFER_PX = 300;
+
+/**
+ * 基于 Intersection Observer 的视口按需渲染 + 缓冲区预渲染
+ * 仅渲染视口内及缓冲区的消息，降低 DOM 节点数量，解决长对话滚动卡顿
+ */
+function ViewportChatList({ messages, scrollParentRef, onRoomClick, onRefreshBatch }) {
+  const [visibleIndices, setVisibleIndices] = useState(() => new Set());
+  const heightCacheRef = useRef({});
+  const observerRef = useRef(null);
+
+  useEffect(() => {
+    const root = scrollParentRef?.current;
+    if (!root || messages.length === 0) return;
+
+    heightCacheRef.current = {};
+    const visibleSet = new Set();
+    const updateVisible = () => {
+      setVisibleIndices((prev) => {
+        const next = new Set(visibleSet);
+        if (prev.size === next.size && [...prev].every((i) => next.has(i))) return prev;
+        return next;
+      });
+    };
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          const idx = parseInt(entry.target.dataset?.msgIndex, 10);
+          if (Number.isNaN(idx)) continue;
+          if (entry.isIntersecting) {
+            visibleSet.add(idx);
+            heightCacheRef.current[idx] = entry.target.offsetHeight;
+          } else {
+            visibleSet.delete(idx);
+          }
+        }
+        updateVisible();
+      },
+      {
+        root,
+        rootMargin: `${VIEWPORT_BUFFER_PX}px 0px ${VIEWPORT_BUFFER_PX}px 0px`,
+        threshold: 0,
+      }
+    );
+    observerRef.current = observer;
+
+    const slots = root.querySelectorAll('[data-msg-index]');
+    slots.forEach((el) => observer.observe(el));
+
+    return () => {
+      observer.disconnect();
+      observerRef.current = null;
+    };
+  }, [messages.length]);
+
+  const shouldOptimize = messages.length > VIEWPORT_RENDER_THRESHOLD;
+
+  if (!shouldOptimize) {
+    return (
+      <div className="space-y-4">
+        {messages.map((msg, i) => (
+          <div key={i} className="pb-4">
+            <ChatMessage msg={msg} msgIndex={i} onRoomClick={onRoomClick} onRefreshBatch={onRefreshBatch} />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {messages.map((msg, i) => {
+        const isVisible = visibleIndices.has(i);
+        const cachedHeight = heightCacheRef.current[i];
+        const placeholderHeight = cachedHeight || 120;
+
+        return (
+          <div
+            key={i}
+            data-msg-index={i}
+            className="pb-4"
+            style={!isVisible ? { minHeight: placeholderHeight } : undefined}
+          >
+            {isVisible ? (
+              <ChatMessage msg={msg} msgIndex={i} onRoomClick={onRoomClick} onRefreshBatch={onRefreshBatch} />
+            ) : (
+              <div style={{ height: placeholderHeight }} aria-hidden="true" />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function AiHotelChat() {
   const { axios, navigate, user } = useAppContext();
   const userId = user?._id ? String(user._id) : null;
@@ -303,10 +401,17 @@ function AiHotelChat() {
     if (!viewingRecord) saveCurrentSession(currentMessages, sessionKey);
   }, [currentMessages, viewingRecord, sessionKey]);
 
+  // 历史对话：在首帧绘制前滚到底部，避免出现向下滚动过程
+  useLayoutEffect(() => {
+    if (messages.length === 0 || !scrollParentRef.current || !viewingRecord) return;
+    const el = scrollParentRef.current;
+    el.scrollTop = el.scrollHeight;
+  }, [messages.length, viewingRecord?.id]);
+
+  // 当前对话：新消息时平滑滚动到底部
   useEffect(() => {
-    if (messages.length > 0 && scrollParentRef.current) {
-      scrollParentRef.current.scrollTo({ top: scrollParentRef.current.scrollHeight, behavior: 'smooth' });
-    }
+    if (messages.length === 0 || !scrollParentRef.current || viewingRecord) return;
+    scrollParentRef.current.scrollTo({ top: scrollParentRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages.length]);
 
   function getRecordTitle(msgs) {
@@ -545,18 +650,12 @@ function AiHotelChat() {
               </div>
             )}
             {messages.length > 0 && (
-              <div className="space-y-4">
-                {messages.map((msg, i) => (
-                  <div key={i} className="pb-4">
-                    <ChatMessage
-                      msg={msg}
-                      msgIndex={i}
-                      onRoomClick={handleRoomClick}
-                      onRefreshBatch={handleRefreshBatch}
-                    />
-                  </div>
-                ))}
-              </div>
+              <ViewportChatList
+                messages={messages}
+                scrollParentRef={scrollParentRef}
+                onRoomClick={handleRoomClick}
+                onRefreshBatch={handleRefreshBatch}
+              />
             )}
             {loading && (
               <div className="flex justify-start pt-2">

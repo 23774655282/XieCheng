@@ -7,6 +7,9 @@ import HotelPreReviewApplication from "../models/hotelPreReviewApplication.model
 export const applyMerchant = async (req, res) => {
   try {
     const user = req.user;
+    if (user.role === "admin") {
+      return res.status(400).json({ success: false, message: "管理员不能申请成为商户" });
+    }
     if (user.role !== "user") {
       return res.status(400).json({ success: false, message: "仅普通用户可申请成为商户" });
     }
@@ -182,6 +185,9 @@ export const approveMerchantApplication = async (req, res) => {
     const user = await User.findById(id);
     if (!user) {
       return res.status(404).json({ success: false, message: "用户不存在" });
+    }
+    if (user.role === "admin") {
+      return res.status(400).json({ success: false, message: "管理员不能成为商户" });
     }
     if (user.role !== "user" || (user.merchantApplicationStatus || "none") !== "pending") {
       return res.status(400).json({ success: false, message: "该用户无待审核的商户申请" });

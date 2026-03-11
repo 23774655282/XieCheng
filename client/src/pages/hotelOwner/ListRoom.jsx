@@ -8,6 +8,7 @@ import { useNavigate, useParams } from "react-router-dom"
 import { IoAdd } from "react-icons/io5"
 import { usePerf } from "../../context/PerfContext"
 import { virtualListPerf } from "../../utils/virtualListPerf"
+import { getRoomTypeLabel } from "../../utils/roomTypes"
 
 function RoomCountStepper({ value, roomId, onUpdate, axios, getToken }) {
   const [count, setCount] = useState(value)
@@ -119,20 +120,6 @@ function ListRoom() {
   const navigate = useNavigate();
   const { hotelId } = useParams();
   const hasPreReview = hotel && (hotel.applicantName || hotel.licenseUrl);
-  const roomTypeToCn = {
-    'Single Bed': '单人间',
-    'Double Bed': '双人间',
-    'King Bed': '大床房',
-    'Luxury Room': '豪华房',
-    'Family Suite': '家庭套房',
-    'Standard Room': '标准间',
-    'Business Room': '商务房',
-    'Sea View Room': '海景房',
-    'Suite': '套房',
-  };
-
-  const getRoomTypeLabel = (roomType) => roomTypeToCn[roomType] || roomType;
-
   async function fetchRooms() {
     try {
       const token = await getToken()

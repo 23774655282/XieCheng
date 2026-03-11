@@ -12,6 +12,7 @@ import { isCity } from '../utils/destinationSearch';
 import { usePerf } from '../context/PerfContext';
 import { virtualListPerf } from '../utils/virtualListPerf';
 import { SkeletonRoomGrid, SkeletonHotelList } from '../components/Skeleton';
+import { getRoomTypeLabel } from '../utils/roomTypes';
 
 function CheckBox({ label, selected = false, onChange }) {
   return (
@@ -318,10 +319,8 @@ function AllRooms() {
     }
   }, [mobileDropdownOpen]);
 
-  const roomTypes = ['单床', '双床', '大床房', '豪华房', '家庭套房', '标准间', '商务房', '海景房', '套房'];
-  const roomTypeToEn = { '单床': 'Single Bed', '双床': 'Double Bed', '大床房': 'King Bed', '豪华房': 'Luxury Room', '家庭套房': 'Family Suite', '标准间': 'Standard Room', '商务房': 'Business Room', '海景房': 'Sea View Room', '套房': 'Suite' };
-  const roomTypeToCn = { 'Single Bed': '单人间', 'Double Bed': '双人间', 'King Bed': '大床房', 'Luxury Room': '豪华房', 'Family Suite': '家庭套房', 'Standard Room': '标准间', 'Business Room': '商务房', 'Sea View Room': '海景房', 'Suite': '套房' };
-  const getRoomTypeLabel = (roomType) => roomTypeToCn[roomType] || roomType;
+  const roomTypes = ['单床', '双床', '大床房', '雅致大床房', '高端大床房', '舒适大床房', '豪华大床房', '温馨大床房', '观景大床房', '商务大床房', '豪华房', '家庭套房', '标准间', '商务房', '海景房', '套房'];
+  const roomTypeToEn = { '单床': 'Single Bed', '双床': 'Double Bed', '大床房': 'King Bed', '雅致大床房': 'Elegant King Bed', '高端大床房': 'Premium King Bed', '舒适大床房': 'Comfortable King Bed', '豪华大床房': 'Deluxe King Bed', '温馨大床房': 'Cozy King Bed', '观景大床房': 'View King Bed', '商务大床房': 'Business King Bed', '豪华房': 'Luxury Room', '家庭套房': 'Family Suite', '标准间': 'Standard Room', '商务房': 'Business Room', '海景房': 'Sea View Room', '套房': 'Suite' };
   const facilityLabelMap = {
     'Free Wifi': '免费 Wi-Fi',
     'Free Breakfast': '免费早餐',

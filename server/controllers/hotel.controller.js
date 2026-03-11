@@ -106,6 +106,9 @@ export const getCities = async (req, res) => {
 /** 商户：注册酒店，初始状态为待审核 */
 export const registerHotel = async (req, res) => {
     try {
+        if (req.user.role === "admin") {
+            return res.status(400).json({ success: false, message: "管理员不能注册酒店成为商户" });
+        }
         const { name, nameEn, address, contact, city, starRating, openTime, nearbyAttractions, promotions, hotelIntro } = req.body;
         const owner = req.user._id;
 
@@ -511,6 +514,9 @@ export const updateHotel = async (req, res) => {
 
         // 如果当前商户还没有酒店，视为首次保存，直接创建一条酒店记录
         if (!hotel) {
+            if (req.user.role === "admin") {
+                return res.status(400).json({ success: false, message: "管理员不能成为商户" });
+            }
             const owner = req.user._id;
             const latVal = latitude === "" || latitude == null ? null : Number(latitude);
             const lngVal = longitude === "" || longitude == null ? null : Number(longitude);

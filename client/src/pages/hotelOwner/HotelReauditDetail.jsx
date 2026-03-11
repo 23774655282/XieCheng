@@ -5,6 +5,7 @@ import toast from "react-hot-toast";
 import { IoAdd, IoCloudUploadOutline, IoCreateOutline, IoClose } from "react-icons/io5";
 import AddressInput from "../../components/AddressInput";
 import CityInput, { parseCityFromDistrict, parseDistrictFromDistrict } from "../../components/CityInput";
+import { getRoomTypeLabel } from "../../utils/roomTypes";
 
 function RoomCountStepper({ value, roomId, onUpdate, axios, getToken }) {
     const [count, setCount] = useState(value);
@@ -56,18 +57,6 @@ function PromoDiscountStepper({ value, roomId, onUpdate, axios, getToken }) {
         </div>
     );
 }
-
-const roomTypeToCn = {
-    "Single Bed": "单人间",
-    "Double Bed": "双人间",
-    "King Bed": "大床房",
-    "Luxury Room": "豪华房",
-    "Family Suite": "家庭套房",
-    "Standard Room": "标准间",
-    "Business Room": "商务房",
-    "Sea View Room": "海景房",
-    "Suite": "套房",
-};
 
 function HotelReauditDetail() {
     const { hotelId } = useParams();
@@ -621,7 +610,7 @@ function HotelReauditDetail() {
                                                 )}
                                             </div>
                                         </td>
-                                        <td className="p-2 sm:p-3 font-medium">{roomTypeToCn[r.roomType] || r.roomType}</td>
+                                        <td className="p-2 sm:p-3 font-medium">{getRoomTypeLabel(r.roomType)}</td>
                                         <td className="p-2 sm:p-3">{r.pricePerNight} 元</td>
                                         <td className="p-2 sm:p-3">
                                             <PromoDiscountStepper value={r.promoDiscount} roomId={r._id} onUpdate={() => fetchRoomsList(roomPage)} axios={axios} getToken={getToken} />
@@ -724,7 +713,7 @@ function HotelReauditDetail() {
                     <div className="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full mx-4" onClick={(e) => e.stopPropagation()}>
                         <p className="text-gray-800 font-medium mb-1">确认删除</p>
                         <p className="text-gray-600 text-sm mb-6">
-                            确定要删除房型「{roomTypeToCn[roomToDelete.roomType] || roomToDelete.roomType}」吗？删除后不可恢复。
+                            确定要删除房型「{getRoomTypeLabel(roomToDelete.roomType)}」吗？删除后不可恢复。
                         </p>
                         <div className="flex justify-end gap-3">
                             <button
