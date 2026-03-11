@@ -63,5 +63,36 @@ const userSchema = new Schema({
   loginCodeExpiresAt: { type: Date },
 }, { timestamps: true });
 
+// 管理员与商户互斥：管理员不能成为商户，商户不能成为管理员
+userSchema.pre('save', async function (next) {
+  if (!this.isModified('role') || this.isNew) return next();
+  const current = await this.constructor.findById(this._id).select('role').lean();
+  if (!current) return next();
+  if (this.role === 'admin' && current.role === 'merchant') {
+    return next(new Error('商户不能成为管理员'));
+  }
+  if (this.role === 'merchant' && current.role === 'admin') {
+    return next(new Error('管理员不能成为商户'));
+  }
+  next();
+});
+
+userSchema.pre(['findOneAndUpdate', 'updateOne'], async function (next) {
+  const update = this.getUpdate();
+  const newRole = update?.role ?? update?.$set?.role;
+  if (!newRole || (newRole !== 'admin' && newRole !== 'merchant')) return next();
+  const id = this.getQuery()._id ?? this.getQuery().id;
+  if (!id) return next();
+  const doc = await this.model.findById(id).select('role').lean();
+  if (!doc) return next();
+  if (newRole === 'admin' && doc.role === 'merchant') {
+    return next(new Error('商户不能成为管理员'));
+  }
+  if (newRole === 'merchant' && doc.role === 'admin') {
+    return next(new Error('管理员不能成为商户'));
+  }
+  next();
+});
+
 const User = mongoose.model('User', userSchema);
 export default User;

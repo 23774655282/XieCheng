@@ -6,6 +6,7 @@ import { facilityIcons, roomCommonData, assets } from '../assets/assets';
 import { FaLocationArrow } from 'react-icons/fa';
 import { useAppContext } from '../context/AppContext';
 import toast from 'react-hot-toast';
+import { getRoomTypeLabel } from '../utils/roomTypes';
 
 const facilityLabelMap = {
     'Free Wifi': '免费 Wi-Fi',
@@ -21,15 +22,6 @@ const facilityLabelMap = {
     'Restaurant': '餐厅',
     'Airport Shuttle': '机场接送',
 };
-const roomTypeLabelMap = {
-    'Single Bed': '单人间',
-    'Double Bed': '双人间',
-    'Luxury Room': '豪华房',
-    'Family Suite': '家庭套房',
-};
-function getRoomTypeLabel(roomType) {
-    return roomTypeLabelMap[roomType] || roomType;
-}
 
 function RoomDetail() {
     const { id } = useParams();

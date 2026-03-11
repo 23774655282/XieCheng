@@ -56,8 +56,33 @@ function HotelReg() {
   }
 
 
+  // 管理员不能成为商户，显示提示
+  if (role === "admin") {
+    return (
+      <div className="fixed top-0 bottom-0 left-0 right-0 z-[100] flex items-center justify-center bg-black/50">
+        <div className="w-11/12 md:max-w-md bg-white rounded-xl p-8 relative">
+          <IoIosCloseCircleOutline
+            className="absolute top-6 right-6 text-2xl cursor-pointer text-gray-700 hover:text-red-500 transition"
+            onClick={() => setShowHotelReg(false)}
+          />
+          <div className="flex flex-col items-center text-center pt-6">
+            <p className="text-xl font-bold text-gray-900 mb-2">管理员不能成为商户</p>
+            <p className="text-sm text-gray-600 mb-6">管理员与商户角色互斥，无法注册酒店。</p>
+            <button
+              type="button"
+              onClick={() => setShowHotelReg(false)}
+              className="w-full py-3 px-4 bg-gray-800 hover:bg-gray-700 text-white rounded-full font-medium"
+            >
+              关闭
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // 普通用户（或角色未加载）：显示提示页，引导去申请成为商户
-  if (role !== "merchant" && role !== "admin") {
+  if (role !== "merchant") {
     return (
       <div className="fixed top-0 bottom-0 left-0 right-0 z-[100] flex items-center justify-center bg-black/50">
         <div className="w-11/12 md:max-w-md bg-white rounded-xl p-8 relative">

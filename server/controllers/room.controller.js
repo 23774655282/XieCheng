@@ -677,7 +677,7 @@ export const rejectRoomEdit = async (req, res) => {
 
 const SMART_SEARCH_SYSTEM = `你是一个酒店预订助手的解析器。用户会用自然语言描述出行需求，可能不规范（如只说"我和我朋友去"、"一家四口"、景点名等），你需要理解真实意图并推断合理默认值。
 请只输出一个 JSON 对象，不要输出任何其他文字、解释或 markdown 标记。
-JSON 必须包含且仅包含以下 6 个字段（均为数字或字符串）：
+JSON 必须包含以下 7 个字段（均为数字或字符串）：
 
 1. destination: 目的地**城市名称**。
    - 若用户说的是景点、地标或俗称，请解析为所在城市。例如：中山陵→南京，外滩/塔里木外滩/上海外滩→上海，天安门/故宫→北京，西湖→杭州，兵马俑→西安，夫子庙→南京。
@@ -689,15 +689,25 @@ JSON 必须包含且仅包含以下 6 个字段（均为数字或字符串）：
 
 4. nights: 入住晚数，数字。未提及则保留上一轮或填 1。
 
-5. budget: 酒店总预算（单位：元），数字。未提及则保留上一轮或填 0。
+5. budget: 酒店总预算（单位：元），数字。未提及则保留上一轮或填 0。**填 0 表示不限制预算**。
 
-6. roomType: 推荐房型。根据人数与关系推断，**只能**从以下四选一填写，无法推断时填空字符串 ""：
+6. roomType: 推荐房型。根据人数与关系推断，从以下选一填写，无法推断时填空字符串 ""：
    - "Single Bed"：一人、单人出行
-   - "Double Bed"：两人、情侣、朋友、夫妻（如"我和我朋友"、"两个人"）
-   - "Luxury Room"：明确要豪华、高端
-   - "Family Suite"：一家多口、带小孩、家庭出游（如"一家四口"、"带两个孩子"）
+   - "Double Bed"：两人、情侣、朋友、夫妻
+   - "King Bed" / "Elegant King Bed" / "Premium King Bed" / "Comfortable King Bed" / "Deluxe King Bed" / "Cozy King Bed"：大床类（雅致、高端、舒适、豪华、温馨等）
+   - "View King Bed" / "Sea View Room"：观景、海景
+   - "Business King Bed" / "Standard Room"：商务、标准间
+   - "Suite" / "Luxury Room"：套房、豪华房
+   - "Family Suite"：一家多口、带小孩、家庭出游
 
-若请求中带有「上一轮条件」，则在上一轮基础上只更新用户本轮提到或可推断的字段，未提到的保持上一轮的值。`;
+**合并规则**：若请求中带有「上一轮条件」，则在上一轮基础上只更新用户本轮提到或可推断的字段，未提到的保持上一轮的值。
+
+**重置/放宽规则（重要）**：当用户表示要重新开始、换地方、放宽条件时，**未在本轮明确提及的字段应填 0 或空字符串**，不沿用上一轮。同时必须设置 resetScope 字段：
+- resetScope: "all" — 用户说"随便看看"、"重新推荐"、"重新来"、"不要之前的条件"时，完全重置，所有字段按本轮填，未说的填默认值。
+- resetScope: "destination" — 用户说"换一个地方"、"去上海吧"、"改成北京"等**更换目的地**时，destination 填新城市，budget 和 roomType 若未提及则填 0 和 ""。
+- resetScope: "none" — 正常多轮补充，沿用上一轮未提及的字段。
+
+7. resetScope: 字符串，必填。"all" | "destination" | "none"。`;
 
 /** 智能搜索：纯向量检索，将用户问题向量化后与房间文档做语义相似度匹配；支持多轮对话，可传 previousCriteria 合并上一轮条件（用于展示） */
 export const smartSearchRooms = async (req, res) => {
@@ -762,18 +772,26 @@ export const smartSearchRooms = async (req, res) => {
             console.error("Smart search parse error:", raw, e);
             return res.status(502).json({ success: false, message: "解析结果格式异常，请换一种说法重试" });
         }
-        const prev = previousCriteria && typeof previousCriteria === "object" ? previousCriteria : {};
+        const resetScope = String(criteria.resetScope ?? "none").trim();
+        const prev = (resetScope === "all" || !previousCriteria || typeof previousCriteria !== "object")
+            ? {}
+            : previousCriteria;
         const destStr = String(criteria.destination ?? "").trim();
-        const destination = destStr || prev.destination || null;
+        const destination = destStr || (resetScope === "all" ? null : prev.destination) || null;
         const parseNum = (val, fallback) => { const n = parseInt(val, 10); return Number.isNaN(n) ? (fallback != null ? Number(fallback) : null) : n; };
         const adults = Math.max(0, parseNum(criteria.adults, prev.adults) || 1);
         const children = Math.max(0, parseNum(criteria.children, prev.children) || 0);
         const nights = Math.max(1, parseNum(criteria.nights, prev.nights) || 1);
-        const budget = Math.max(0, parseNum(criteria.budget, prev.budget) || 0);
-        const VALID_ROOM_TYPES = ["Single Bed", "Double Bed", "Luxury Room", "Family Suite"];
-        const rawRoomType = String(criteria.roomType ?? prev.roomType ?? "").trim();
+        const budgetSource = (resetScope === "destination" || resetScope === "all") ? criteria.budget : (criteria.budget ?? prev.budget);
+        const budgetOut = Math.max(0, parseNum(budgetSource, 0) || 0);
+        const VALID_ROOM_TYPES = [
+            "Single Bed", "Double Bed", "King Bed", "Elegant King Bed", "Premium King Bed", "Comfortable King Bed",
+            "Deluxe King Bed", "Cozy King Bed", "View King Bed", "Business King Bed", "Business Room", "Standard Room",
+            "Sea View Room", "Suite", "Luxury Room", "Family Suite",
+        ];
+        const rawRoomType = String((resetScope === "destination" || resetScope === "all") ? (criteria.roomType ?? "") : (criteria.roomType ?? prev.roomType ?? "")).trim();
         const roomType = VALID_ROOM_TYPES.includes(rawRoomType) ? rawRoomType : null;
-        const criteriaOut = { destination: destination || null, adults, children, nights, budget: budget || null, roomType };
+        const criteriaOut = { destination: destination || null, adults, children, nights, budget: budgetOut || null, roomType };
 
         // 后置过滤：保证满足用户硬性条件（目的地、预算、房型）
         const roomsFiltered = filterRoomsByCriteria(similarRooms, criteriaOut);

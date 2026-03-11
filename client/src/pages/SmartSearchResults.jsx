@@ -5,8 +5,7 @@ import Title from '../components/Title';
 import { useAppContext } from '../context/AppContext';
 import toast from 'react-hot-toast';
 
-const roomTypeToCn = { 'Single Bed': '单人间', 'Double Bed': '双人间', 'Luxury Room': '豪华房', 'Family Suite': '家庭套房' };
-const getRoomTypeLabel = (roomType) => roomTypeToCn[roomType] || roomType;
+import { getRoomTypeLabel } from '../utils/roomTypes';
 const facilityLabelMap = {
   'Free Wifi': '免费 Wi-Fi',
   'Free Breakfast': '免费早餐',

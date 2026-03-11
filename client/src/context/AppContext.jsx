@@ -2,12 +2,13 @@ import axios from 'axios';
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import { tokenCookie } from '../utils/cookie';
 
 axios.defaults.baseURL = import.meta.env.VITE_BACKEND_URL;
 
-/** 请求拦截：统一从 localStorage 注入 token，避免每个请求都手动带认证 */
+/** 请求拦截：统一从 cookie 注入 token，避免每个请求都手动带认证 */
 axios.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
+  const token = tokenCookie.get();
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
@@ -20,7 +21,7 @@ export function AppProvider({ children }) {
   const fetchUserPromiseRef = useRef(null);
 
   const [userInfo, setUserInfo] = useState({ _id: null, username: '', avatar: '', birthday: null, favoriteHotels: [] });
-  const getToken = async () => localStorage.getItem("token");
+  const getToken = async () => tokenCookie.get();
 
   /** 仅解码 JWT payload 判断是否过期，不校验签名 */
   function isTokenExpired(token) {
@@ -37,7 +38,7 @@ export function AppProvider({ children }) {
 
   const [role, setRoleState] = useState(null); // 'user' | 'merchant' | 'admin'
   const [merchantApplicationStatus, setMerchantApplicationStatus] = useState(null); // 'none' | 'pending' | 'approved' | 'rejected'
-  const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem("token"));
+  const [isAuthenticated, setIsAuthenticated] = useState(!!tokenCookie.get());
   const [isOwner, setIsOwner] = useState(false);   // 商户：可访问 /owner
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false); // 平台管理员：可访问 /admin
   const [authChecked, setAuthChecked] = useState(false); // 认证是否已加载（刷新后需等待）
@@ -110,7 +111,7 @@ export function AppProvider({ children }) {
     if (fetchUserPromiseRef.current) return fetchUserPromiseRef.current;
     const run = async () => {
       try {
-        const token = localStorage.getItem("token");
+        const token = tokenCookie.get();
         if (!token) {
           setIsAuthenticated(false);
           setRoleState(null);
@@ -123,7 +124,7 @@ export function AppProvider({ children }) {
           return false;
         }
         if (isTokenExpired(token)) {
-          localStorage.removeItem("token");
+          tokenCookie.remove();
           setIsAuthenticated(false);
           setRoleState(null);
           setMerchantApplicationStatus(null);
@@ -144,7 +145,7 @@ export function AppProvider({ children }) {
           const r = data.role || "user";
           setRoleState(r);
           setMerchantApplicationStatus(data.merchantApplicationStatus || "none");
-          setIsOwner(r === "merchant" || r === "admin");
+          setIsOwner(r === "merchant");  // 仅商户可访问商户中心，管理员与商户互斥
           setIsPlatformAdmin(r === "admin");
           setUserInfo({
             _id: data._id || null,
@@ -167,7 +168,7 @@ export function AppProvider({ children }) {
           fetchUserPromiseRef.current = null;
           return true;
         } else {
-          localStorage.removeItem("token");
+          tokenCookie.remove();
           setIsAuthenticated(false);
           setRoleState(null);
           setMerchantApplicationStatus(null);
@@ -179,7 +180,7 @@ export function AppProvider({ children }) {
           return false;
         }
       } catch (error) {
-        if (error.response?.status === 401) localStorage.removeItem("token");
+        if (error.response?.status === 401) tokenCookie.remove();
         setIsAuthenticated(false);
         setRoleState(null);
         setMerchantApplicationStatus(null);
@@ -224,11 +225,11 @@ export function AppProvider({ children }) {
   /** 用登录接口返回的 token + user 直接更新认证状态，不依赖 GET /api/users，避免登录后仍显示未登录 */
   function setAuthFromLogin({ token, user }) {
     if (!token) return;
-    localStorage.setItem("token", token);
+    tokenCookie.set(token);
     const r = (user && user.role) || "user";
     setRoleState(r);
     setMerchantApplicationStatus("none");
-    setIsOwner(r === "merchant" || r === "admin");
+    setIsOwner(r === "merchant");  // 仅商户可访问商户中心，管理员与商户互斥
     setIsPlatformAdmin(r === "admin");
     setUserInfo({
       _id: user?.id || null,
@@ -242,7 +243,7 @@ export function AppProvider({ children }) {
   }
 
   function logout() {
-    localStorage.removeItem("token");
+    tokenCookie.remove();
     setIsAuthenticated(false);
     setRoleState(null);
     setMerchantApplicationStatus(null);

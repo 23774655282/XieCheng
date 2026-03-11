@@ -1,34 +1,20 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { loadAMap } from '../utils/loadAmap';
+import { loadAMap, setupMoveendDebounce } from '../utils/loadAmap';
 import { geocodeAmap, wgs84ToGcj02, getDistrictBounds } from '../utils/amap';
 import { useAppContext } from '../context/AppContext';
+import { usePerf } from '../context/PerfContext';
 
 const DEFAULT_CENTER = [39.9042, 116.4074]; // 北京 [lat, lng] GCJ-02
 const DEFAULT_ZOOM = 4;
-
-/** 从高德 Bounds 得到 { minLat, maxLat, minLng, maxLng } */
-function boundsToParams(bounds) {
-  if (!bounds) return null;
-  const sw = bounds.getSouthWest && bounds.getSouthWest();
-  const ne = bounds.getNorthEast && bounds.getNorthEast();
-  if (!sw || !ne) return null;
-  const lng1 = typeof sw.getLng === 'function' ? sw.getLng() : sw.lng;
-  const lat1 = typeof sw.getLat === 'function' ? sw.getLat() : sw.lat;
-  const lng2 = typeof ne.getLng === 'function' ? ne.getLng() : ne.lng;
-  const lat2 = typeof ne.getLat === 'function' ? ne.getLat() : ne.lat;
-  return {
-    minLat: Math.min(lat1, lat2),
-    maxLat: Math.max(lat1, lat2),
-    minLng: Math.min(lng1, lng2),
-    maxLng: Math.max(lng1, lng2),
-  };
-}
+/** 全量模式：中国大致范围，用于一次性加载全部酒店（TBT 对比用） */
+const FULL_BOUNDS = { minLat: 18, maxLat: 54, minLng: 73, maxLng: 135 };
 
 function TravelMap() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { axios } = useAppContext();
+  const { isViewportMap } = usePerf();
   const [searchInput, setSearchInput] = useState('');
   const latParam = searchParams.get('lat');
   const lngParam = searchParams.get('lng');
@@ -160,8 +146,8 @@ function TravelMap() {
 
   const onBoundsChange = useCallback((b) => {
     boundsRef.current = b;
-    fetchHotels(b, filterCity, filterStar);
-  }, [filterCity, filterStar, fetchHotels]);
+    if (isViewportMap) fetchHotels(b, filterCity, filterStar);
+  }, [filterCity, filterStar, fetchHotels, isViewportMap]);
 
   onBoundsChangeRef.current = onBoundsChange;
 
@@ -170,9 +156,14 @@ function TravelMap() {
     return () => { mountedRef.current = false; };
   }, []);
 
+  // 视口模式：bounds 变化时请求；全量模式：filter 变化时用 FULL_BOUNDS 请求
   useEffect(() => {
-    if (boundsRef.current) fetchHotels(boundsRef.current, filterCity, filterStar);
-  }, [filterCity, filterStar, fetchHotels]);
+    if (isViewportMap) {
+      if (boundsRef.current) fetchHotels(boundsRef.current, filterCity, filterStar);
+    } else {
+      fetchHotels(FULL_BOUNDS, filterCity, filterStar);
+    }
+  }, [filterCity, filterStar, fetchHotels, isViewportMap]);
 
   const handleCloseHotelCard = useCallback(async () => {
     const hotel = selectedHotel;
@@ -247,12 +238,12 @@ function TravelMap() {
     }
   };
 
-  // 初始化高德地图
+  // 初始化高德地图；视口模式用 setupMoveendDebounce 按视口请求，全量模式不监听 moveend
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
     let map = null;
-    let debounceTimer = null;
+    let cleanup = null;
     loadAMap()
       .then((AMap) => {
         map = new AMap.Map(el, {
@@ -261,31 +252,25 @@ function TravelMap() {
           viewMode: '2D',
         });
         mapRef.current = map;
-
-        function emitBounds() {
-          if (debounceTimer) clearTimeout(debounceTimer);
-          debounceTimer = setTimeout(() => {
-            const b = map.getBounds();
-            const params = boundsToParams(b);
-            if (params) onBoundsChangeRef.current(params);
-          }, 350);
+        if (isViewportMap) {
+          cleanup = setupMoveendDebounce(map, (params) => onBoundsChangeRef.current(params), 350);
+        } else {
+          boundsRef.current = FULL_BOUNDS;
         }
-        map.on('moveend', emitBounds);
-        emitBounds();
         setMapReady(true);
       })
       .catch((err) => {
         console.error('[TravelMap] loadAMap failed', err);
       });
     return () => {
-      if (debounceTimer) clearTimeout(debounceTimer);
+      if (cleanup) cleanup();
       if (map) {
         map.destroy();
         mapRef.current = null;
       }
       setMapReady(false);
     };
-  }, []);
+  }, [isViewportMap]);
 
   // 同步 mapCenter / mapZoom 到地图（搜索或 URL 变化）
   useEffect(() => {
@@ -473,8 +458,13 @@ function TravelMap() {
         <div className="flex-1 min-h-0 min-w-0 relative">
           <div ref={containerRef} className="w-full h-full" />
           {!mapReady && (
-            <div className="absolute inset-0 flex items-center justify-center bg-gray-100 text-gray-500">
-              地图加载中…
+            <div className="absolute inset-0 map-skeleton flex flex-col items-center justify-center gap-4" aria-hidden>
+              <div className="grid grid-cols-4 gap-2 w-3/4 max-w-xs opacity-60">
+                {[...Array(12)].map((_, i) => (
+                  <div key={i} className="aspect-square rounded bg-white/50" />
+                ))}
+              </div>
+              <span className="text-sm text-gray-500 font-medium">地图加载中…</span>
             </div>
           )}
           <div className="absolute bottom-3 left-3 right-3 sm:right-auto sm:left-4 sm:max-w-[280px] rounded-lg bg-white/95 shadow px-3 py-2 text-sm text-gray-600 z-[1000]">

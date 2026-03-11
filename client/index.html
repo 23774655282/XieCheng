@@ -2,7 +2,15 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <!-- 高德地图由 TravelMap 页面按需动态加载，此处不放置同步 script，避免阻塞 FCP -->
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <!-- 字体非阻塞加载：preconnect 提前建连，media=print+onload 避免阻塞首屏 -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://webapi.amap.com">
+    <link rel="dns-prefetch" href="https://webapi.amap.com">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&family=Playfair:ital,opsz,wght@0,5..1200,300..900;1,5..1200,300..900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+    <noscript><link href="https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&family=Playfair:ital,opsz,wght@0,5..1200,300..900;1,5..1200,300..900&display=swap" rel="stylesheet"></noscript>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Vite + React</title>
   </head>
