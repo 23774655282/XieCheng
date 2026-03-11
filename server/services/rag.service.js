@@ -15,7 +15,13 @@ import Review from "../models/review.model.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const roomTypeToCn = { "Single Bed": "单人间", "Double Bed": "双人间", "Luxury Room": "豪华房", "Family Suite": "家庭套房" };
+const roomTypeToCn = {
+  "Single Bed": "单人间", "Double Bed": "双人间", "King Bed": "大床房",
+  "Elegant King Bed": "雅致大床房", "Premium King Bed": "高端大床房", "Comfortable King Bed": "舒适大床房",
+  "Deluxe King Bed": "豪华大床房", "Cozy King Bed": "温馨大床房", "View King Bed": "观景大床房",
+  "Business King Bed": "商务大床房", "Business Room": "商务房", "Standard Room": "标准间", "Sea View Room": "海景房",
+  "Suite": "套房", "Luxury Room": "豪华房", "Family Suite": "家庭套房",
+};
 
 /** LanceDB 存储路径（可通过 LANCEDB_PATH 环境变量覆盖） */
 function getLanceDbPath() {
